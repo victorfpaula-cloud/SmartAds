@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* CSS do Leaflet (mapa do construtor de público) — importado global porque os componentes do
+   react-leaflet esperam essas classes já disponíveis antes de montar o mapa; importar só no
+   componente do mapa causa flash sem estilo na primeira renderização. */
+@import "leaflet/dist/leaflet.css";
