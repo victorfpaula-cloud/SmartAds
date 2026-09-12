@@ -285,6 +285,9 @@ export async function criarConjuntoDeAnuncios(
 
   if (params.tipoOrcamento === "diario") {
     corpo.daily_budget = params.orcamentoCentavos;
+    // Data-fim é opcional no diário (a Meta aceita end_time mesmo sem lifetime_budget) — só define
+    // quando o usuário quis um "contínuo até tal dia" em vez de "até eu pausar".
+    if (params.dataFim) corpo.end_time = params.dataFim;
   } else {
     corpo.lifetime_budget = params.orcamentoCentavos;
     corpo.start_time = params.dataInicio;
@@ -349,6 +352,10 @@ export async function criarCriativoNovo(
     descricao?: string;
     link?: string;
     callToAction?: string;
+    /** ID do formulário de Leads já existente no Meta Business Suite — usado só no modelo
+     * Formulário. TODO: validar o encaixe exato (call_to_action.value.lead_gen_form_id) com uma
+     * campanha de teste real antes do primeiro uso em produção, como já previsto no plano original. */
+    leadGenFormId?: string;
   }
 ): Promise<{ id: string }> {
   const linkData: Record<string, unknown> = {
@@ -358,7 +365,15 @@ export async function criarCriativoNovo(
   if (params.imageHash) linkData.image_hash = params.imageHash;
   if (params.titulo) linkData.name = params.titulo;
   if (params.descricao) linkData.description = params.descricao;
-  if (params.callToAction) linkData.call_to_action = { type: params.callToAction, value: { link: params.link } };
+  if (params.callToAction || params.leadGenFormId) {
+    linkData.call_to_action = {
+      type: params.callToAction ?? "SIGN_UP",
+      value: {
+        ...(params.link ? { link: params.link } : {}),
+        ...(params.leadGenFormId ? { lead_gen_form_id: params.leadGenFormId } : {}),
+      },
+    };
+  }
 
   return chamar(`${adAccountId}/adcreatives`, {
     metodo: "POST",

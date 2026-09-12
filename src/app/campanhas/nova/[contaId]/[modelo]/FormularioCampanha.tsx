@@ -1,0 +1,520 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import ConstrutorDePublico from "@/components/ConstrutorDePublico";
+import type { ModeloCampanha } from "@/lib/meta/modelos";
+import type { Publico } from "@/lib/meta/tipos";
+
+const PUBLICO_VAZIO: Publico = { localizacoes: [], interesses: [], idadeMin: 18, idadeMax: 65, genero: "todos" };
+
+interface PublicoSalvo {
+  id: string;
+  nome: string;
+  targeting: Publico;
+}
+
+interface PostInstagram {
+  id: string;
+  caption?: string;
+  media_type: string;
+  media_url?: string;
+  thumbnail_url?: string;
+  permalink: string;
+}
+
+const ETAPAS = ["Público", "Orçamento", "Criativo", "Revisão"];
+
+export default function FormularioCampanha({
+  contaId,
+  clienteId,
+  clienteNome,
+  instagramBusinessId,
+  modelo,
+}: {
+  contaId: string;
+  clienteId?: string;
+  clienteNome: string;
+  instagramBusinessId?: string | null;
+  modelo: ModeloCampanha;
+}) {
+  const router = useRouter();
+  const [etapa, setEtapa] = useState(1);
+
+  // Passo 1 — público
+  const [publicosSalvos, setPublicosSalvos] = useState<PublicoSalvo[]>([]);
+  const [publicoSalvoId, setPublicoSalvoId] = useState<string>("");
+  const [modoPublico, setModoPublico] = useState<"salvo" | "novo">("salvo");
+  const [publicoNovo, setPublicoNovo] = useState<Publico>(PUBLICO_VAZIO);
+  const [incluirFacebook, setIncluirFacebook] = useState(false);
+
+  // Passo 2 — orçamento
+  const [tipoOrcamento, setTipoOrcamento] = useState<"diario" | "vitalicio">("diario");
+  const [valorReais, setValorReais] = useState("");
+  const [dataInicio, setDataInicio] = useState("");
+  const [dataFim, setDataFim] = useState("");
+
+  // Passo 3 — criativo
+  const [usarPostExistente, setUsarPostExistente] = useState(modelo.permiteUsarPostExistente);
+  const [posts, setPosts] = useState<PostInstagram[]>([]);
+  const [carregandoPosts, setCarregandoPosts] = useState(false);
+  const [postSelecionadoId, setPostSelecionadoId] = useState("");
+  const [mensagem, setMensagem] = useState("");
+  const [titulo, setTitulo] = useState("");
+  const [imagemBase64, setImagemBase64] = useState<string | undefined>();
+  const [link, setLink] = useState("");
+  const [callToAction, setCallToAction] = useState("LEARN_MORE");
+  const [leadGenFormId, setLeadGenFormId] = useState("");
+
+  // Passo 4 — revisão
+  const [nomeCampanha, setNomeCampanha] = useState("");
+  const [publicando, setPublicando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!clienteId) return;
+    fetch(`/api/publicos?clienteId=${clienteId}`)
+      .then((r) => r.json())
+      .then((corpo) => setPublicosSalvos(corpo.publicos ?? []));
+  }, [clienteId]);
+
+  useEffect(() => {
+    if (etapa === 3 && usarPostExistente && instagramBusinessId && posts.length === 0) {
+      setCarregandoPosts(true);
+      fetch(`/api/meta/posts-instagram?instagramBusinessId=${instagramBusinessId}`)
+        .then((r) => r.json())
+        .then((corpo) => setPosts(corpo.posts ?? []))
+        .finally(() => setCarregandoPosts(false));
+    }
+  }, [etapa, usarPostExistente, instagramBusinessId, posts.length]);
+
+  const publicoEfetivo: Publico =
+    modoPublico === "salvo"
+      ? publicosSalvos.find((p) => p.id === publicoSalvoId)?.targeting ?? PUBLICO_VAZIO
+      : publicoNovo;
+
+  const valorCentavos = Math.round(parseFloat((valorReais || "0").replace(",", ".")) * 100) || 0;
+
+  function orcamentoPrevisto(): string {
+    if (!valorCentavos) return "—";
+    const reais = (centavos: number) => `R$ ${(centavos / 100).toFixed(2).replace(".", ",")}`;
+    if (tipoOrcamento === "vitalicio") return reais(valorCentavos);
+    if (dataFim && dataInicio) {
+      const dias = Math.max(
+        1,
+        Math.round((new Date(dataFim).getTime() - new Date(dataInicio).getTime()) / 86_400_000) + 1
+      );
+      return `${reais(valorCentavos * dias)} (${dias} dias)`;
+    }
+    return `Contínuo — ~${reais(valorCentavos * 30)}/mês (estimativa)`;
+  }
+
+  function podeAvancarDe(passo: number): boolean {
+    if (passo === 1) return publicoEfetivo.localizacoes.length > 0;
+    if (passo === 2) {
+      if (!valorCentavos) return false;
+      if (tipoOrcamento === "vitalicio") return !!dataInicio && !!dataFim;
+      return true;
+    }
+    if (passo === 3) {
+      if (usarPostExistente) return !!postSelecionadoId;
+      if (!mensagem.trim()) return false;
+      if (modelo.exigeLink && !link.trim()) return false;
+      if (modelo.exigeFormulario && !leadGenFormId.trim()) return false;
+      return true;
+    }
+    return true;
+  }
+
+  async function publicar() {
+    if (!nomeCampanha.trim()) return;
+    setPublicando(true);
+    setErro(null);
+
+    const resposta = await fetch("/api/campanhas", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contaId,
+        tipoModelo: modelo.tipo,
+        nomeCampanha: nomeCampanha.trim(),
+        publico: publicoEfetivo,
+        publicoId: modoPublico === "salvo" ? publicoSalvoId : undefined,
+        incluirFacebook,
+        orcamento: {
+          tipo: tipoOrcamento,
+          valorCentavos,
+          dataInicio: dataInicio || undefined,
+          dataFim: dataFim || undefined,
+        },
+        criativo: {
+          usarPostExistente,
+          postSelecionadoId: usarPostExistente ? postSelecionadoId : undefined,
+          mensagem,
+          titulo: titulo || undefined,
+          imagemBase64,
+          link: modelo.exigeLink ? link : undefined,
+          callToAction: modelo.exigeLink ? callToAction : undefined,
+          leadGenFormId: modelo.exigeFormulario ? leadGenFormId : undefined,
+        },
+      }),
+    });
+    const corpo = await resposta.json();
+    setPublicando(false);
+
+    if (resposta.ok) {
+      router.push("/campanhas");
+    } else {
+      setErro(corpo.erro || "Falha ao publicar a campanha.");
+    }
+  }
+
+  function lerImagem(arquivo: File) {
+    const leitor = new FileReader();
+    leitor.onload = () => {
+      const resultado = leitor.result as string;
+      setImagemBase64(resultado.split(",")[1]); // remove o prefixo "data:image/...;base64,"
+    };
+    leitor.readAsDataURL(arquivo);
+  }
+
+  return (
+    <div className="mt-6">
+      <div className="mb-6 flex items-center gap-2">
+        {ETAPAS.map((nome, indice) => (
+          <div key={nome} className="flex items-center gap-2">
+            <span
+              className={
+                etapa === indice + 1
+                  ? "rounded-full bg-accent px-3 py-1 text-xs font-semibold text-white"
+                  : etapa > indice + 1
+                    ? "rounded-full bg-ok/20 px-3 py-1 text-xs font-semibold text-ok"
+                    : "rounded-full bg-white/[0.05] px-3 py-1 text-xs font-medium text-neutral-500"
+              }
+            >
+              {indice + 1}. {nome}
+            </span>
+            {indice < ETAPAS.length - 1 && <span className="text-neutral-700">—</span>}
+          </div>
+        ))}
+      </div>
+
+      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 backdrop-blur-xl">
+        {etapa === 1 && (
+          <div className="flex flex-col gap-4">
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setModoPublico("salvo")}
+                className={`flex-1 rounded-lg border px-3 py-2 text-xs font-semibold ${modoPublico === "salvo" ? "border-accent bg-accent/10 text-accent-strong" : "border-white/10 text-neutral-400"}`}
+              >
+                Usar público salvo
+              </button>
+              <button
+                type="button"
+                onClick={() => setModoPublico("novo")}
+                className={`flex-1 rounded-lg border px-3 py-2 text-xs font-semibold ${modoPublico === "novo" ? "border-accent bg-accent/10 text-accent-strong" : "border-white/10 text-neutral-400"}`}
+              >
+                Montar novo agora
+              </button>
+            </div>
+
+            {modoPublico === "salvo" ? (
+              publicosSalvos.length === 0 ? (
+                <p className="text-xs text-neutral-500">
+                  Nenhum público salvo pra {clienteNome} ainda — monte um novo abaixo.
+                </p>
+              ) : (
+                <select
+                  value={publicoSalvoId}
+                  onChange={(e) => setPublicoSalvoId(e.target.value)}
+                  className="h-10 w-full rounded-lg border border-white/14 bg-ink-850 px-3 text-sm text-neutral-100"
+                >
+                  <option value="">Selecione…</option>
+                  {publicosSalvos.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.nome}
+                    </option>
+                  ))}
+                </select>
+              )
+            ) : (
+              <ConstrutorDePublico valor={publicoNovo} onChange={setPublicoNovo} />
+            )}
+
+            <div className="mt-2 flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3">
+              <div>
+                <p className="text-sm font-medium text-neutral-200">Incluir Facebook além do Instagram</p>
+                <p className="text-xs text-neutral-500">Posicionamento fixo: Feed + Stories + Reels.</p>
+              </div>
+              <input
+                type="checkbox"
+                checked={incluirFacebook}
+                onChange={(e) => setIncluirFacebook(e.target.checked)}
+                className="h-5 w-5 accent-accent"
+              />
+            </div>
+          </div>
+        )}
+
+        {etapa === 2 && (
+          <div className="flex flex-col gap-4">
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setTipoOrcamento("diario")}
+                className={`flex-1 rounded-lg border px-3 py-2 text-xs font-semibold ${tipoOrcamento === "diario" ? "border-accent bg-accent/10 text-accent-strong" : "border-white/10 text-neutral-400"}`}
+              >
+                Diário
+              </button>
+              <button
+                type="button"
+                onClick={() => setTipoOrcamento("vitalicio")}
+                className={`flex-1 rounded-lg border px-3 py-2 text-xs font-semibold ${tipoOrcamento === "vitalicio" ? "border-accent bg-accent/10 text-accent-strong" : "border-white/10 text-neutral-400"}`}
+              >
+                Vitalício
+              </button>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-neutral-400">
+                Valor {tipoOrcamento === "diario" ? "por dia" : "total"} (R$)
+              </label>
+              <input
+                value={valorReais}
+                onChange={(e) => setValorReais(e.target.value)}
+                placeholder="50,00"
+                className="mt-1 h-10 w-full rounded-lg border border-white/14 bg-ink-850 px-3 text-sm text-neutral-100"
+              />
+            </div>
+
+            {tipoOrcamento === "vitalicio" ? (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-neutral-400">Início</label>
+                  <input
+                    type="date"
+                    value={dataInicio}
+                    onChange={(e) => setDataInicio(e.target.value)}
+                    className="mt-1 h-10 w-full rounded-lg border border-white/14 bg-ink-850 px-3 text-sm text-neutral-100"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-neutral-400">Fim</label>
+                  <input
+                    type="date"
+                    value={dataFim}
+                    onChange={(e) => setDataFim(e.target.value)}
+                    className="mt-1 h-10 w-full rounded-lg border border-white/14 bg-ink-850 px-3 text-sm text-neutral-100"
+                  />
+                </div>
+              </div>
+            ) : (
+              <div>
+                <label className="text-xs font-semibold text-neutral-400">Data de término (opcional)</label>
+                <input
+                  type="date"
+                  value={dataFim}
+                  onChange={(e) => setDataFim(e.target.value)}
+                  placeholder="Sem data = contínuo até eu pausar"
+                  className="mt-1 h-10 w-full rounded-lg border border-white/14 bg-ink-850 px-3 text-sm text-neutral-100"
+                />
+              </div>
+            )}
+
+            <div className="rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3 text-sm">
+              <span className="text-neutral-400">Orçamento previsto: </span>
+              <span className="font-semibold text-neutral-100">{orcamentoPrevisto()}</span>
+            </div>
+          </div>
+        )}
+
+        {etapa === 3 && (
+          <div className="flex flex-col gap-4">
+            {modelo.permiteUsarPostExistente && (
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setUsarPostExistente(true)}
+                  className={`flex-1 rounded-lg border px-3 py-2 text-xs font-semibold ${usarPostExistente ? "border-accent bg-accent/10 text-accent-strong" : "border-white/10 text-neutral-400"}`}
+                >
+                  Usar publicação existente
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUsarPostExistente(false)}
+                  className={`flex-1 rounded-lg border px-3 py-2 text-xs font-semibold ${!usarPostExistente ? "border-accent bg-accent/10 text-accent-strong" : "border-white/10 text-neutral-400"}`}
+                >
+                  Criar novo
+                </button>
+              </div>
+            )}
+
+            {usarPostExistente ? (
+              carregandoPosts ? (
+                <p className="text-xs text-neutral-500">Carregando publicações…</p>
+              ) : posts.length === 0 ? (
+                <p className="text-xs text-neutral-500">Nenhuma publicação encontrada nessa conta.</p>
+              ) : (
+                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                  {posts.map((post) => (
+                    <button
+                      key={post.id}
+                      type="button"
+                      onClick={() => setPostSelecionadoId(post.id)}
+                      className={`aspect-square overflow-hidden rounded-lg border-2 ${postSelecionadoId === post.id ? "border-accent" : "border-transparent"}`}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={post.thumbnail_url || post.media_url}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                    </button>
+                  ))}
+                </div>
+              )
+            ) : (
+              <>
+                <div>
+                  <label className="text-xs font-semibold text-neutral-400">Imagem</label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => e.target.files?.[0] && lerImagem(e.target.files[0])}
+                    className="mt-1 block w-full text-xs text-neutral-400"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-neutral-400">Texto do anúncio</label>
+                  <textarea
+                    value={mensagem}
+                    onChange={(e) => setMensagem(e.target.value)}
+                    rows={3}
+                    className="mt-1 w-full rounded-lg border border-white/14 bg-ink-850 px-3 py-2 text-sm text-neutral-100"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-neutral-400">Título (opcional)</label>
+                  <input
+                    value={titulo}
+                    onChange={(e) => setTitulo(e.target.value)}
+                    className="mt-1 h-10 w-full rounded-lg border border-white/14 bg-ink-850 px-3 text-sm text-neutral-100"
+                  />
+                </div>
+
+                {modelo.exigeLink && (
+                  <>
+                    <div>
+                      <label className="text-xs font-semibold text-neutral-400">URL de destino</label>
+                      <input
+                        value={link}
+                        onChange={(e) => setLink(e.target.value)}
+                        placeholder="https://…"
+                        className="mt-1 h-10 w-full rounded-lg border border-white/14 bg-ink-850 px-3 text-sm text-neutral-100"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-neutral-400">Botão</label>
+                      <select
+                        value={callToAction}
+                        onChange={(e) => setCallToAction(e.target.value)}
+                        className="mt-1 h-10 w-full rounded-lg border border-white/14 bg-ink-850 px-3 text-sm text-neutral-100"
+                      >
+                        <option value="LEARN_MORE">Saiba mais</option>
+                        <option value="SHOP_NOW">Comprar agora</option>
+                        <option value="SIGN_UP">Cadastre-se</option>
+                        <option value="CONTACT_US">Fale conosco</option>
+                      </select>
+                    </div>
+                  </>
+                )}
+
+                {modelo.exigeFormulario && (
+                  <div>
+                    <label className="text-xs font-semibold text-neutral-400">
+                      ID do formulário de Leads (já criado no Meta Business Suite)
+                    </label>
+                    <input
+                      value={leadGenFormId}
+                      onChange={(e) => setLeadGenFormId(e.target.value)}
+                      className="mt-1 h-10 w-full rounded-lg border border-white/14 bg-ink-850 px-3 text-sm text-neutral-100"
+                    />
+                    <p className="mt-1 text-xs text-neutral-500">
+                      Pega em Meta Business Suite → Biblioteca de Formulários.
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {etapa === 4 && (
+          <div className="flex flex-col gap-4">
+            <div>
+              <label className="text-xs font-semibold text-neutral-400">Nome da campanha</label>
+              <input
+                value={nomeCampanha}
+                onChange={(e) => setNomeCampanha(e.target.value)}
+                placeholder={`${clienteNome} — ${modelo.nomeExibicao}`}
+                className="mt-1 h-10 w-full rounded-lg border border-white/14 bg-ink-850 px-3 text-sm text-neutral-100"
+              />
+            </div>
+
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3 text-xs">
+              <dt className="text-neutral-500">Objetivo</dt>
+              <dd className="text-neutral-200">{modelo.nomeExibicao}</dd>
+              <dt className="text-neutral-500">Localizações</dt>
+              <dd className="text-neutral-200">{publicoEfetivo.localizacoes.length}</dd>
+              <dt className="text-neutral-500">Plataforma</dt>
+              <dd className="text-neutral-200">{incluirFacebook ? "Instagram + Facebook" : "Instagram"}</dd>
+              <dt className="text-neutral-500">Orçamento</dt>
+              <dd className="text-neutral-200">
+                {tipoOrcamento === "diario" ? "Diário" : "Vitalício"} — {orcamentoPrevisto()}
+              </dd>
+            </dl>
+
+            <p className="text-xs text-neutral-500">
+              A campanha nasce <strong className="text-neutral-300">pausada</strong> — revise no
+              painel de Campanhas antes de ativar.
+            </p>
+
+            {erro && (
+              <div className="rounded-lg border border-danger/30 bg-danger/10 px-4 py-2.5 text-sm text-danger">
+                {erro}
+              </div>
+            )}
+
+            <button
+              onClick={publicar}
+              disabled={publicando || !nomeCampanha.trim()}
+              className="h-11 rounded-lg bg-accent text-sm font-bold text-white hover:bg-accent-strong disabled:opacity-50"
+            >
+              {publicando ? "Publicando…" : "Publicar campanha (pausada)"}
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-4 flex justify-between">
+        <button
+          onClick={() => setEtapa((e) => Math.max(1, e - 1))}
+          disabled={etapa === 1}
+          className="rounded-lg border border-white/10 px-4 py-2 text-sm font-medium text-neutral-400 hover:text-neutral-200 disabled:opacity-30"
+        >
+          Voltar
+        </button>
+        {etapa < 4 && (
+          <button
+            onClick={() => setEtapa((e) => Math.min(4, e + 1))}
+            disabled={!podeAvancarDe(etapa)}
+            className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-strong disabled:opacity-40"
+          >
+            Continuar
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
