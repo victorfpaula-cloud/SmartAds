@@ -182,6 +182,11 @@ create table if not exists smartads_saude_contas (
   conta_id uuid primary key references smartads_contas_meta(id) on delete cascade,
   status text not null check (status in ('boa', 'atencao', 'sem_dados')),
   motivo text not null,
+  -- Detalhe da anomalia (comparação período a período, ver src/lib/anomalia.ts) que motivou o
+  -- status "atencao", quando é esse o caso — null quando o status veio só do limiar simples
+  -- (src/lib/saude.ts) ou quando está "boa"/"sem_dados". Alimenta o botão "Por quê? (IA)" sem
+  -- precisar buscar os números nos dois períodos de novo.
+  anomalia jsonb,
   calculado_em timestamptz not null default now()
 );
 
@@ -199,3 +204,19 @@ create table if not exists smartads_resumos_ia (
 );
 
 alter table smartads_resumos_ia enable row level security;
+
+-- ============================================================================
+-- Anotações livres por campanha (tela de Campanhas) — chaveada pelo ID de campanha DA PRÓPRIA
+-- Meta (não pelo id local de smartads_campanhas_criadas), porque funciona pra qualquer campanha
+-- que aparece no painel "Campanhas no ar", inclusive as que já existiam antes do SmartAds.
+-- ============================================================================
+create table if not exists smartads_anotacoes (
+  id uuid primary key default gen_random_uuid(),
+  meta_campaign_id text not null,
+  texto text not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists smartads_anotacoes_campanha_idx on smartads_anotacoes(meta_campaign_id);
+
+alter table smartads_anotacoes enable row level security;
