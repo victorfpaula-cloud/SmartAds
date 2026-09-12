@@ -20,7 +20,13 @@ const LINKS = [
 export default function Cabecalho({ ativo }: { ativo: string }) {
   return (
     <>
-      <header className="sticky top-0 z-20 border-b border-white/10 bg-ink-950/80 backdrop-blur-xl">
+      {/* `env(safe-area-inset-top)` evita colidir com a barra de status do iPad/iPhone quando o
+          app roda "Adicionado à Tela de Início" (modo standalone, sem a barra do Safari que antes
+          empurrava o conteúdo pra baixo) — mesmo problema já corrigido embaixo, agora em cima. */}
+      <header
+        className="barra-vidro sticky top-0 z-20 border-b"
+        style={{ paddingTop: "env(safe-area-inset-top)" }}
+      >
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6 sm:py-3.5">
           <div className="flex items-center gap-8">
             <span className="font-display text-[15px] font-bold tracking-tight">SmartAds</span>
@@ -59,7 +65,7 @@ export default function Cabecalho({ ativo }: { ativo: string }) {
           partir do breakpoint sm, onde a navegação do topo já dá conta. `pb-[env(safe-area-inset-
           bottom)]` evita ficar por baixo da barra de gestos do iPhone. */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-20 border-t border-white/10 bg-ink-950/90 backdrop-blur-xl sm:hidden"
+        className="barra-vidro fixed inset-x-0 bottom-0 z-20 border-t sm:hidden"
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 6px)" }}
       >
         <div className="grid grid-cols-4">

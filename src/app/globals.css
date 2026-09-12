@@ -44,4 +44,14 @@
   .pilula-ativa {
     @apply bg-gradient-to-br from-white/15 to-white/5 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_4px_14px_-6px_rgba(0,0,0,0.5)];
   }
+
+  /* Barra cheia (cabeçalho fixo em cima, abas fixas embaixo) — a barra em si nunca tinha o
+     tratamento de vidro (só os botões dentro dela), por isso ficava lisa/plana em vez de parecer
+     vidro de verdade (reportado pelo dono comparando com o chatbot-direct). Mesma receita do
+     .cartao-vidro (fundo translúcido, sombra colorida, traço de luz), sem cantos arredondados —
+     a barra encosta nas duas bordas da tela — e sem animação de entrada (ela é fixa, não "entra"
+     quando a página muda, ficaria piscando a cada navegação). */
+  .barra-vidro {
+    @apply relative border-white/10 bg-white/[0.05] backdrop-blur-xl shadow-[0_8px_30px_-14px_rgba(99,102,241,0.35)] before:pointer-events-none before:absolute before:inset-x-[10%] before:top-0 before:z-10 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/40 before:to-transparent before:content-[''];
+  }
 }
