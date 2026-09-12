@@ -56,5 +56,11 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // icon.png/apple-icon.png/manifest.webmanifest/logo.png precisam ficar de fora: quem busca esses
+  // arquivos é o navegador (pra montar o atalho na tela de início) ou a própria tela de login antes
+  // de existir sessão nenhuma — sem essa exceção, o middleware redirecionava a imagem pro /login e
+  // o logo aparecia quebrado (visto em produção, print de 12/09/2026).
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|icon.png|apple-icon.png|manifest.webmanifest|logo.png).*)",
+  ],
 };

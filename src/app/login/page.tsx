@@ -44,9 +44,8 @@ export default function LoginPage() {
                 className="absolute -inset-2.5 rounded-full opacity-50"
                 style={{ background: "radial-gradient(closest-side, rgba(99,102,241,0.45), transparent 70%)" }}
               />
-              <div className="relative flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500/30 to-indigo-500/5 text-lg font-bold text-indigo-100">
-                SA
-              </div>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.png" alt="SmartAds" className="relative h-14 w-14 rounded-2xl object-cover" />
             </div>
             <div className="text-center">
               <div className="font-display text-[19px] font-bold tracking-tight">SmartAds</div>
