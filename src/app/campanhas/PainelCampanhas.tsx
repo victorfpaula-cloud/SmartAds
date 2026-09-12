@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { NotePencil, X } from "@phosphor-icons/react";
 
 interface ContaMeta {
   id: string;
@@ -46,6 +47,7 @@ export default function PainelCampanhas({ clientes }: { clientes: Cliente[] }) {
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [executando, setExecutando] = useState<string | null>(null);
+  const [campanhaComNotas, setCampanhaComNotas] = useState<Campanha | null>(null);
 
   const contasDoCliente = clientesComConta.find((c) => c.id === clienteId)?.smartads_contas_meta ?? [];
 
@@ -213,6 +215,12 @@ export default function PainelCampanhas({ clientes }: { clientes: Cliente[] }) {
                       >
                         Orçamento
                       </button>
+                      <button
+                        onClick={() => setCampanhaComNotas(campanha)}
+                        className="text-xs font-medium text-neutral-400 hover:text-neutral-200 hover:underline"
+                      >
+                        Notas
+                      </button>
                       {campanha.local && (
                         <Link
                           href={`/campanhas/duplicar/${campanha.local.id}`}
@@ -234,6 +242,130 @@ export default function PainelCampanhas({ clientes }: { clientes: Cliente[] }) {
       <Link href="/campanhas/nova" className="w-fit rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-strong">
         + Nova campanha
       </Link>
+
+      {campanhaComNotas && (
+        <ModalAnotacoes campanha={campanhaComNotas} onFechar={() => setCampanhaComNotas(null)} />
+      )}
+    </div>
+  );
+}
+
+interface Anotacao {
+  id: string;
+  texto: string;
+  created_at: string;
+}
+
+/** Anotações livres por campanha — "cliente pediu pra pausar dia 20", esse tipo de coisa que não
+ * cabe em nenhum campo estruturado do app. Ficam salvas pelo ID da campanha na Meta, então
+ * funcionam pra qualquer campanha do painel, mesmo uma que já existia antes do SmartAds. */
+function ModalAnotacoes({ campanha, onFechar }: { campanha: Campanha; onFechar: () => void }) {
+  const [anotacoes, setAnotacoes] = useState<Anotacao[] | null>(null);
+  const [texto, setTexto] = useState("");
+  const [salvando, setSalvando] = useState(false);
+
+  function carregar() {
+    fetch(`/api/anotacoes?campaignId=${campanha.id}`)
+      .then((r) => r.json())
+      .then((corpo) => setAnotacoes(corpo.anotacoes ?? []))
+      .catch(() => setAnotacoes([]));
+  }
+
+  useEffect(() => {
+    carregar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campanha.id]);
+
+  async function salvar(evento: React.FormEvent) {
+    evento.preventDefault();
+    if (!texto.trim()) return;
+    setSalvando(true);
+
+    const resposta = await fetch("/api/anotacoes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ campaignId: campanha.id, texto }),
+    });
+    setSalvando(false);
+
+    if (resposta.ok) {
+      setTexto("");
+      carregar();
+    } else {
+      const corpo = await resposta.json();
+      alert(corpo.erro || "Falha ao salvar a anotação.");
+    }
+  }
+
+  async function excluir(id: string) {
+    setAnotacoes((atual) => atual?.filter((a) => a.id !== id) ?? null);
+    await fetch(`/api/anotacoes/${id}`, { method: "DELETE" });
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6 backdrop-blur-sm">
+      <div className="flex max-h-[90dvh] w-full max-w-md flex-col overflow-y-auto rounded-2xl border border-white/10 bg-ink-900 shadow-2xl">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-ink-900 px-5 py-3.5">
+          <div className="flex items-center gap-2 overflow-hidden">
+            <NotePencil size={16} className="shrink-0 text-neutral-400" />
+            <h3 className="truncate text-sm font-semibold text-neutral-100">{campanha.name}</h3>
+          </div>
+          <button onClick={onFechar} aria-label="Fechar" className="botao-icone-vidro h-8 w-8 shrink-0">
+            <X size={16} weight="bold" />
+          </button>
+        </div>
+
+        <div className="flex flex-col gap-3 p-5">
+          <form onSubmit={salvar} className="flex flex-col gap-2">
+            <textarea
+              value={texto}
+              onChange={(e) => setTexto(e.target.value)}
+              placeholder="Ex: cliente pediu pra pausar dia 20"
+              rows={2}
+              className="w-full resize-none rounded-lg border border-white/14 bg-ink-850 px-3 py-2 text-sm text-neutral-100 outline-none focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+            />
+            <button
+              type="submit"
+              disabled={salvando || !texto.trim()}
+              className="h-9 w-fit rounded-lg bg-accent px-4 text-xs font-semibold text-white hover:bg-accent-strong disabled:opacity-40"
+            >
+              {salvando ? "Salvando…" : "Adicionar anotação"}
+            </button>
+          </form>
+
+          <div className="flex flex-col gap-2">
+            {anotacoes === null ? (
+              <p className="text-xs text-neutral-500">Carregando…</p>
+            ) : anotacoes.length === 0 ? (
+              <p className="text-xs text-neutral-500">Nenhuma anotação ainda nessa campanha.</p>
+            ) : (
+              anotacoes.map((anotacao) => (
+                <div key={anotacao.id} className="cartao-vidro-interno flex items-start justify-between gap-2 px-3 py-2.5">
+                  <div>
+                    <p className="text-xs leading-relaxed text-neutral-300">{anotacao.texto}</p>
+                    <p className="mt-1 text-[10.5px] text-neutral-600">
+                      {new Date(anotacao.created_at).toLocaleDateString("pt-BR", {
+                        day: "2-digit",
+                        month: "2-digit",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => excluir(anotacao.id)}
+                    aria-label="Excluir anotação"
+                    className="shrink-0 text-neutral-600 hover:text-danger"
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
