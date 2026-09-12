@@ -30,8 +30,9 @@ alter table smartads_clientes enable row level security;
 -- ============================================================================
 -- Contas de anúncio Meta associadas a um cliente. Não é uma "conexão" própria (não guarda token
 -- nenhum) — é só o mapeamento "essa conta de anúncio + essa página/Instagram pertencem a esse
--- cliente", escolhido uma vez na tela de contas conectadas a partir da lista que o token de
--- Usuário do Sistema já enxerga. Um cliente pode ter várias (alguns têm só 1, outros até 20).
+-- cliente", escolhido uma vez na tela de contas conectadas a partir da lista que o login com a
+-- Meta já enxerga (ver smartads_meta_status). Um cliente pode ter várias (alguns têm só 1, outros
+-- até 20).
 -- ============================================================================
 create table if not exists smartads_contas_meta (
   id uuid primary key default gen_random_uuid(),
