@@ -60,7 +60,7 @@ export default function Cabecalho({ ativo }: { ativo: string }) {
           bottom)]` evita ficar por baixo da barra de gestos do iPhone. */}
       <nav
         className="fixed inset-x-0 bottom-0 z-20 border-t border-white/10 bg-ink-950/90 backdrop-blur-xl sm:hidden"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 6px)" }}
       >
         <div className="grid grid-cols-4">
           {LINKS.map(({ href, label, Icone }) => (
