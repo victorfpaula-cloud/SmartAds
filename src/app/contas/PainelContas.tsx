@@ -27,7 +27,7 @@ interface StatusMeta {
 }
 
 interface Anomalia {
-  metrica: "ctr" | "cpc" | "spend";
+  metrica: "frequencia" | "ctr" | "cpm" | "cpc" | "spend";
   rotulo: string;
   valorAtual: number;
   valorAnterior: number;
@@ -61,11 +61,13 @@ interface PaginaDisponivel {
 export default function PainelContas({
   clientesIniciais,
   statusMetaInicial,
+  anunciosPorConta,
   avisoConexao,
   mensagemErro,
 }: {
   clientesIniciais: Cliente[];
   statusMetaInicial: StatusMeta;
+  anunciosPorConta: Record<string, number>;
   avisoConexao: "conectado" | "erro" | null;
   mensagemErro?: string;
 }) {
@@ -138,6 +140,8 @@ export default function PainelContas({
 
       <BannerConexaoMeta status={statusMeta} />
 
+      <AvisoCAPI />
+
       <section className="cartao-vidro overflow-hidden">
         <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
           <h2 className="text-sm font-semibold text-neutral-200">Clientes</h2>
@@ -206,6 +210,21 @@ export default function PainelContas({
                             )}
                           </div>
                         )}
+
+                        {(() => {
+                          const total = anunciosPorConta[conta.id] ?? 0;
+                          // Só o suficiente pra avisar, não pra alarmar — o piso de 15 é o que a
+                          // pesquisa de mercado apontou como faixa saudável de diversidade de
+                          // criativo pro algoritmo de entrega de 2026 (ver conversa de definição).
+                          if (total === 0 || total >= 15) return null;
+                          return (
+                            <p className="mt-1.5 pl-4 text-[11px] text-neutral-500">
+                              {total} anúncio{total > 1 ? "s" : ""} criado{total > 1 ? "s" : ""} aqui pelo
+                              SmartAds — o algoritmo de 2026 testa melhor com 15+ variações de criativo
+                              ativas por conta.
+                            </p>
+                          );
+                        })()}
                       </div>
                     ))}
                   </div>
@@ -251,6 +270,68 @@ function BannerConexaoMeta({ status }: { status: StatusMeta }) {
       >
         Conectar Meta
       </a>
+    </div>
+  );
+}
+
+const CHAVE_CAPI_DISPENSADO = "smartads_aviso_capi_dispensado";
+
+/** Aviso estático (sem IA, sem chamada nenhuma) sobre o Conversions API (CAPI) da Meta — achado
+ * de maior impacto da pesquisa de mercado que fizemos: contas com CAPI configurado têm 17,8% de
+ * custo por resultado menor (dado da própria Meta, abril de 2026), e desde 2026 a configuração é
+ * um clique só no Gerenciador de Eventos, sem precisar de desenvolvedor. O SmartAds não consegue
+ * configurar isso por API (é do lado da conta do cliente na Meta) — só orienta e linka direto.
+ * Dispensável (guarda em localStorage) porque é educativo, não um alerta de algo errado agora. */
+function AvisoCAPI() {
+  const [dispensado, setDispensado] = useState(true); // true até confirmar no localStorage, evita "pulo" na tela
+
+  useEffect(() => {
+    try {
+      setDispensado(localStorage.getItem(CHAVE_CAPI_DISPENSADO) === "1");
+    } catch {
+      setDispensado(false);
+    }
+  }, []);
+
+  function dispensar() {
+    setDispensado(true);
+    try {
+      localStorage.setItem(CHAVE_CAPI_DISPENSADO, "1");
+    } catch {
+      // localStorage bloqueado (aba anônima etc.) — sem problema, só reaparece na próxima visita
+    }
+  }
+
+  if (dispensado) return null;
+
+  return (
+    <div className="cartao-vidro flex flex-col gap-2.5 p-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex items-start gap-2.5">
+        <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-indigo-500/30 to-indigo-500/5 text-indigo-200">
+          <Sparkle size={13} weight="fill" />
+        </div>
+        <p className="text-xs leading-relaxed text-neutral-300">
+          <strong className="text-neutral-100">Confira o Conversions API (CAPI) de cada cliente.</strong>{" "}
+          Contas com CAPI configurado têm em média 17,8% menos custo por resultado (dado da própria
+          Meta). Desde 2026 a configuração é um clique só, direto no Gerenciador de Eventos — sem
+          precisar de desenvolvedor.{" "}
+          <a
+            href="https://www.facebook.com/events_manager2"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-accent-strong hover:underline"
+          >
+            Abrir Gerenciador de Eventos
+          </a>
+        </p>
+      </div>
+      <button
+        onClick={dispensar}
+        className="botao-icone-vidro h-7 w-7 shrink-0 self-end rounded-lg text-neutral-400 sm:self-start"
+        aria-label="Dispensar aviso"
+      >
+        ×
+      </button>
     </div>
   );
 }

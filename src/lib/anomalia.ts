@@ -1,7 +1,7 @@
 import type { LinhaInsight } from "@/lib/meta/api";
 
 export interface Anomalia {
-  metrica: "ctr" | "cpc" | "spend";
+  metrica: "frequencia" | "ctr" | "cpm" | "cpc" | "spend";
   rotulo: string;
   valorAtual: number;
   valorAnterior: number;
@@ -9,10 +9,16 @@ export interface Anomalia {
   mensagem: string;
 }
 
-// % de variação pra considerar relevante o suficiente pra virar aviso — abaixo disso é ruído
-// normal de semana a semana, não vale interromper o dono com isso.
-const LIMIAR_CTR_CPC = 35;
-const LIMIAR_GASTO = 80;
+// Limiares calibrados com o que a indústria de tráfego pago usa como sinal de fadiga de
+// criativo/conta em 2026 (não são números inventados — vieram de pesquisa sobre as ferramentas
+// líderes do mercado, ver conversa de definição desse recurso): frequência cruzando 2-2,5 em 7
+// dias, CTR caindo 20-25% sustentado, CPM subindo 15-20%+ sem explicação. Gasto e CPC são sinais
+// nossos, adicionais, com limiar mais folgado (só entram se nada acima disparar).
+const LIMIAR_FREQUENCIA = 2.5;
+const LIMIAR_CTR_QUEDA = 22;
+const LIMIAR_CPM_ALTA = 17;
+const LIMIAR_CPC_ALTA = 35;
+const LIMIAR_GASTO_ALTA = 80;
 
 function calcularDelta(atual: number, anterior: number): number | null {
   if (anterior === 0) return null; // não dá pra calcular variação percentual a partir de zero
@@ -20,11 +26,19 @@ function calcularDelta(atual: number, anterior: number): number | null {
 }
 
 /** Compara o período atual com o anterior (mesmo tamanho de janela, ex: 7 dias vs os 7 dias
- * antes) pra achar UMA anomalia acionável — pura matemática, sem IA. Prioridade: CTR caindo é o
- * sinal mais direto de criativo cansado/público errado, depois CPC subindo (mais caro por
- * clique), depois gasto disparando sem explicação. Retorna só a primeira que encontrar (uma
- * conta não precisa de 3 avisos ao mesmo tempo) — `null` quando nada foge do normal, ou quando
- * não tem gasto num dos dois períodos (comparação não faz sentido pra conta nova ou pausada). */
+ * antes) pra achar UMA anomalia acionável — pura matemática, sem IA. Ordem de prioridade (a
+ * primeira que disparar vence, uma conta não precisa de 5 avisos ao mesmo tempo):
+ *
+ * 1. Frequência alta — sinal mais direto e imediato de fadiga de criativo (o mesmo público já
+ *    viu o anúncio demais). É o único limiar absoluto, não comparativo: alto agora já é
+ *    problema, não precisa comparar com a semana passada.
+ * 2. CTR caindo — o público está reagindo menos ao criativo/oferta.
+ * 3. CPM subindo — ficou mais caro alcançar a mesma pessoa (leilão mais concorrido, ou qualidade
+ *    de entrega caindo).
+ * 4. CPC subindo / gasto disparando — sinais adicionais nossos, limiar mais alto.
+ *
+ * `null` quando nada foge do normal, ou quando não tem gasto num dos dois períodos (comparação
+ * não faz sentido pra conta nova ou pausada). */
 export function detectarAnomalia(atual: LinhaInsight[], anterior: LinhaInsight[]): Anomalia | null {
   const a = atual[0];
   const b = anterior[0];
@@ -33,10 +47,24 @@ export function detectarAnomalia(atual: LinhaInsight[], anterior: LinhaInsight[]
   const gastoAnterior = Number(b?.spend ?? 0);
   if (gastoAtual === 0 || gastoAnterior === 0) return null;
 
+  const impressoesAtual = Number(a?.impressions ?? 0);
+  const alcanceAtual = Number(a?.reach ?? 0);
+  const frequenciaAtual = alcanceAtual > 0 ? impressoesAtual / alcanceAtual : 0;
+  if (frequenciaAtual >= LIMIAR_FREQUENCIA) {
+    return {
+      metrica: "frequencia",
+      rotulo: "frequência",
+      valorAtual: frequenciaAtual,
+      valorAnterior: 0,
+      deltaPercentual: 0,
+      mensagem: `Frequência de ${frequenciaAtual.toFixed(1)}x nos últimos 7 dias — o público já viu o anúncio muitas vezes, sinal clássico de criativo cansado.`,
+    };
+  }
+
   const ctrAtual = Number(a?.ctr ?? 0);
   const ctrAnterior = Number(b?.ctr ?? 0);
   const deltaCtr = calcularDelta(ctrAtual, ctrAnterior);
-  if (deltaCtr !== null && deltaCtr <= -LIMIAR_CTR_CPC) {
+  if (deltaCtr !== null && deltaCtr <= -LIMIAR_CTR_QUEDA) {
     return {
       metrica: "ctr",
       rotulo: "CTR",
@@ -47,10 +75,24 @@ export function detectarAnomalia(atual: LinhaInsight[], anterior: LinhaInsight[]
     };
   }
 
+  const cpmAtual = Number(a?.cpm ?? 0);
+  const cpmAnterior = Number(b?.cpm ?? 0);
+  const deltaCpm = calcularDelta(cpmAtual, cpmAnterior);
+  if (deltaCpm !== null && deltaCpm >= LIMIAR_CPM_ALTA) {
+    return {
+      metrica: "cpm",
+      rotulo: "CPM",
+      valorAtual: cpmAtual,
+      valorAnterior: cpmAnterior,
+      deltaPercentual: deltaCpm,
+      mensagem: `CPM subiu ${deltaCpm.toFixed(0)}% (de R$ ${cpmAnterior.toFixed(2)} pra R$ ${cpmAtual.toFixed(2)} por mil impressões) comparado à semana anterior.`,
+    };
+  }
+
   const cpcAtual = Number(a?.cpc ?? 0);
   const cpcAnterior = Number(b?.cpc ?? 0);
   const deltaCpc = calcularDelta(cpcAtual, cpcAnterior);
-  if (deltaCpc !== null && deltaCpc >= LIMIAR_CTR_CPC) {
+  if (deltaCpc !== null && deltaCpc >= LIMIAR_CPC_ALTA) {
     return {
       metrica: "cpc",
       rotulo: "custo por clique",
@@ -62,7 +104,7 @@ export function detectarAnomalia(atual: LinhaInsight[], anterior: LinhaInsight[]
   }
 
   const deltaGasto = calcularDelta(gastoAtual, gastoAnterior);
-  if (deltaGasto !== null && deltaGasto >= LIMIAR_GASTO) {
+  if (deltaGasto !== null && deltaGasto >= LIMIAR_GASTO_ALTA) {
     return {
       metrica: "spend",
       rotulo: "gasto",
