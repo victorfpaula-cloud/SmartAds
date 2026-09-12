@@ -458,14 +458,20 @@ export interface LinhaInsight {
 
 export async function obterInsightsConta(
   adAccountId: string,
-  opcoes: { nivel?: "campaign" | "adset" | "ad"; datePreset?: string } = {}
+  opcoes: {
+    nivel?: "account" | "campaign" | "adset" | "ad";
+    datePreset?: string;
+    /** Sem isso, cada linha vem separada por dia (bom pro gráfico). Passar `false` agrega tudo
+     * num único total por conta/campanha — usado no resumo do relatório, que quer só o total. */
+    porDia?: boolean;
+  } = {}
 ): Promise<LinhaInsight[]> {
   const dados = await chamar<{ data: LinhaInsight[] }>(`${adAccountId}/insights`, {
     query: {
       level: opcoes.nivel ?? "campaign",
       fields: CAMPOS_INSIGHTS,
       date_preset: opcoes.datePreset ?? "last_7d",
-      time_increment: 1,
+      ...(opcoes.porDia === false ? {} : { time_increment: 1 }),
       limit: 500,
     },
   });
