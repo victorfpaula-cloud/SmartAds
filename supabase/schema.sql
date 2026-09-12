@@ -63,10 +63,12 @@ create unique index if not exists smartads_contas_meta_ad_account_unico
 alter table smartads_contas_meta enable row level security;
 
 -- ============================================================================
--- Públicos salvos — presets de segmentação reutilizáveis por cliente. `targeting` guarda o spec já
--- no formato que a Meta espera no campo `targeting` do conjunto de anúncios (geo_locations com
--- cities/regions/countries/custom_locations, e opcionalmente interesses) — monta uma vez na tela de
--- público, usa direto em qualquer campanha depois.
+-- Públicos salvos — presets de segmentação reutilizáveis por cliente. Apesar do nome da coluna,
+-- `targeting` guarda o formato NATIVO do SmartAds (localizações — cidade/ponto/região/país — mais
+-- interesses, idade e gênero), não o spec já convertido da Meta: é isso que o construtor de
+-- público (mapa + interesses) sabe reabrir pra editar depois. A conversão pro formato real da Meta
+-- (`geo_locations`/`flexible_spec`) acontece só na hora de criar a campanha (montarTargeting em
+-- src/lib/meta/api.ts).
 --
 -- Além dos públicos montados aqui dentro (`origem = 'smartads'`), também dá pra reaproveitar um
 -- público que o cliente já tinha salvo direto no Gerenciador de Anúncios da Meta
