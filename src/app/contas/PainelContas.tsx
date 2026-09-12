@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Sparkle } from "@phosphor-icons/react";
 
 interface ContaMeta {
   id: string;
@@ -25,9 +26,19 @@ interface StatusMeta {
   ultimo_erro?: string | null;
 }
 
+interface Anomalia {
+  metrica: "ctr" | "cpc" | "spend";
+  rotulo: string;
+  valorAtual: number;
+  valorAnterior: number;
+  deltaPercentual: number;
+  mensagem: string;
+}
+
 interface SaudeConta {
   status: "boa" | "atencao" | "sem_dados";
   motivo: string;
+  anomalia: Anomalia | null;
 }
 
 const COR_SAUDE: Record<SaudeConta["status"], string> = {
@@ -173,21 +184,28 @@ export default function PainelContas({
                 {cliente.smartads_contas_meta.length > 0 && (
                   <div className="mt-3 flex flex-col gap-1.5">
                     {cliente.smartads_contas_meta.map((conta) => (
-                      <div
-                        key={conta.id}
-                        className="selo-vidro flex items-center gap-2 px-3 py-2 text-xs text-neutral-400"
-                      >
-                        {saude[conta.id] && (
-                          <span
-                            className={`h-2 w-2 shrink-0 rounded-full ${COR_SAUDE[saude[conta.id].status]}`}
-                            title={saude[conta.id].motivo}
-                          />
+                      <div key={conta.id} className="selo-vidro px-3 py-2 text-xs text-neutral-400">
+                        <div className="flex items-center gap-2">
+                          {saude[conta.id] && (
+                            <span
+                              className={`h-2 w-2 shrink-0 rounded-full ${COR_SAUDE[saude[conta.id].status]}`}
+                            />
+                          )}
+                          <span className="font-medium text-neutral-200">
+                            {conta.nome_exibicao || conta.meta_ad_account_nome || conta.meta_ad_account_id}
+                          </span>
+                          {conta.page_nome && <span>· {conta.page_nome}</span>}
+                          {conta.instagram_username && <span>· @{conta.instagram_username}</span>}
+                        </div>
+
+                        {saude[conta.id]?.status === "atencao" && (
+                          <div className="mt-1.5 pl-4">
+                            <p className="text-[11px] leading-relaxed text-warn">{saude[conta.id].motivo}</p>
+                            {saude[conta.id].anomalia && (
+                              <BotaoExplicarAnomalia contaId={conta.id} />
+                            )}
+                          </div>
                         )}
-                        <span className="font-medium text-neutral-200">
-                          {conta.nome_exibicao || conta.meta_ad_account_nome || conta.meta_ad_account_id}
-                        </span>
-                        {conta.page_nome && <span>· {conta.page_nome}</span>}
-                        {conta.instagram_username && <span>· @{conta.instagram_username}</span>}
                       </div>
                     ))}
                   </div>
@@ -234,6 +252,55 @@ function BannerConexaoMeta({ status }: { status: StatusMeta }) {
         Conectar Meta
       </a>
     </div>
+  );
+}
+
+/** Explicação em texto (Gemini) pra uma anomalia já detectada — some por trás de um clique
+ * porque é a única chamada de IA que rodaria sem o dono pedir (as outras têm botão "gerar" bem
+ * visível); aqui o gasto de token só acontece se alguém realmente quiser entender o "porquê". */
+function BotaoExplicarAnomalia({ contaId }: { contaId: string }) {
+  const [texto, setTexto] = useState<string | null>(null);
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  async function explicar() {
+    setCarregando(true);
+    setErro(null);
+    const resposta = await fetch("/api/ia/explicar-anomalia", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contaId }),
+    });
+    const corpo = await resposta.json();
+    setCarregando(false);
+
+    if (resposta.ok) {
+      setTexto(corpo.texto);
+    } else {
+      setErro(corpo.erro || "Falha ao gerar a explicação.");
+    }
+  }
+
+  if (texto) {
+    return (
+      <p className="mt-1.5 flex items-start gap-1.5 text-[11px] leading-relaxed text-neutral-300">
+        <Sparkle size={12} weight="fill" className="mt-0.5 shrink-0 text-indigo-300" />
+        {texto}
+      </p>
+    );
+  }
+
+  return (
+    <>
+      <button
+        onClick={explicar}
+        disabled={carregando}
+        className="mt-1 text-[11px] font-medium text-accent-strong hover:underline disabled:opacity-50"
+      >
+        {carregando ? "Explicando…" : "Por quê? (IA)"}
+      </button>
+      {erro && <p className="mt-1 text-[11px] text-danger">{erro}</p>}
+    </>
   );
 }
 
