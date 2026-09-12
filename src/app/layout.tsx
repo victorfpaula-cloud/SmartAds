@@ -57,7 +57,22 @@ export default function RootLayout({
         className="bg-ink-950 font-sans text-neutral-100 antialiased"
         style={{ backgroundColor: CorDeFundo }}
       >
-        {children}
+        {/* Fundo suave (Liquid Glass) — a MESMA receita do chatbot-direct (reservas/layout.tsx):
+            três manchas de degradê radial, sem blur nem position:fixed (um gradiente é suave até
+            "transparent" sozinho, sem precisar desfocar nada). Sem isso, os cards/barras com
+            backdrop-blur não tinham nada colorido atrás pra borrar — só preto sólido — e o "vidro"
+            ficava sem graça nenhuma (reportado pelo dono comparando com a tela de Reservas). */}
+        <div
+          className="min-h-dvh"
+          style={{
+            backgroundImage:
+              "radial-gradient(640px circle at 8% 0%, rgba(79,70,229,0.10), transparent 70%)," +
+              "radial-gradient(600px circle at 100% 28%, rgba(139,92,246,0.09), transparent 70%)," +
+              "radial-gradient(560px circle at 4% 100%, rgba(245,158,11,0.08), transparent 70%)",
+          }}
+        >
+          {children}
+        </div>
       </body>
     </html>
   );
