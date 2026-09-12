@@ -171,3 +171,18 @@ insert into smartads_meta_status (id) values ('default')
 on conflict (id) do nothing;
 
 alter table smartads_meta_status enable row level security;
+
+-- ============================================================================
+-- Selo de saúde por conta (tela de Contas) — cache do cálculo feito em src/lib/saude.ts (pura
+-- matemática sobre os últimos 7 dias, sem IA), recalculado sob demanda quando o registro está
+-- velho (ver src/app/api/saude/route.ts), não por um cron. Evita bater na Meta a cada
+-- carregamento de página.
+-- ============================================================================
+create table if not exists smartads_saude_contas (
+  conta_id uuid primary key references smartads_contas_meta(id) on delete cascade,
+  status text not null check (status in ('boa', 'atencao', 'sem_dados')),
+  motivo text not null,
+  calculado_em timestamptz not null default now()
+);
+
+alter table smartads_saude_contas enable row level security;
