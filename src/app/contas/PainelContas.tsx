@@ -25,6 +25,17 @@ interface StatusMeta {
   ultimo_erro?: string | null;
 }
 
+interface SaudeConta {
+  status: "boa" | "atencao" | "sem_dados";
+  motivo: string;
+}
+
+const COR_SAUDE: Record<SaudeConta["status"], string> = {
+  boa: "bg-ok",
+  atencao: "bg-warn",
+  sem_dados: "bg-neutral-600",
+};
+
 interface ContaDisponivel {
   id: string;
   name: string;
@@ -52,6 +63,17 @@ export default function PainelContas({
   const [nomeNovoCliente, setNomeNovoCliente] = useState("");
   const [criandoCliente, setCriandoCliente] = useState(false);
   const [clienteExpandidoId, setClienteExpandidoId] = useState<string | null>(null);
+  const [saude, setSaude] = useState<Record<string, SaudeConta>>({});
+
+  // Selo de saúde por conta — busca depois da tela já ter mostrado alguma coisa (não trava o
+  // carregamento inicial) e só se a Meta estiver conectada, senão a rota nem tem o que calcular.
+  useEffect(() => {
+    if (!statusMeta.conectado) return;
+    fetch("/api/saude")
+      .then((r) => r.json())
+      .then((corpo) => setSaude(corpo.saude ?? {}))
+      .catch(() => {});
+  }, [statusMeta.conectado]);
 
   async function criarCliente(evento: React.FormEvent) {
     evento.preventDefault();
@@ -155,6 +177,12 @@ export default function PainelContas({
                         key={conta.id}
                         className="selo-vidro flex items-center gap-2 px-3 py-2 text-xs text-neutral-400"
                       >
+                        {saude[conta.id] && (
+                          <span
+                            className={`h-2 w-2 shrink-0 rounded-full ${COR_SAUDE[saude[conta.id].status]}`}
+                            title={saude[conta.id].motivo}
+                          />
+                        )}
                         <span className="font-medium text-neutral-200">
                           {conta.nome_exibicao || conta.meta_ad_account_nome || conta.meta_ad_account_id}
                         </span>
