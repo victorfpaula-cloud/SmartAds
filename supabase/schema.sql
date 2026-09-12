@@ -220,3 +220,91 @@ create table if not exists smartads_anotacoes (
 create index if not exists smartads_anotacoes_campanha_idx on smartads_anotacoes(meta_campaign_id);
 
 alter table smartads_anotacoes enable row level security;
+
+-- ============================================================================
+-- Regras de automação (pausar/ajustar orçamento sozinho) — SEMPRE desligadas por padrão
+-- (ativa = false), o dono liga explicitamente depois de configurar. Limitadas a campanhas
+-- criadas pelo próprio SmartAds (campanha_id → smartads_campanhas_criadas), porque é lá que
+-- guardamos o meta_adset_id necessário pra mexer em orçamento — mesma limitação que o botão
+-- "Orçamento" do painel de Campanhas já tem.
+-- ============================================================================
+create table if not exists smartads_regras_automacao (
+  id uuid primary key default gen_random_uuid(),
+  conta_id uuid not null references smartads_contas_meta(id) on delete cascade,
+  -- null = aplica a TODAS as campanhas ativas dessa conta criadas pelo SmartAds
+  campanha_id uuid references smartads_campanhas_criadas(id) on delete cascade,
+  nome text not null,
+  metrica text not null check (metrica in ('ctr', 'cpc', 'cpm', 'frequencia', 'gasto')),
+  operador text not null check (operador in ('maior_que', 'menor_que')),
+  valor_limite numeric not null,
+  janela_dias integer not null default 3,
+  acao text not null check (acao in ('pausar', 'aumentar_orcamento', 'diminuir_orcamento')),
+  acao_percentual numeric,
+  gasto_minimo_centavos integer not null default 0,
+  cooldown_horas integer not null default 24,
+  ativa boolean not null default false,
+  ultimo_disparo_em timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists smartads_regras_automacao_conta_idx on smartads_regras_automacao(conta_id);
+
+alter table smartads_regras_automacao enable row level security;
+
+-- ============================================================================
+-- Log de auditoria de toda ação autônoma (regra, teste A/B, piloto automático) — o dono só vê
+-- "um aviso do que foi feito" na tela, mas cada linha aqui guarda os números exatos que
+-- motivaram a ação, pra investigar depois se precisar.
+-- ============================================================================
+create table if not exists smartads_execucoes_automacao (
+  id uuid primary key default gen_random_uuid(),
+  regra_id uuid references smartads_regras_automacao(id) on delete set null,
+  campanha_id uuid references smartads_campanhas_criadas(id) on delete set null,
+  tipo text not null check (tipo in ('regra', 'teste_ab', 'piloto_automatico')),
+  descricao text not null,
+  dados jsonb,
+  sucesso boolean not null,
+  erro_mensagem text,
+  executado_em timestamptz not null default now()
+);
+
+create index if not exists smartads_execucoes_automacao_executado_idx on smartads_execucoes_automacao(executado_em desc);
+
+alter table smartads_execucoes_automacao enable row level security;
+
+-- ============================================================================
+-- Teste A/B — usa as próprias variações de imagem já criadas na campanha (meta_ad_ids), não
+-- duplica essa lista. Roda até completar duracao_dias_minima E gasto_minimo_centavos; se não
+-- bater os dois, fica marcado "dado_insuficiente" em vez de forçar um vencedor sem confiança
+-- estatística nenhuma.
+-- ============================================================================
+create table if not exists smartads_testes_ab (
+  id uuid primary key default gen_random_uuid(),
+  campanha_id uuid not null references smartads_campanhas_criadas(id) on delete cascade,
+  duracao_dias_minima integer not null default 7,
+  gasto_minimo_centavos integer not null default 5000,
+  status text not null default 'rodando' check (status in ('rodando', 'concluido', 'dado_insuficiente')),
+  vencedor_meta_ad_id text,
+  avaliado_em timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists smartads_testes_ab_campanha_idx on smartads_testes_ab(campanha_id);
+
+alter table smartads_testes_ab enable row level security;
+
+-- ============================================================================
+-- Piloto automático por cliente — realoca orçamento entre as campanhas desse cliente sozinho,
+-- dentro de um teto por execução. Desligado por padrão (ativo = false); o dono liga na tela de
+-- Contas quando quiser.
+-- ============================================================================
+create table if not exists smartads_piloto_automatico (
+  cliente_id uuid primary key references smartads_clientes(id) on delete cascade,
+  ativo boolean not null default false,
+  teto_realocacao_percentual numeric not null default 20,
+  gasto_minimo_centavos integer not null default 10000,
+  ultimo_ajuste_em timestamptz,
+  created_at timestamptz not null default now()
+);
+
+alter table smartads_piloto_automatico enable row level security;

@@ -4,6 +4,7 @@ import {
   Megaphone,
   Target,
   ChartLineUp,
+  Robot,
   SignOut,
 } from "@phosphor-icons/react/dist/ssr";
 
@@ -11,6 +12,7 @@ const LINKS = [
   { href: "/contas", label: "Contas", Icone: Buildings },
   { href: "/campanhas", label: "Campanhas", Icone: Megaphone },
   { href: "/publicos", label: "Públicos", Icone: Target },
+  { href: "/automacao", label: "Automação", Icone: Robot },
   { href: "/relatorios", label: "Relatórios", Icone: ChartLineUp },
 ];
 
@@ -68,19 +70,19 @@ export default function Cabecalho({ ativo }: { ativo: string }) {
         className="barra-vidro fixed inset-x-0 bottom-0 z-20 border-t sm:hidden"
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 6px)" }}
       >
-        <div className="grid grid-cols-4">
+        <div className="grid grid-cols-5">
           {LINKS.map(({ href, label, Icone }) => (
             <Link
               key={href}
               href={href}
               className={
                 ativo === href
-                  ? "flex flex-col items-center gap-1 py-2.5 text-accent-strong"
-                  : "flex flex-col items-center gap-1 py-2.5 text-neutral-500"
+                  ? "flex flex-col items-center gap-1 px-0.5 py-2.5 text-accent-strong"
+                  : "flex flex-col items-center gap-1 px-0.5 py-2.5 text-neutral-500"
               }
             >
-              <Icone size={22} weight={ativo === href ? "fill" : "regular"} />
-              <span className="text-[10.5px] font-medium">{label}</span>
+              <Icone size={21} weight={ativo === href ? "fill" : "regular"} />
+              <span className="text-center text-[9.5px] font-medium leading-tight">{label}</span>
             </Link>
           ))}
         </div>
