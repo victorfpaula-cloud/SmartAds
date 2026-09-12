@@ -92,7 +92,8 @@ export default function PainelRelatorios() {
       )}
 
       <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl">
-        <table className="w-full text-left text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[560px] text-left text-sm">
           <thead>
             <tr className="border-b border-white/10 text-xs uppercase tracking-wide text-neutral-500">
               <th className="px-4 py-3 font-medium">Cliente</th>
@@ -122,6 +123,7 @@ export default function PainelRelatorios() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

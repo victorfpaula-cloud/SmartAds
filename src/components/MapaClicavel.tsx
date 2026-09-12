@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { MapContainer, TileLayer, Marker, Circle, useMapEvents } from "react-leaflet";
+import { X } from "@phosphor-icons/react";
 
 // Ícone padrão do Leaflet depende de arquivos que o bundler do Next não resolve sozinho — sem
 // isso o marcador aparece quebrado (ícone ausente). Usa os mesmos PNGs do próprio pacote via CDN
@@ -44,16 +45,20 @@ export default function MapaClicavel({
   const [nome, setNome] = useState("");
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
-      <div className="flex w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-ink-900 shadow-2xl">
-        <div className="flex items-center justify-between border-b border-white/10 px-5 py-3.5">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6 backdrop-blur-sm">
+      <div className="flex max-h-[90dvh] w-full max-w-2xl flex-col overflow-y-auto rounded-2xl border border-white/10 bg-ink-900 shadow-2xl">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-ink-900 px-5 py-3.5">
           <h3 className="text-sm font-semibold text-neutral-100">Marcar ponto no mapa</h3>
-          <button onClick={onFechar} className="text-neutral-400 hover:text-neutral-200">
-            ✕
+          <button
+            onClick={onFechar}
+            aria-label="Fechar"
+            className="flex h-8 w-8 items-center justify-center rounded-full text-neutral-400 hover:bg-white/10 hover:text-neutral-200"
+          >
+            <X size={16} weight="bold" />
           </button>
         </div>
 
-        <div className="h-80 w-full">
+        <div className="h-72 w-full shrink-0 sm:h-80">
           <MapContainer
             center={centroInicial}
             zoom={ponto ? 12 : 4}

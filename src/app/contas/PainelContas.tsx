@@ -110,7 +110,7 @@ export default function PainelContas({
           <h2 className="text-sm font-semibold text-neutral-200">Clientes</h2>
         </div>
 
-        <form onSubmit={criarCliente} className="flex gap-2 border-b border-white/10 px-5 py-4">
+        <form onSubmit={criarCliente} className="flex flex-col gap-2 border-b border-white/10 px-5 py-4 sm:flex-row">
           <input
             value={nomeNovoCliente}
             onChange={(e) => setNomeNovoCliente(e.target.value)}
@@ -120,7 +120,7 @@ export default function PainelContas({
           <button
             type="submit"
             disabled={criandoCliente}
-            className="h-10 rounded-lg bg-accent px-4 text-sm font-semibold text-white transition hover:bg-accent-strong disabled:opacity-60"
+            className="h-10 shrink-0 rounded-lg bg-accent px-4 text-sm font-semibold text-white transition active:scale-[0.98] hover:bg-accent-strong disabled:opacity-60"
           >
             {criandoCliente ? "Criando…" : "Adicionar cliente"}
           </button>
@@ -128,13 +128,13 @@ export default function PainelContas({
 
         {clientes.length === 0 ? (
           <p className="px-5 py-8 text-center text-sm text-neutral-500">
-            Nenhum cliente cadastrado ainda — adicione o primeiro acima.
+            Nenhum cliente cadastrado ainda. Adicione o primeiro acima.
           </p>
         ) : (
           <ul className="divide-y divide-white/10">
             {clientes.map((cliente) => (
               <li key={cliente.id} className="px-5 py-4">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-sm font-semibold text-neutral-100">{cliente.nome}</span>
                   <button
                     onClick={() =>
@@ -180,7 +180,7 @@ export default function PainelContas({
 function BannerConexaoMeta({ status }: { status: StatusMeta }) {
   if (status.conectado) {
     return (
-      <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 backdrop-blur-xl">
+      <div className="flex flex-col gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between">
         <span className="text-sm text-neutral-300">
           Meta conectada{status.meta_user_nome ? ` como ${status.meta_user_nome}` : ""}.
         </span>
@@ -195,13 +195,13 @@ function BannerConexaoMeta({ status }: { status: StatusMeta }) {
   }
 
   return (
-    <div className="flex items-center justify-between rounded-xl border border-warn/30 bg-warn/10 px-4 py-3">
+    <div className="flex flex-col gap-2.5 rounded-xl border border-warn/30 bg-warn/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
       <span className="text-sm text-neutral-200">
-        {status.ultimo_erro || "A Meta ainda não foi conectada — conecte pra adicionar contas de anúncio."}
+        {status.ultimo_erro || "A Meta ainda não foi conectada. Conecte pra adicionar contas de anúncio."}
       </span>
       <a
         href="/api/auth/meta/login"
-        className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-accent-strong"
+        className="shrink-0 rounded-lg bg-accent px-3 py-1.5 text-center text-xs font-semibold text-white hover:bg-accent-strong"
       >
         Conectar Meta
       </a>

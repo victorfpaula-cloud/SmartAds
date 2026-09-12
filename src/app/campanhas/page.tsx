@@ -15,7 +15,7 @@ export default async function CampanhasPage() {
   return (
     <>
       <Cabecalho ativo="/campanhas" />
-      <main className="mx-auto max-w-6xl px-6 py-8">
+      <main className="mx-auto max-w-6xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
         <h1 className="font-display text-2xl font-bold">Campanhas no ar</h1>
         <p className="mt-1 text-sm text-neutral-400">
           Pausar/ativar e editar orçamento na hora, por cliente e conta.

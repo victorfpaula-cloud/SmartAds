@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
+import { MapPin, GlobeHemisphereWest, X } from "@phosphor-icons/react";
 import type { Localizacao, Interesse, Publico, Genero } from "@/lib/meta/tipos";
 
 const MapaClicavel = dynamic(() => import("./MapaClicavel"), { ssr: false });
@@ -59,7 +60,7 @@ export default function ConstrutorDePublico({
         {valor.localizacoes.length > 0 && (
           <div className="mt-2.5 flex flex-wrap gap-1.5">
             {valor.localizacoes.map((loc, indice) => (
-              <Chip key={indice} texto={rotuloLocalizacao(loc)} onRemover={() => removerLocalizacao(indice)} />
+              <Chip key={indice} icone={iconeLocalizacao(loc)} texto={rotuloLocalizacao(loc)} onRemover={() => removerLocalizacao(indice)} />
             ))}
           </div>
         )}
@@ -77,7 +78,7 @@ export default function ConstrutorDePublico({
         )}
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div>
           <label className="text-xs font-semibold text-neutral-400">Idade mín.</label>
           <input
@@ -134,18 +135,40 @@ export default function ConstrutorDePublico({
 }
 
 function rotuloLocalizacao(loc: Localizacao): string {
-  if (loc.tipo === "cidade") return `📍 ${loc.nome} (${loc.raioKm}km)`;
-  if (loc.tipo === "ponto") return `📍 ${loc.nome || "Ponto no mapa"} (${loc.raioKm}km)`;
-  if (loc.tipo === "regiao") return `🗺️ ${loc.nome}`;
-  return `🌎 ${loc.nome}`;
+  if (loc.tipo === "cidade") return `${loc.nome} (${loc.raioKm}km)`;
+  if (loc.tipo === "ponto") return `${loc.nome || "Ponto no mapa"} (${loc.raioKm}km)`;
+  if (loc.tipo === "regiao") return loc.nome;
+  return loc.nome;
 }
 
-function Chip({ texto, onRemover }: { texto: string; onRemover: () => void }) {
+function iconeLocalizacao(loc: Localizacao) {
+  return loc.tipo === "regiao" || loc.tipo === "pais" ? (
+    <GlobeHemisphereWest size={13} weight="bold" />
+  ) : (
+    <MapPin size={13} weight="bold" />
+  );
+}
+
+function Chip({
+  texto,
+  icone,
+  onRemover,
+}: {
+  texto: string;
+  icone?: React.ReactNode;
+  onRemover: () => void;
+}) {
   return (
-    <span className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-neutral-200">
+    <span className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.05] py-1 pl-3 pr-1.5 text-xs text-neutral-200">
+      {icone && <span className="text-neutral-400">{icone}</span>}
       {texto}
-      <button type="button" onClick={onRemover} className="text-neutral-500 hover:text-danger">
-        ✕
+      <button
+        type="button"
+        onClick={onRemover}
+        aria-label={`Remover ${texto}`}
+        className="flex h-5 w-5 items-center justify-center rounded-full text-neutral-500 hover:bg-white/10 hover:text-danger"
+      >
+        <X size={11} weight="bold" />
       </button>
     </span>
   );

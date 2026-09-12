@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
     const promotedObject = modelo.exigeFormulario ? { page_id: conta.page_id } : undefined;
 
     const adset = await criarConjuntoDeAnuncios(adAccountId, {
-      name: `${corpo.nomeCampanha} — conjunto`,
+      name: `${corpo.nomeCampanha} - conjunto`,
       campaignId: campanha.id,
       optimizationGoal: modelo.optimizationGoal,
       billingEvent: modelo.billingEvent,
@@ -131,7 +131,7 @@ export async function POST(request: NextRequest) {
         pageId: conta.page_id,
         instagramActorId: conta.instagram_business_id,
         sourceInstagramMediaId: corpo.criativo.postSelecionadoId,
-        name: `${corpo.nomeCampanha} — criativo`,
+        name: `${corpo.nomeCampanha} - criativo`,
       });
     } else {
       const imageHash = corpo.criativo.imagemBase64
@@ -139,7 +139,7 @@ export async function POST(request: NextRequest) {
         : undefined;
 
       criativo = await criarCriativoNovo(adAccountId, {
-        name: `${corpo.nomeCampanha} — criativo`,
+        name: `${corpo.nomeCampanha} - criativo`,
         pageId: conta.page_id,
         instagramActorId: conta.instagram_business_id,
         imageHash,
@@ -153,7 +153,7 @@ export async function POST(request: NextRequest) {
     criativoId = criativo.id;
 
     const anuncio = await criarAnuncio(adAccountId, {
-      name: `${corpo.nomeCampanha} — anúncio`,
+      name: `${corpo.nomeCampanha} - anúncio`,
       adsetId: adset.id,
       creativeId: criativo.id,
     });

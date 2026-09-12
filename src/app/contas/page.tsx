@@ -26,7 +26,7 @@ export default async function ContasPage({
   return (
     <>
       <Cabecalho ativo="/contas" />
-      <main className="mx-auto max-w-6xl px-6 py-8">
+      <main className="mx-auto max-w-6xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
         <PainelContas
           clientesIniciais={clientes ?? []}
           statusMetaInicial={statusMeta ?? { conectado: false }}
