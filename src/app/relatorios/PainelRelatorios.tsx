@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { Sparkle, ArrowsClockwise } from "@phosphor-icons/react";
 
 interface LinhaResumo {
   clienteId: string;
@@ -42,6 +43,95 @@ export default function PainelRelatorios() {
   if (linhas.length === 0) {
     return <p className="cartao-vidro px-5 py-6 text-sm text-neutral-400">Nenhuma conta associada ainda.</p>;
   }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <ResumoIA />
+      <PainelNumeros linhas={linhas} />
+    </div>
+  );
+}
+
+function formatarTempoRelativo(iso: string): string {
+  const minutos = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (minutos < 1) return "agora mesmo";
+  if (minutos < 60) return `há ${minutos} min`;
+  const horas = Math.round(minutos / 60);
+  if (horas < 24) return `há ${horas}h`;
+  const dias = Math.round(horas / 24);
+  return `há ${dias} dia${dias > 1 ? "s" : ""}`;
+}
+
+/** Resumo em texto (Gemini) do panorama de todos os clientes — gerado sob demanda (nunca
+ * automático, pra não gastar token à toa) e cacheado (ver /api/ia/resumo). Falha "quieta": se o
+ * Gemini não estiver configurado ou a chamada falhar, mostra o convite pra gerar de novo em vez
+ * de quebrar o resto da tela de Relatórios, que segue funcionando com os números crus abaixo. */
+function ResumoIA() {
+  const [resumo, setResumo] = useState<{ texto: string; gerado_em: string } | null | undefined>(undefined);
+  const [gerando, setGerando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/ia/resumo")
+      .then((r) => r.json())
+      .then((corpo) => setResumo(corpo.resumo))
+      .catch(() => setResumo(null));
+  }, []);
+
+  async function gerar() {
+    setGerando(true);
+    setErro(null);
+    const resposta = await fetch("/api/ia/resumo", { method: "POST" });
+    const corpo = await resposta.json();
+    setGerando(false);
+
+    if (resposta.ok) {
+      setResumo(corpo.resumo);
+    } else {
+      setErro(corpo.erro || "Falha ao gerar o resumo.");
+    }
+  }
+
+  if (resumo === undefined) return null; // ainda carregando o cache — evita um "pulo" na tela
+
+  return (
+    <div className="cartao-vidro p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500/30 to-indigo-500/5 text-indigo-200">
+            <Sparkle size={15} weight="fill" />
+          </div>
+          <h2 className="text-sm font-semibold text-neutral-200">Resumo (IA)</h2>
+        </div>
+        <button
+          onClick={gerar}
+          disabled={gerando}
+          className="botao-icone-vidro shrink-0 gap-1.5 rounded-lg px-2.5 py-1.5 text-[11.5px] font-medium disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <ArrowsClockwise size={13} className={gerando ? "animate-spin" : ""} />
+          {gerando ? "Gerando…" : resumo ? "Atualizar" : "Gerar resumo"}
+        </button>
+      </div>
+
+      {resumo ? (
+        <>
+          <p className="mt-3.5 text-[13.5px] leading-relaxed text-neutral-300">{resumo.texto}</p>
+          <p className="mt-3 text-[11px] text-neutral-600">
+            Gerado por IA · atualizado {formatarTempoRelativo(resumo.gerado_em)}
+          </p>
+        </>
+      ) : (
+        <p className="mt-3.5 text-[13px] text-neutral-500">
+          Peça um resumo em português do panorama dos últimos 30 dias de todos os clientes.
+        </p>
+      )}
+
+      {erro && <p className="mt-2.5 text-xs text-danger">{erro}</p>}
+    </div>
+  );
+}
+
+function PainelNumeros({ linhas }: { linhas: LinhaResumo[] }) {
 
   const validas = linhas.filter((l) => l.erro === undefined);
   const totalGasto = validas.reduce((s, l) => s + (l.spend ?? 0), 0);

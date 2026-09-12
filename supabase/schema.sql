@@ -186,3 +186,16 @@ create table if not exists smartads_saude_contas (
 );
 
 alter table smartads_saude_contas enable row level security;
+
+-- ============================================================================
+-- Resumo em texto (Gemini) do painel de Relatórios — linha única, reescrita a cada geração (não
+-- guarda histórico de resumos antigos, só o mais recente). Gerado sob demanda (botão na tela),
+-- não por cron — evita gastar token à toa quando ninguém está olhando.
+-- ============================================================================
+create table if not exists smartads_resumos_ia (
+  id text primary key default 'relatorios',
+  texto text not null,
+  gerado_em timestamptz not null default now()
+);
+
+alter table smartads_resumos_ia enable row level security;
