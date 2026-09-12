@@ -36,7 +36,11 @@ interface CorpoRequisicao {
     postSelecionadoId?: string;
     mensagem: string;
     titulo?: string;
-    imagemBase64?: string;
+    /** Uma imagem por Anúncio, todos dentro do MESMO Conjunto de Anúncios — não um conjunto por
+     * imagem. É assim que o algoritmo da Meta (Andromeda) testa as variações e distribui verba
+     * entre elas sozinho; espalhar em conjuntos separados fragmenta o público/orçamento e faz
+     * cada um entrar em aprendizado do zero. Ver explicação equivalente na tela (FormularioCampanha). */
+    imagensBase64?: string[];
     link?: string;
     callToAction?: string;
     leadGenFormId?: string;
@@ -92,14 +96,16 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
   }
+  if (!corpo.criativo.usarPostExistente && !corpo.criativo.imagensBase64?.length) {
+    return NextResponse.json({ erro: "Envie pelo menos uma imagem." }, { status: 400 });
+  }
 
   const adAccountId = conta.meta_ad_account_id as string;
   const targeting = montarTargeting(corpo.publico, corpo.incluirFacebook);
 
   let campanhaId: string | undefined;
   let adsetId: string | undefined;
-  let criativoId: string | undefined;
-  let anuncioId: string | undefined;
+  const anuncioIds: string[] = [];
 
   try {
     const campanha = await criarCampanha(adAccountId, {
@@ -125,39 +131,46 @@ export async function POST(request: NextRequest) {
     });
     adsetId = adset.id;
 
-    let criativo: { id: string };
     if (corpo.criativo.usarPostExistente && corpo.criativo.postSelecionadoId) {
-      criativo = await criarCriativoDePostExistente(adAccountId, {
+      const criativo = await criarCriativoDePostExistente(adAccountId, {
         pageId: conta.page_id,
         instagramActorId: conta.instagram_business_id,
         sourceInstagramMediaId: corpo.criativo.postSelecionadoId,
         name: `${corpo.nomeCampanha} - criativo`,
       });
-    } else {
-      const imageHash = corpo.criativo.imagemBase64
-        ? await subirImagem(adAccountId, corpo.criativo.imagemBase64)
-        : undefined;
-
-      criativo = await criarCriativoNovo(adAccountId, {
-        name: `${corpo.nomeCampanha} - criativo`,
-        pageId: conta.page_id,
-        instagramActorId: conta.instagram_business_id,
-        imageHash,
-        mensagem: corpo.criativo.mensagem,
-        titulo: corpo.criativo.titulo,
-        link: corpo.criativo.link,
-        callToAction: corpo.criativo.callToAction,
-        leadGenFormId: corpo.criativo.leadGenFormId,
+      const anuncio = await criarAnuncio(adAccountId, {
+        name: `${corpo.nomeCampanha} - anúncio`,
+        adsetId: adset.id,
+        creativeId: criativo.id,
       });
-    }
-    criativoId = criativo.id;
+      anuncioIds.push(anuncio.id);
+    } else {
+      // Uma imagem = um Anúncio, todos no MESMO conjunto criado acima — não um conjunto por
+      // imagem (ver comentário no tipo CorpoRequisicao.criativo.imagensBase64 do porquê).
+      const imagens = corpo.criativo.imagensBase64 ?? [];
+      for (let i = 0; i < imagens.length; i++) {
+        const sufixo = imagens.length > 1 ? ` ${i + 1}` : "";
+        const imageHash = await subirImagem(adAccountId, imagens[i]);
 
-    const anuncio = await criarAnuncio(adAccountId, {
-      name: `${corpo.nomeCampanha} - anúncio`,
-      adsetId: adset.id,
-      creativeId: criativo.id,
-    });
-    anuncioId = anuncio.id;
+        const criativo = await criarCriativoNovo(adAccountId, {
+          name: `${corpo.nomeCampanha} - criativo${sufixo}`,
+          pageId: conta.page_id,
+          instagramActorId: conta.instagram_business_id,
+          imageHash,
+          mensagem: corpo.criativo.mensagem,
+          titulo: corpo.criativo.titulo,
+          link: corpo.criativo.link,
+          callToAction: corpo.criativo.callToAction,
+          leadGenFormId: corpo.criativo.leadGenFormId,
+        });
+        const anuncio = await criarAnuncio(adAccountId, {
+          name: `${corpo.nomeCampanha} - anúncio${sufixo}`,
+          adsetId: adset.id,
+          creativeId: criativo.id,
+        });
+        anuncioIds.push(anuncio.id);
+      }
+    }
 
     const { data: campanhaSalva } = await supabase
       .from("smartads_campanhas_criadas")
@@ -166,7 +179,7 @@ export async function POST(request: NextRequest) {
         publico_id: corpo.publicoId ?? null,
         meta_campaign_id: campanha.id,
         meta_adset_id: adset.id,
-        meta_ad_ids: [anuncio.id],
+        meta_ad_ids: anuncioIds,
         tipo_modelo: corpo.tipoModelo,
         config_criacao: corpo,
       })
@@ -178,7 +191,7 @@ export async function POST(request: NextRequest) {
       acao: "criar_campanha",
       payload: corpo as unknown as Record<string, unknown>,
       sucesso: true,
-      resultado: { campanhaId: campanha.id, adsetId: adset.id, anuncioId: anuncio.id },
+      resultado: { campanhaId: campanha.id, adsetId: adset.id, anuncioIds },
     });
 
     return NextResponse.json({ campanha: campanhaSalva }, { status: 201 });
@@ -208,6 +221,6 @@ export async function POST(request: NextRequest) {
     });
 
     const status = erro instanceof ErroMetaNaoConectado ? 409 : 502;
-    return NextResponse.json({ erro: mensagem, etapaAlcancada: { campanhaId, adsetId, criativoId, anuncioId } }, { status });
+    return NextResponse.json({ erro: mensagem, etapaAlcancada: { campanhaId, adsetId, anuncioIds } }, { status });
   }
 }
