@@ -1,10 +1,23 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Manrope, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "SmartAds",
   description: "Gerenciador de anúncios Meta Ads simplificado, pra agência com múltiplos clientes",
+  // Mesmo padrão dos apps irmãos (ver chatbot-direct): ícones (src/app/icon.png e apple-icon.png,
+  // servidos automaticamente pelo Next) + manifest, pra aparecer como app de verdade — com ícone
+  // próprio, sem a barra do navegador — ao "Adicionar à Tela de Início" no iPhone/iPad.
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "SmartAds",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#07080a",
 };
 
 // Mesmo par de fontes dos apps irmãos: Space Grotesk pros títulos/números (classe font-display,

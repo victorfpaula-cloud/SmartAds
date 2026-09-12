@@ -1,0 +1,12 @@
+{
+  "name": "SmartAds",
+  "short_name": "SmartAds",
+  "start_url": "/contas",
+  "display": "standalone",
+  "background_color": "#07080a",
+  "theme_color": "#07080a",
+  "icons": [
+    { "src": "/icon.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/apple-icon.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
