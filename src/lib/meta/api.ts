@@ -461,6 +461,10 @@ export async function obterInsightsConta(
   opcoes: {
     nivel?: "account" | "campaign" | "adset" | "ad";
     datePreset?: string;
+    /** Intervalo customizado (ex: "os 7 dias ANTES do last_7d", pra comparação período a
+     * período) — a Meta não tem um date_preset pronto pra isso. Quando presente, tem prioridade
+     * sobre `datePreset`. */
+    intervalo?: { desde: string; ate: string };
     /** Sem isso, cada linha vem separada por dia (bom pro gráfico). Passar `false` agrega tudo
      * num único total por conta/campanha — usado no resumo do relatório, que quer só o total. */
     porDia?: boolean;
@@ -470,7 +474,9 @@ export async function obterInsightsConta(
     query: {
       level: opcoes.nivel ?? "campaign",
       fields: CAMPOS_INSIGHTS,
-      date_preset: opcoes.datePreset ?? "last_7d",
+      ...(opcoes.intervalo
+        ? { time_range: { since: opcoes.intervalo.desde, until: opcoes.intervalo.ate } }
+        : { date_preset: opcoes.datePreset ?? "last_7d" }),
       ...(opcoes.porDia === false ? {} : { time_increment: 1 }),
       limit: 500,
     },
