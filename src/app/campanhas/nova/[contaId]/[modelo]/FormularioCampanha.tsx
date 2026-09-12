@@ -25,34 +25,55 @@ interface PostInstagram {
 
 const ETAPAS = ["Público", "Orçamento", "Criativo", "Revisão"];
 
+/** Preenchidos quando o formulário abre a partir de "Duplicar" (ver /campanhas/duplicar/[id]) —
+ * reaproveita público, plataforma e orçamento da campanha original, e pula direto pro passo do
+ * criativo (que nasce em branco, de propósito: é sempre um conteúdo novo). */
+export interface ValoresIniciaisCampanha {
+  publico: Publico;
+  publicoId?: string;
+  incluirFacebook: boolean;
+  orcamento: { tipo: "diario" | "vitalicio"; valorCentavos: number; dataInicio?: string; dataFim?: string };
+  nomeCampanha?: string;
+}
+
 export default function FormularioCampanha({
   contaId,
   clienteId,
   clienteNome,
   instagramBusinessId,
   modelo,
+  valoresIniciais,
+  etapaInicial = 1,
 }: {
   contaId: string;
   clienteId?: string;
   clienteNome: string;
   instagramBusinessId?: string | null;
   modelo: ModeloCampanha;
+  valoresIniciais?: ValoresIniciaisCampanha;
+  etapaInicial?: number;
 }) {
   const router = useRouter();
-  const [etapa, setEtapa] = useState(1);
+  const [etapa, setEtapa] = useState(etapaInicial);
 
   // Passo 1 — público
   const [publicosSalvos, setPublicosSalvos] = useState<PublicoSalvo[]>([]);
-  const [publicoSalvoId, setPublicoSalvoId] = useState<string>("");
-  const [modoPublico, setModoPublico] = useState<"salvo" | "novo">("salvo");
-  const [publicoNovo, setPublicoNovo] = useState<Publico>(PUBLICO_VAZIO);
-  const [incluirFacebook, setIncluirFacebook] = useState(false);
+  const [publicoSalvoId, setPublicoSalvoId] = useState<string>(valoresIniciais?.publicoId ?? "");
+  const [modoPublico, setModoPublico] = useState<"salvo" | "novo">(
+    valoresIniciais && !valoresIniciais.publicoId ? "novo" : "salvo"
+  );
+  const [publicoNovo, setPublicoNovo] = useState<Publico>(valoresIniciais?.publico ?? PUBLICO_VAZIO);
+  const [incluirFacebook, setIncluirFacebook] = useState(valoresIniciais?.incluirFacebook ?? false);
 
   // Passo 2 — orçamento
-  const [tipoOrcamento, setTipoOrcamento] = useState<"diario" | "vitalicio">("diario");
-  const [valorReais, setValorReais] = useState("");
-  const [dataInicio, setDataInicio] = useState("");
-  const [dataFim, setDataFim] = useState("");
+  const [tipoOrcamento, setTipoOrcamento] = useState<"diario" | "vitalicio">(
+    valoresIniciais?.orcamento.tipo ?? "diario"
+  );
+  const [valorReais, setValorReais] = useState(
+    valoresIniciais ? String(valoresIniciais.orcamento.valorCentavos / 100).replace(".", ",") : ""
+  );
+  const [dataInicio, setDataInicio] = useState(valoresIniciais?.orcamento.dataInicio ?? "");
+  const [dataFim, setDataFim] = useState(valoresIniciais?.orcamento.dataFim ?? "");
 
   // Passo 3 — criativo
   const [usarPostExistente, setUsarPostExistente] = useState(modelo.permiteUsarPostExistente);
@@ -67,7 +88,9 @@ export default function FormularioCampanha({
   const [leadGenFormId, setLeadGenFormId] = useState("");
 
   // Passo 4 — revisão
-  const [nomeCampanha, setNomeCampanha] = useState("");
+  const [nomeCampanha, setNomeCampanha] = useState(
+    valoresIniciais?.nomeCampanha ? `${valoresIniciais.nomeCampanha} (cópia)` : ""
+  );
   const [publicando, setPublicando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -180,6 +203,11 @@ export default function FormularioCampanha({
 
   return (
     <div className="mt-6">
+      {valoresIniciais && (
+        <div className="mb-4 rounded-lg border border-accent/30 bg-accent/10 px-4 py-2.5 text-xs text-accent-strong">
+          Duplicando campanha — público e orçamento reaproveitados. Falta só o criativo novo.
+        </div>
+      )}
       <div className="mb-6 flex items-center gap-2">
         {ETAPAS.map((nome, indice) => (
           <div key={nome} className="flex items-center gap-2">

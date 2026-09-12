@@ -204,13 +204,23 @@ export default function PainelCampanhas({ clientes }: { clientes: Cliente[] }) {
                   </td>
                   <td className="px-4 py-3 text-neutral-300">{formatarReais(campanha.spend)}</td>
                   <td className="px-4 py-3 text-right">
-                    <button
-                      onClick={() => editarOrcamento(campanha)}
-                      disabled={executando === campanha.id}
-                      className="text-xs font-medium text-accent-strong hover:underline"
-                    >
-                      Editar orçamento
-                    </button>
+                    <div className="flex justify-end gap-3">
+                      <button
+                        onClick={() => editarOrcamento(campanha)}
+                        disabled={executando === campanha.id}
+                        className="text-xs font-medium text-accent-strong hover:underline"
+                      >
+                        Orçamento
+                      </button>
+                      {campanha.local && (
+                        <Link
+                          href={`/campanhas/duplicar/${campanha.local.id}`}
+                          className="text-xs font-medium text-neutral-400 hover:text-neutral-200 hover:underline"
+                        >
+                          Duplicar
+                        </Link>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
