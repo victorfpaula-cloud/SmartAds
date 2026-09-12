@@ -82,7 +82,9 @@ export default function FormularioCampanha({
   const [postSelecionadoId, setPostSelecionadoId] = useState("");
   const [mensagem, setMensagem] = useState("");
   const [titulo, setTitulo] = useState("");
-  const [imagemBase64, setImagemBase64] = useState<string | undefined>();
+  // Uma imagem = um Anúncio depois (ver hierarquia explicada na tela) — todas as variações
+  // entram no MESMO Conjunto de Anúncios, nunca um conjunto por imagem.
+  const [imagens, setImagens] = useState<string[]>([]);
   const [link, setLink] = useState("");
   const [callToAction, setCallToAction] = useState("LEARN_MORE");
   const [leadGenFormId, setLeadGenFormId] = useState("");
@@ -141,6 +143,7 @@ export default function FormularioCampanha({
     }
     if (passo === 3) {
       if (usarPostExistente) return !!postSelecionadoId;
+      if (imagens.length === 0) return false;
       if (!mensagem.trim()) return false;
       if (modelo.exigeLink && !link.trim()) return false;
       if (modelo.exigeFormulario && !leadGenFormId.trim()) return false;
@@ -175,7 +178,7 @@ export default function FormularioCampanha({
           postSelecionadoId: usarPostExistente ? postSelecionadoId : undefined,
           mensagem,
           titulo: titulo || undefined,
-          imagemBase64,
+          imagensBase64: usarPostExistente ? undefined : imagens,
           link: modelo.exigeLink ? link : undefined,
           callToAction: modelo.exigeLink ? callToAction : undefined,
           leadGenFormId: modelo.exigeFormulario ? leadGenFormId : undefined,
@@ -192,13 +195,19 @@ export default function FormularioCampanha({
     }
   }
 
-  function lerImagem(arquivo: File) {
-    const leitor = new FileReader();
-    leitor.onload = () => {
-      const resultado = leitor.result as string;
-      setImagemBase64(resultado.split(",")[1]); // remove o prefixo "data:image/...;base64,"
-    };
-    leitor.readAsDataURL(arquivo);
+  function adicionarImagens(arquivos: FileList) {
+    Array.from(arquivos).forEach((arquivo) => {
+      const leitor = new FileReader();
+      leitor.onload = () => {
+        const resultado = leitor.result as string;
+        setImagens((atual) => [...atual, resultado.split(",")[1]]); // remove o prefixo "data:image/...;base64,"
+      };
+      leitor.readAsDataURL(arquivo);
+    });
+  }
+
+  function removerImagem(indice: number) {
+    setImagens((atual) => atual.filter((_, i) => i !== indice));
   }
 
   return (
@@ -425,14 +434,56 @@ export default function FormularioCampanha({
               )
             ) : (
               <>
+                <div className="cartao-vidro-interno px-4 py-3.5 text-xs leading-relaxed text-neutral-400">
+                  <p className="font-semibold text-neutral-300">
+                    Campanha → Conjunto de Anúncios → Anúncio
+                  </p>
+                  <p className="mt-1.5">
+                    Cada imagem que você adicionar aqui vira um <strong className="text-neutral-300">Anúncio</strong> separado,
+                    mas todos dentro do <strong className="text-neutral-300">mesmo Conjunto de Anúncios</strong> desta
+                    campanha — nunca um conjunto novo por imagem. É assim que a Meta testa sozinha
+                    qual variação funciona melhor e direciona mais verba pra ela. Separar em
+                    conjuntos diferentes divide o público/orçamento à toa e atrapalha esse teste.
+                  </p>
+                </div>
+
                 <div>
-                  <label className="text-xs font-semibold text-neutral-400">Imagem</label>
+                  <label className="text-xs font-semibold text-neutral-400">
+                    Imagens {imagens.length > 0 && `(${imagens.length} ${imagens.length > 1 ? "variações" : "variação"} = ${imagens.length} anúncio${imagens.length > 1 ? "s" : ""})`}
+                  </label>
                   <input
                     type="file"
                     accept="image/*"
-                    onChange={(e) => e.target.files?.[0] && lerImagem(e.target.files[0])}
+                    multiple
+                    onChange={(e) => e.target.files && adicionarImagens(e.target.files)}
                     className="mt-1 block w-full text-xs text-neutral-400"
                   />
+                  <p className="mt-1 text-xs text-neutral-500">
+                    Pode selecionar várias de uma vez — inclusive as variações que o Meta AI sugere.
+                  </p>
+
+                  {imagens.length > 0 && (
+                    <div className="mt-3 grid grid-cols-4 gap-2 sm:grid-cols-6">
+                      {imagens.map((imagem, indice) => (
+                        <div key={indice} className="group relative aspect-square overflow-hidden rounded-lg border border-white/10">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={`data:image/jpeg;base64,${imagem}`}
+                            alt=""
+                            className="h-full w-full object-cover"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removerImagem(indice)}
+                            aria-label="Remover imagem"
+                            className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/70 text-[11px] font-bold text-white"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-neutral-400">Texto do anúncio</label>
@@ -518,6 +569,12 @@ export default function FormularioCampanha({
               <dd className="text-neutral-200">{publicoEfetivo.localizacoes.length}</dd>
               <dt className="text-neutral-500">Plataforma</dt>
               <dd className="text-neutral-200">{incluirFacebook ? "Instagram + Facebook" : "Instagram"}</dd>
+              <dt className="text-neutral-500">Criativo</dt>
+              <dd className="text-neutral-200">
+                {usarPostExistente
+                  ? "1 anúncio (publicação existente)"
+                  : `${imagens.length} anúncio${imagens.length > 1 ? "s" : ""} (${imagens.length} ${imagens.length > 1 ? "variações" : "variação"} de imagem), mesmo conjunto`}
+              </dd>
               <dt className="text-neutral-500">Orçamento</dt>
               <dd className="text-neutral-200">
                 {tipoOrcamento === "diario" ? "Diário" : "Vitalício"}: {orcamentoPrevisto()}
