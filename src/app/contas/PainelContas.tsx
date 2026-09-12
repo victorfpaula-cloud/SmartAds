@@ -105,7 +105,7 @@ export default function PainelContas({
 
       <BannerConexaoMeta status={statusMeta} />
 
-      <section className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl">
+      <section className="cartao-vidro overflow-hidden">
         <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
           <h2 className="text-sm font-semibold text-neutral-200">Clientes</h2>
         </div>
@@ -131,9 +131,9 @@ export default function PainelContas({
             Nenhum cliente cadastrado ainda. Adicione o primeiro acima.
           </p>
         ) : (
-          <ul className="divide-y divide-white/10">
+          <ul className="flex flex-col gap-2 p-3">
             {clientes.map((cliente) => (
-              <li key={cliente.id} className="px-5 py-4">
+              <li key={cliente.id} className="cartao-vidro-interno px-4 py-3.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-sm font-semibold text-neutral-100">{cliente.nome}</span>
                   <button
@@ -141,7 +141,7 @@ export default function PainelContas({
                       setClienteExpandidoId(clienteExpandidoId === cliente.id ? null : cliente.id)
                     }
                     disabled={!statusMeta.conectado}
-                    className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-neutral-300 hover:border-white/20 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="botao-icone-vidro rounded-lg px-3 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40"
                     title={statusMeta.conectado ? undefined : "Conecte a Meta primeiro"}
                   >
                     + Conta de anúncio
@@ -153,7 +153,7 @@ export default function PainelContas({
                     {cliente.smartads_contas_meta.map((conta) => (
                       <div
                         key={conta.id}
-                        className="flex items-center gap-2 rounded-lg border border-white/8 bg-white/[0.02] px-3 py-2 text-xs text-neutral-400"
+                        className="selo-vidro flex items-center gap-2 px-3 py-2 text-xs text-neutral-400"
                       >
                         <span className="font-medium text-neutral-200">
                           {conta.nome_exibicao || conta.meta_ad_account_nome || conta.meta_ad_account_id}
@@ -180,7 +180,7 @@ export default function PainelContas({
 function BannerConexaoMeta({ status }: { status: StatusMeta }) {
   if (status.conectado) {
     return (
-      <div className="flex flex-col gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between">
+      <div className="cartao-vidro flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <span className="text-sm text-neutral-300">
           Meta conectada{status.meta_user_nome ? ` como ${status.meta_user_nome}` : ""}.
         </span>
@@ -279,7 +279,7 @@ function AdicionarConta({
   return (
     <form
       onSubmit={associar}
-      className="mt-3 flex flex-col gap-2.5 rounded-xl border border-white/10 bg-white/[0.02] p-4"
+      className="cartao-vidro-interno mt-3 flex flex-col gap-2.5 p-4"
     >
       <div>
         <label className="text-xs font-semibold text-neutral-400">Conta de anúncio</label>

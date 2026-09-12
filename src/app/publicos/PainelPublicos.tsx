@@ -61,7 +61,7 @@ export default function PainelPublicos({ clientes }: { clientes: Cliente[] }) {
 
   if (clientes.length === 0) {
     return (
-      <p className="rounded-xl border border-white/10 bg-white/[0.03] px-5 py-6 text-sm text-neutral-400">
+      <p className="cartao-vidro px-5 py-6 text-sm text-neutral-400">
         Cadastre um cliente em Contas primeiro.
       </p>
     );
@@ -81,7 +81,7 @@ export default function PainelPublicos({ clientes }: { clientes: Cliente[] }) {
         ))}
       </select>
 
-      <section className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl">
+      <section className="cartao-vidro overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 px-5 py-3.5">
           <h2 className="text-sm font-semibold text-neutral-200">Públicos desse cliente</h2>
           <button
@@ -116,9 +116,9 @@ export default function PainelPublicos({ clientes }: { clientes: Cliente[] }) {
         ) : publicos.length === 0 ? (
           <p className="px-5 py-6 text-sm text-neutral-500">Nenhum público salvo pra esse cliente ainda.</p>
         ) : (
-          <ul className="divide-y divide-white/10">
+          <ul className="flex flex-col gap-2 p-3">
             {publicos.map((publico) => (
-              <li key={publico.id} className="px-5 py-3.5">
+              <li key={publico.id} className="cartao-vidro-interno px-4 py-3">
                 <p className="text-sm font-semibold text-neutral-100">{publico.nome}</p>
                 <p className="mt-0.5 text-xs text-neutral-500">
                   {publico.targeting.localizacoes.length} localização

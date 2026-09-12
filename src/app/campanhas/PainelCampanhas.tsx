@@ -124,7 +124,7 @@ export default function PainelCampanhas({ clientes }: { clientes: Cliente[] }) {
 
   if (clientesComConta.length === 0) {
     return (
-      <p className="rounded-xl border border-white/10 bg-white/[0.03] px-5 py-6 text-sm text-neutral-400">
+      <p className="cartao-vidro px-5 py-6 text-sm text-neutral-400">
         Associe uma conta de anúncio em Contas primeiro.
       </p>
     );
@@ -161,7 +161,7 @@ export default function PainelCampanhas({ clientes }: { clientes: Cliente[] }) {
         <div className="rounded-lg border border-danger/30 bg-danger/10 px-4 py-2.5 text-sm text-danger">{erro}</div>
       )}
 
-      <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl">
+      <div className="cartao-vidro overflow-hidden">
         {carregando ? (
           <p className="px-5 py-8 text-center text-sm text-neutral-500">Carregando campanhas…</p>
         ) : campanhas.length === 0 ? (

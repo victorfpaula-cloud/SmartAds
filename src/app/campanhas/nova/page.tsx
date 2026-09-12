@@ -26,7 +26,7 @@ export default async function EscolherContaPage() {
         </p>
 
         {clientesComConta.length === 0 ? (
-          <div className="mt-6 rounded-xl border border-white/10 bg-white/[0.03] px-5 py-6 text-sm text-neutral-400">
+          <div className="cartao-vidro mt-6 px-5 py-6 text-sm text-neutral-400">
             Nenhuma conta de anúncio associada ainda.{" "}
             <Link href="/contas" className="text-accent-strong hover:underline">
               Associe uma conta primeiro.
@@ -44,7 +44,7 @@ export default async function EscolherContaPage() {
                     <Link
                       key={conta.id}
                       href={`/campanhas/nova/${conta.id}`}
-                      className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3.5 backdrop-blur-xl transition hover:border-accent/40 hover:bg-white/[0.05]"
+                      className="cartao-vidro-interno flex items-center justify-between px-4 py-3.5 transition hover:border-accent/40"
                     >
                       <div>
                         <p className="text-sm font-semibold text-neutral-100">
