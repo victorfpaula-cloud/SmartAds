@@ -52,7 +52,7 @@ export default function MapaClicavel({
           <button
             onClick={onFechar}
             aria-label="Fechar"
-            className="flex h-8 w-8 items-center justify-center rounded-full text-neutral-400 hover:bg-white/10 hover:text-neutral-200"
+            className="botao-icone-vidro h-8 w-8"
           >
             <X size={16} weight="bold" />
           </button>

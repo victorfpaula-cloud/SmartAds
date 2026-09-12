@@ -248,7 +248,7 @@ export default function FormularioCampanha({
         </div>
       </div>
 
-      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 backdrop-blur-xl">
+      <div className="cartao-vidro p-6">
         {etapa === 1 && (
           <div className="flex flex-col gap-4">
             <div className="flex gap-2">

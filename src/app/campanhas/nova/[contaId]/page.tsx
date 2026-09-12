@@ -73,7 +73,7 @@ export default async function EscolherModeloPage({ params }: { params: { contaId
             <Link
               key={tipo}
               href={`/campanhas/nova/${params.contaId}/${tipo}`}
-              className="group flex items-start gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-5 backdrop-blur-xl transition active:scale-[0.98] hover:border-accent/40 hover:bg-white/[0.05]"
+              className="cartao-vidro group flex items-start gap-4 p-5 transition active:scale-[0.98] hover:border-accent/40"
             >
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500/25 to-indigo-500/5 text-indigo-200">
                 <Icone size={22} weight="duotone" />

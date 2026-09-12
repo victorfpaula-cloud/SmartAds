@@ -6,3 +6,42 @@
    react-leaflet esperam essas classes já disponíveis antes de montar o mapa; importar só no
    componente do mapa causa flash sem estilo na primeira renderização. */
 @import "leaflet/dist/leaflet.css";
+
+/* Vocabulário do "liquid glass" — a MESMA receita da tela de Reservas do chatbot-direct (o
+   dono pediu explicitamente pra replicar, não só "se inspirar"), centralizada aqui em vez de
+   repetida em cada componente, pra nunca mais um card ficar sem o vidro por esquecimento (foi
+   exatamente isso que aconteceu lá no chatbot-direct uma vez, e virou lição aprendida deles). */
+@layer components {
+  /* Card principal — o "vidro" de verdade: fundo translúcido com blur, borda com tinta de
+     índigo, sombra colorida (não preta pura) e um traço de luz fino no topo (before:) simulando
+     reflexo de superfície líquida. Entra com fade + leve subida. */
+  .cartao-vidro {
+    @apply animate-entrada relative rounded-2xl border border-indigo-500/15 bg-white/[0.04] backdrop-blur-xl shadow-[0_18px_42px_-16px_rgba(99,102,241,0.2),0_6px_14px_-6px_rgba(0,0,0,0.55)] before:pointer-events-none before:absolute before:inset-x-[8%] before:top-0 before:z-10 before:h-[1.5px] before:bg-gradient-to-r before:from-transparent before:via-white/40 before:to-transparent before:content-[''] motion-reduce:animate-none;
+  }
+
+  /* Card aninhado (uma linha/item dentro de um .cartao-vidro) — mais recuado que o card por
+     fora, sem blur próprio (o de fora já borra o fundo de verdade; borrar de novo aqui só custa
+     desempenho sem ganho visual, e em alguns celulares dá artefato com vários aninhados). */
+  .cartao-vidro-interno {
+    @apply animate-entrada relative rounded-2xl border border-indigo-400/15 bg-gradient-to-br from-white/[0.025] to-[#0c0c0f]/95 shadow-[inset_0_1px_0_rgba(255,255,255,0.02),0_14px_30px_-16px_rgba(0,0,0,0.6)] before:pointer-events-none before:absolute before:inset-x-[12%] before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/40 before:to-transparent before:content-[''] motion-reduce:animate-none;
+  }
+
+  /* Selo/estatística em destaque (número, badge de status) — mesmo degradê índigo com brilho de
+     topo, só que num formato mais compacto (xl em vez de 2xl). Precisa de overflow-hidden no uso
+     (o before some no canto se o elemento tiver corte arredondado). */
+  .selo-vidro {
+    @apply relative overflow-hidden rounded-xl border border-indigo-500/20 bg-gradient-to-br from-indigo-500/10 to-neutral-900 before:pointer-events-none before:absolute before:inset-x-[15%] before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/40 before:to-transparent before:content-[''];
+  }
+
+  /* Botão circular de ícone (fechar, sair, atualizar) — vidro discreto, sem o brilho de topo dos
+     cards (é pequeno demais pra precisar). */
+  .botao-icone-vidro {
+    @apply flex items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-neutral-300 backdrop-blur-xl transition hover:border-white/20 hover:text-neutral-100;
+  }
+
+  /* Pílula ativa (aba selecionada) — preenchimento em degradê branco sutil com sombra interna,
+     em vez de só um fundo sólido chapado. */
+  .pilula-ativa {
+    @apply bg-gradient-to-br from-white/15 to-white/5 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_4px_14px_-6px_rgba(0,0,0,0.5)];
+  }
+}

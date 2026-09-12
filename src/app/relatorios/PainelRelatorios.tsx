@@ -40,7 +40,7 @@ export default function PainelRelatorios() {
     return <p className="text-sm text-neutral-500">Carregando…</p>;
   }
   if (linhas.length === 0) {
-    return <p className="rounded-xl border border-white/10 bg-white/[0.03] px-5 py-6 text-sm text-neutral-400">Nenhuma conta associada ainda.</p>;
+    return <p className="cartao-vidro px-5 py-6 text-sm text-neutral-400">Nenhuma conta associada ainda.</p>;
   }
 
   const validas = linhas.filter((l) => l.erro === undefined);
@@ -65,7 +65,7 @@ export default function PainelRelatorios() {
       </div>
 
       {gastoPorCliente.length > 1 && (
-        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 backdrop-blur-xl">
+        <div className="cartao-vidro p-5">
           <h2 className="mb-4 text-sm font-semibold text-neutral-200">Gasto por cliente</h2>
           <ResponsiveContainer width="100%" height={Math.max(160, gastoPorCliente.length * 44)}>
             <BarChart data={gastoPorCliente} layout="vertical" margin={{ left: 8, right: 24 }}>
@@ -91,7 +91,7 @@ export default function PainelRelatorios() {
         </div>
       )}
 
-      <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl">
+      <div className="cartao-vidro overflow-hidden">
         <div className="overflow-x-auto">
         <table className="w-full min-w-[560px] text-left text-sm">
           <thead>
@@ -131,7 +131,7 @@ export default function PainelRelatorios() {
 
 function Estatistica({ rotulo, valor }: { rotulo: string; valor: string }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3.5 backdrop-blur-xl">
+    <div className="selo-vidro px-4 py-3.5">
       <p className="text-xs text-neutral-500">{rotulo}</p>
       <p className="mt-1 font-display text-xl font-bold text-neutral-50">{valor}</p>
     </div>

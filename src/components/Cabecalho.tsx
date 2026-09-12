@@ -31,7 +31,7 @@ export default function Cabecalho({ ativo }: { ativo: string }) {
                   href={href}
                   className={
                     ativo === href
-                      ? "flex items-center gap-1.5 rounded-lg bg-white/[0.06] px-3 py-1.5 text-[13px] font-semibold text-neutral-100"
+                      ? "pilula-ativa flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] font-semibold text-neutral-100"
                       : "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] font-medium text-neutral-400 hover:text-neutral-200"
                   }
                 >
@@ -46,7 +46,7 @@ export default function Cabecalho({ ativo }: { ativo: string }) {
             <button
               type="submit"
               aria-label="Sair"
-              className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-neutral-400 hover:border-white/20 hover:text-neutral-200 sm:h-auto sm:w-auto sm:gap-1.5 sm:px-3 sm:py-1.5 sm:text-xs sm:font-medium"
+              className="botao-icone-vidro h-9 w-9 rounded-lg text-neutral-400 sm:h-auto sm:w-auto sm:gap-1.5 sm:rounded-lg sm:px-3 sm:py-1.5 sm:text-xs sm:font-medium"
             >
               <SignOut size={16} />
               <span className="hidden sm:inline">Sair</span>
