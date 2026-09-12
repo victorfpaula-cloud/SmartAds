@@ -30,7 +30,7 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden px-6">
+    <main className="relative flex min-h-[100dvh] items-center justify-center overflow-hidden px-6">
       <div
         className="pointer-events-none absolute -top-64 left-1/2 h-[640px] w-[900px] -translate-x-1/2 rounded-full opacity-60"
         style={{ background: "radial-gradient(closest-side, rgba(99,102,241,0.18), transparent 72%)" }}
@@ -50,7 +50,7 @@ export default function LoginPage() {
             </div>
             <div className="text-center">
               <div className="font-display text-[19px] font-bold tracking-tight">SmartAds</div>
-              <p className="mt-1 text-[12.5px] text-neutral-400">Gerenciador de anúncios — acesso restrito</p>
+              <p className="mt-1 text-[12.5px] text-neutral-400">Gerenciador de anúncios, acesso restrito</p>
             </div>
           </div>
 

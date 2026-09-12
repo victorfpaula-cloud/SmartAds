@@ -82,7 +82,7 @@ export default function PainelPublicos({ clientes }: { clientes: Cliente[] }) {
       </select>
 
       <section className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl">
-        <div className="flex items-center justify-between border-b border-white/10 px-5 py-3.5">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 px-5 py-3.5">
           <h2 className="text-sm font-semibold text-neutral-200">Públicos desse cliente</h2>
           <button
             onClick={() => setCriando(!criando)}

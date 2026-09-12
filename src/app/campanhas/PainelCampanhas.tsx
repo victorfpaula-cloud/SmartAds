@@ -34,7 +34,7 @@ const NOME_MODELO: Record<string, string> = {
 };
 
 function formatarReais(centavosTexto?: string): string {
-  if (!centavosTexto) return "—";
+  if (!centavosTexto) return "-";
   return `R$ ${(Number(centavosTexto) / 100).toFixed(2).replace(".", ",")}`;
 }
 
@@ -167,7 +167,8 @@ export default function PainelCampanhas({ clientes }: { clientes: Cliente[] }) {
         ) : campanhas.length === 0 ? (
           <p className="px-5 py-8 text-center text-sm text-neutral-500">Nenhuma campanha nessa conta ainda.</p>
         ) : (
-          <table className="w-full text-left text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] text-left text-sm">
             <thead>
               <tr className="border-b border-white/10 text-xs uppercase tracking-wide text-neutral-500">
                 <th className="px-4 py-3 font-medium">Campanha</th>
@@ -183,7 +184,7 @@ export default function PainelCampanhas({ clientes }: { clientes: Cliente[] }) {
                 <tr key={campanha.id}>
                   <td className="px-4 py-3 font-medium text-neutral-100">{campanha.name}</td>
                   <td className="px-4 py-3 text-neutral-400">
-                    {campanha.local ? NOME_MODELO[campanha.local.tipo_modelo] : "—"}
+                    {campanha.local ? NOME_MODELO[campanha.local.tipo_modelo] : "-"}
                   </td>
                   <td className="px-4 py-3">
                     <button
@@ -226,6 +227,7 @@ export default function PainelCampanhas({ clientes }: { clientes: Cliente[] }) {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

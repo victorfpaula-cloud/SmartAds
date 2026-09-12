@@ -119,7 +119,7 @@ export default function FormularioCampanha({
   const valorCentavos = Math.round(parseFloat((valorReais || "0").replace(",", ".")) * 100) || 0;
 
   function orcamentoPrevisto(): string {
-    if (!valorCentavos) return "—";
+    if (!valorCentavos) return "-";
     const reais = (centavos: number) => `R$ ${(centavos / 100).toFixed(2).replace(".", ",")}`;
     if (tipoOrcamento === "vitalicio") return reais(valorCentavos);
     if (dataFim && dataInicio) {
@@ -129,7 +129,7 @@ export default function FormularioCampanha({
       );
       return `${reais(valorCentavos * dias)} (${dias} dias)`;
     }
-    return `Contínuo — ~${reais(valorCentavos * 30)}/mês (estimativa)`;
+    return `Contínuo, ~${reais(valorCentavos * 30)}/mês (estimativa)`;
   }
 
   function podeAvancarDe(passo: number): boolean {
@@ -205,10 +205,13 @@ export default function FormularioCampanha({
     <div className="mt-6">
       {valoresIniciais && (
         <div className="mb-4 rounded-lg border border-accent/30 bg-accent/10 px-4 py-2.5 text-xs text-accent-strong">
-          Duplicando campanha — público e orçamento reaproveitados. Falta só o criativo novo.
+          Duplicando campanha: público e orçamento reaproveitados. Falta só o criativo novo.
         </div>
       )}
-      <div className="mb-6 flex items-center gap-2">
+
+      {/* Desktop: os 4 passos lado a lado. No celular isso não cabe (nomes longos + 4 pílulas) —
+          vira uma barra de progresso compacta com só o passo atual escrito por extenso. */}
+      <div className="mb-6 hidden items-center gap-2 sm:flex">
         {ETAPAS.map((nome, indice) => (
           <div key={nome} className="flex items-center gap-2">
             <span
@@ -222,9 +225,27 @@ export default function FormularioCampanha({
             >
               {indice + 1}. {nome}
             </span>
-            {indice < ETAPAS.length - 1 && <span className="text-neutral-700">—</span>}
+            {indice < ETAPAS.length - 1 && <span className="text-neutral-700">-</span>}
           </div>
         ))}
+      </div>
+
+      <div className="mb-6 sm:hidden">
+        <div className="flex items-center justify-between text-xs">
+          <span className="font-semibold text-neutral-200">
+            Passo {etapa} de {ETAPAS.length}: {ETAPAS[etapa - 1]}
+          </span>
+        </div>
+        <div className="mt-2 flex gap-1.5">
+          {ETAPAS.map((nome, indice) => (
+            <div
+              key={nome}
+              className={
+                indice + 1 <= etapa ? "h-1.5 flex-1 rounded-full bg-accent" : "h-1.5 flex-1 rounded-full bg-white/10"
+              }
+            />
+          ))}
+        </div>
       </div>
 
       <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 backdrop-blur-xl">
@@ -250,7 +271,7 @@ export default function FormularioCampanha({
             {modoPublico === "salvo" ? (
               publicosSalvos.length === 0 ? (
                 <p className="text-xs text-neutral-500">
-                  Nenhum público salvo pra {clienteNome} ainda — monte um novo abaixo.
+                  Nenhum público salvo pra {clienteNome} ainda. Monte um novo abaixo.
                 </p>
               ) : (
                 <select
@@ -485,7 +506,7 @@ export default function FormularioCampanha({
               <input
                 value={nomeCampanha}
                 onChange={(e) => setNomeCampanha(e.target.value)}
-                placeholder={`${clienteNome} — ${modelo.nomeExibicao}`}
+                placeholder={`${clienteNome} - ${modelo.nomeExibicao}`}
                 className="mt-1 h-10 w-full rounded-lg border border-white/14 bg-ink-850 px-3 text-sm text-neutral-100"
               />
             </div>
@@ -499,12 +520,12 @@ export default function FormularioCampanha({
               <dd className="text-neutral-200">{incluirFacebook ? "Instagram + Facebook" : "Instagram"}</dd>
               <dt className="text-neutral-500">Orçamento</dt>
               <dd className="text-neutral-200">
-                {tipoOrcamento === "diario" ? "Diário" : "Vitalício"} — {orcamentoPrevisto()}
+                {tipoOrcamento === "diario" ? "Diário" : "Vitalício"}: {orcamentoPrevisto()}
               </dd>
             </dl>
 
             <p className="text-xs text-neutral-500">
-              A campanha nasce <strong className="text-neutral-300">pausada</strong> — revise no
+              A campanha nasce <strong className="text-neutral-300">pausada</strong>. Revise no
               painel de Campanhas antes de ativar.
             </p>
 

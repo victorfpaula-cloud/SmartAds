@@ -1,44 +1,84 @@
 import Link from "next/link";
+import {
+  Buildings,
+  Megaphone,
+  Target,
+  ChartLineUp,
+  SignOut,
+} from "@phosphor-icons/react/dist/ssr";
 
 const LINKS = [
-  { href: "/contas", label: "Contas" },
-  { href: "/campanhas", label: "Campanhas" },
-  { href: "/publicos", label: "Públicos" },
-  { href: "/relatorios", label: "Relatórios" },
+  { href: "/contas", label: "Contas", Icone: Buildings },
+  { href: "/campanhas", label: "Campanhas", Icone: Megaphone },
+  { href: "/publicos", label: "Públicos", Icone: Target },
+  { href: "/relatorios", label: "Relatórios", Icone: ChartLineUp },
 ];
 
+/** Navegação principal — vira barra de abas fixa embaixo no celular (padrão de app, mais fácil de
+ * alcançar com o polegar) e barra no topo no desktop. Um só componente, dois layouts via classes
+ * responsivas, pra nunca desalinhar qual aba está ativa entre as duas versões. */
 export default function Cabecalho({ ativo }: { ativo: string }) {
   return (
-    <header className="sticky top-0 z-20 border-b border-white/10 bg-ink-950/80 backdrop-blur-xl">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3.5">
-        <div className="flex items-center gap-8">
-          <span className="font-display text-[15px] font-bold tracking-tight">SmartAds</span>
-          <nav className="flex items-center gap-1">
-            {LINKS.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={
-                  ativo === link.href
-                    ? "rounded-lg bg-white/[0.06] px-3 py-1.5 text-[13px] font-semibold text-neutral-100"
-                    : "rounded-lg px-3 py-1.5 text-[13px] font-medium text-neutral-400 hover:text-neutral-200"
-                }
-              >
-                {link.label}
-              </Link>
-            ))}
-          </nav>
-        </div>
+    <>
+      <header className="sticky top-0 z-20 border-b border-white/10 bg-ink-950/80 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6 sm:py-3.5">
+          <div className="flex items-center gap-8">
+            <span className="font-display text-[15px] font-bold tracking-tight">SmartAds</span>
+            <nav className="hidden items-center gap-1 sm:flex">
+              {LINKS.map(({ href, label, Icone }) => (
+                <Link
+                  key={href}
+                  href={href}
+                  className={
+                    ativo === href
+                      ? "flex items-center gap-1.5 rounded-lg bg-white/[0.06] px-3 py-1.5 text-[13px] font-semibold text-neutral-100"
+                      : "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] font-medium text-neutral-400 hover:text-neutral-200"
+                  }
+                >
+                  <Icone size={16} weight={ativo === href ? "fill" : "regular"} />
+                  {label}
+                </Link>
+              ))}
+            </nav>
+          </div>
 
-        <form action="/api/auth/logout" method="POST">
-          <button
-            type="submit"
-            className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-neutral-400 hover:border-white/20 hover:text-neutral-200"
-          >
-            Sair
-          </button>
-        </form>
-      </div>
-    </header>
+          <form action="/api/auth/logout" method="POST">
+            <button
+              type="submit"
+              aria-label="Sair"
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-neutral-400 hover:border-white/20 hover:text-neutral-200 sm:h-auto sm:w-auto sm:gap-1.5 sm:px-3 sm:py-1.5 sm:text-xs sm:font-medium"
+            >
+              <SignOut size={16} />
+              <span className="hidden sm:inline">Sair</span>
+            </button>
+          </form>
+        </div>
+      </header>
+
+      {/* Barra de abas no celular — fixa embaixo, mesmo tratamento glass do resto do app. Some a
+          partir do breakpoint sm, onde a navegação do topo já dá conta. `pb-[env(safe-area-inset-
+          bottom)]` evita ficar por baixo da barra de gestos do iPhone. */}
+      <nav
+        className="fixed inset-x-0 bottom-0 z-20 border-t border-white/10 bg-ink-950/90 backdrop-blur-xl sm:hidden"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
+        <div className="grid grid-cols-4">
+          {LINKS.map(({ href, label, Icone }) => (
+            <Link
+              key={href}
+              href={href}
+              className={
+                ativo === href
+                  ? "flex flex-col items-center gap-1 py-2.5 text-accent-strong"
+                  : "flex flex-col items-center gap-1 py-2.5 text-neutral-500"
+              }
+            >
+              <Icone size={22} weight={ativo === href ? "fill" : "regular"} />
+              <span className="text-[10.5px] font-medium">{label}</span>
+            </Link>
+          ))}
+        </div>
+      </nav>
+    </>
   );
 }

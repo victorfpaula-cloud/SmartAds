@@ -19,7 +19,7 @@ export default async function EscolherContaPage() {
   return (
     <>
       <Cabecalho ativo="/campanhas" />
-      <main className="mx-auto max-w-3xl px-6 py-8">
+      <main className="mx-auto max-w-3xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
         <h1 className="font-display text-2xl font-bold">Nova campanha</h1>
         <p className="mt-1 text-sm text-neutral-400">
           Escolha a conta pra qual você quer criar a campanha.

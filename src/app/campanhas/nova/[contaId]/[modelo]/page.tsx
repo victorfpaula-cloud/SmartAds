@@ -27,7 +27,7 @@ export default async function FormularioCampanhaPage({
   return (
     <>
       <Cabecalho ativo="/campanhas" />
-      <main className="mx-auto max-w-3xl px-6 py-8">
+      <main className="mx-auto max-w-3xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
         <p className="text-xs font-medium text-neutral-500">
           {(conta as any).smartads_clientes?.nome} · {conta.nome_exibicao || conta.meta_ad_account_nome}
         </p>
