@@ -18,6 +18,10 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#07080a",
+  // Sem isso, o iPhone/iPad ignora `env(safe-area-inset-bottom)` no CSS (a variável some a 0) e a
+  // barra de abas fixa some por baixo da barra de gestos assim que o app roda "Adicionado à Tela
+  // de Início" (modo standalone, sem a barra do Safari que antes empurrava o conteúdo pra cima).
+  viewportFit: "cover",
 };
 
 // Mesmo par de fontes dos apps irmãos: Space Grotesk pros títulos/números (classe font-display,
