@@ -33,7 +33,10 @@ export async function GET(request: NextRequest) {
       // histórico) devolvia uma linha POR DIA de cada campanha, o que travava a tela em contas
       // com muitas campanhas rodando há meses (achado em 12/09/2026 testando com conta real).
       obterInsightsConta(conta.meta_ad_account_id, { nivel: "campaign", datePreset: "maximum", porDia: false }),
-      supabase.from("smartads_campanhas_criadas").select("id, meta_campaign_id, meta_adset_id, tipo_modelo").eq("conta_id", contaId),
+      supabase
+        .from("smartads_campanhas_criadas")
+        .select("id, meta_campaign_id, meta_adset_id, tipo_modelo, meta_ad_ids")
+        .eq("conta_id", contaId),
     ]);
 
     const gastoPorCampanha = new Map(insights.map((i) => [i.campaign_id, i.spend]));

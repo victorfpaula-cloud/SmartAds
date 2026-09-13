@@ -321,6 +321,19 @@ export async function definirOrcamentoConjunto(
   return chamar(adsetId, { metodo: "POST", corpo });
 }
 
+/** Orçamento atual do conjunto — usado pelas regras de automação que ajustam por PORCENTAGEM
+ * (precisam saber o valor de partida antes de calcular o novo). */
+export async function obterOrcamentoConjunto(
+  adsetId: string
+): Promise<{ tipo: "diario" | "vitalicio"; valorCentavos: number } | null> {
+  const dados = await chamar<{ daily_budget?: string; lifetime_budget?: string }>(adsetId, {
+    query: { fields: "daily_budget,lifetime_budget" },
+  });
+  if (dados.daily_budget) return { tipo: "diario", valorCentavos: Number(dados.daily_budget) };
+  if (dados.lifetime_budget) return { tipo: "vitalicio", valorCentavos: Number(dados.lifetime_budget) };
+  return null;
+}
+
 // ============================================================================
 // Criativo e anúncio
 // ============================================================================

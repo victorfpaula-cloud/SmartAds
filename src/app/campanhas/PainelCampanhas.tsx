@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { NotePencil, X } from "@phosphor-icons/react";
+import { NotePencil, TestTube, X } from "@phosphor-icons/react";
 
 interface ContaMeta {
   id: string;
@@ -23,7 +23,12 @@ interface Campanha {
   daily_budget?: string;
   lifetime_budget?: string;
   spend: string;
-  local: { id: string; meta_adset_id: string | null; tipo_modelo: string } | null;
+  local: {
+    id: string;
+    meta_adset_id: string | null;
+    tipo_modelo: string;
+    meta_ad_ids: string[] | null;
+  } | null;
 }
 
 const NOME_MODELO: Record<string, string> = {
@@ -50,6 +55,7 @@ export default function PainelCampanhas({ clientes }: { clientes: Cliente[] }) {
   const [erro, setErro] = useState<string | null>(null);
   const [executando, setExecutando] = useState<string | null>(null);
   const [campanhaComNotas, setCampanhaComNotas] = useState<Campanha | null>(null);
+  const [campanhaParaTeste, setCampanhaParaTeste] = useState<Campanha | null>(null);
 
   const contasDoCliente = clientesComConta.find((c) => c.id === clienteId)?.smartads_contas_meta ?? [];
 
@@ -241,6 +247,14 @@ export default function PainelCampanhas({ clientes }: { clientes: Cliente[] }) {
                       >
                         Notas
                       </button>
+                      {campanha.local && (campanha.local.meta_ad_ids?.length ?? 0) >= 2 && (
+                        <button
+                          onClick={() => setCampanhaParaTeste(campanha)}
+                          className="text-xs font-medium text-neutral-400 hover:text-neutral-200 hover:underline"
+                        >
+                          Teste A/B
+                        </button>
+                      )}
                       {campanha.local && (
                         <Link
                           href={`/campanhas/duplicar/${campanha.local.id}`}
@@ -276,6 +290,171 @@ export default function PainelCampanhas({ clientes }: { clientes: Cliente[] }) {
       {campanhaComNotas && (
         <ModalAnotacoes campanha={campanhaComNotas} onFechar={() => setCampanhaComNotas(null)} />
       )}
+      {campanhaParaTeste && (
+        <ModalTesteAB campanha={campanhaParaTeste} onFechar={() => setCampanhaParaTeste(null)} />
+      )}
+    </div>
+  );
+}
+
+interface TesteAB {
+  id: string;
+  duracao_dias_minima: number;
+  gasto_minimo_centavos: number;
+  status: "rodando" | "concluido" | "dado_insuficiente";
+  vencedor_meta_ad_id: string | null;
+  avaliado_em: string | null;
+  created_at: string;
+}
+
+const ROTULO_STATUS_TESTE: Record<TesteAB["status"], string> = {
+  rodando: "Rodando",
+  concluido: "Concluído",
+  dado_insuficiente: "Dado insuficiente",
+};
+
+/** Início e acompanhamento de teste A/B — só aparece pra campanhas com 2+ variações de anúncio no
+ * mesmo conjunto (múltiplas imagens). O teste só observa: o cron declara o vencedor sozinho quando
+ * bater a duração e o gasto mínimos, e pausa as variações perdedoras — aqui o usuário só decide
+ * começar a observar, nunca escolhe o vencedor manualmente. */
+function ModalTesteAB({ campanha, onFechar }: { campanha: Campanha; onFechar: () => void }) {
+  const [teste, setTeste] = useState<TesteAB | null | undefined>(undefined);
+  const [duracaoDias, setDuracaoDias] = useState("7");
+  const [gastoMinimo, setGastoMinimo] = useState("50");
+  const [iniciando, setIniciando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch(`/api/testes-ab?campanhaId=${campanha.local?.id}`)
+      .then((r) => r.json())
+      .then((corpo) => setTeste(corpo.teste ?? null))
+      .catch(() => setTeste(null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campanha.local?.id]);
+
+  async function iniciar(evento: React.FormEvent) {
+    evento.preventDefault();
+    setIniciando(true);
+    setErro(null);
+    const resposta = await fetch("/api/testes-ab", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        campanhaId: campanha.local?.id,
+        duracaoDiasMinima: Number(duracaoDias) || 7,
+        gastoMinimoCentavos: Math.round((Number(gastoMinimo.replace(",", ".")) || 50) * 100),
+      }),
+    });
+    const corpo = await resposta.json();
+    setIniciando(false);
+    if (!resposta.ok) {
+      setErro(corpo.erro || "Falha ao iniciar o teste.");
+      return;
+    }
+    setTeste(corpo.teste);
+  }
+
+  const quantidadeVariacoes = campanha.local?.meta_ad_ids?.length ?? 0;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6 backdrop-blur-sm">
+      <div className="flex max-h-[90dvh] w-full max-w-md flex-col overflow-y-auto rounded-2xl border border-white/10 bg-ink-900 shadow-2xl">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-ink-900 px-5 py-3.5">
+          <div className="flex items-center gap-2 overflow-hidden">
+            <TestTube size={16} className="shrink-0 text-neutral-400" />
+            <h3 className="truncate text-sm font-semibold text-neutral-100">Teste A/B — {campanha.name}</h3>
+          </div>
+          <button onClick={onFechar} aria-label="Fechar" className="botao-icone-vidro h-8 w-8 shrink-0">
+            <X size={16} weight="bold" />
+          </button>
+        </div>
+
+        <div className="flex flex-col gap-4 p-5">
+          {teste === undefined ? (
+            <p className="text-xs text-neutral-500">Carregando…</p>
+          ) : teste ? (
+            <div className="cartao-vidro-interno flex flex-col gap-2 px-4 py-3.5">
+              <div className="flex items-center gap-2">
+                <span
+                  className={
+                    teste.status === "concluido"
+                      ? "selo-vidro text-ok"
+                      : teste.status === "dado_insuficiente"
+                        ? "selo-vidro text-neutral-400"
+                        : "selo-vidro text-accent-strong"
+                  }
+                >
+                  {ROTULO_STATUS_TESTE[teste.status]}
+                </span>
+              </div>
+              {teste.status === "rodando" && (
+                <p className="text-xs leading-relaxed text-neutral-400">
+                  Observando as {quantidadeVariacoes} variações desse conjunto. Precisa de pelo menos{" "}
+                  {teste.duracao_dias_minima} dias rodando e R${" "}
+                  {(teste.gasto_minimo_centavos / 100).toFixed(2).replace(".", ",")} de gasto acumulado pra decidir
+                  sozinho — a de maior CTR vence e as outras são pausadas automaticamente.
+                </p>
+              )}
+              {teste.status === "concluido" && (
+                <p className="text-xs leading-relaxed text-neutral-400">
+                  Vencedor definido por CTR em{" "}
+                  {teste.avaliado_em &&
+                    new Date(teste.avaliado_em).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                  . As outras variações foram pausadas — veja o detalhe no histórico da Automação.
+                </p>
+              )}
+              {teste.status === "dado_insuficiente" && (
+                <p className="text-xs leading-relaxed text-neutral-400">
+                  Passou da duração mínima mas não bateu o gasto mínimo — nenhuma variação foi pausada. Deixe
+                  rodando mais um pouco.
+                </p>
+              )}
+            </div>
+          ) : (
+            <form onSubmit={iniciar} className="flex flex-col gap-3">
+              <p className="text-xs leading-relaxed text-neutral-400">
+                Essa campanha tem {quantidadeVariacoes} variações de anúncio no mesmo conjunto. O teste só observa
+                — quando bater a duração e o gasto mínimos abaixo, a variação com maior CTR vence sozinha e as
+                outras são pausadas.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-xs font-medium text-neutral-300">Duração mínima (dias)</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={duracaoDias}
+                    onChange={(e) => setDuracaoDias(e.target.value)}
+                    className="h-10 rounded-lg border border-white/14 bg-ink-850 px-3 text-sm text-neutral-100 outline-none focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-xs font-medium text-neutral-300">Gasto mínimo (R$)</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={gastoMinimo}
+                    onChange={(e) => setGastoMinimo(e.target.value)}
+                    className="h-10 rounded-lg border border-white/14 bg-ink-850 px-3 text-sm text-neutral-100 outline-none focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+                  />
+                </label>
+              </div>
+              {erro && (
+                <div className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
+                  {erro}
+                </div>
+              )}
+              <button
+                type="submit"
+                disabled={iniciando}
+                className="h-10 w-full rounded-lg bg-accent text-sm font-semibold text-white hover:bg-accent-strong disabled:opacity-40"
+              >
+                {iniciando ? "Iniciando…" : "Iniciar teste A/B"}
+              </button>
+            </form>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
