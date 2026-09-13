@@ -225,6 +225,12 @@ export async function POST(request: NextRequest) {
       payload: corpo as unknown as Record<string, unknown>,
       sucesso: false,
       erroMensagem: mensagem,
+      // Guarda o erro CRU da Meta (code, error_subcode, type, error_user_msg...) mesmo quando a
+      // mensagem já traduzida não mostra esse detalhe na tela (ex: quando vem por error_user_msg,
+      // que não tem "Detalhe técnico" anexado) — sem isso, alguns erros ficam impossíveis de
+      // diagnosticar de novo (achado em 13/09/2026 numa campanha real que travava sempre na mesma
+      // etapa sem pista suficiente).
+      resultado: erro instanceof ErroGraphAPIException ? { erroOriginalMeta: erro.original } : undefined,
     });
 
     const status = erro instanceof ErroMetaNaoConectado ? 409 : 502;
