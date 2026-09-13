@@ -60,7 +60,7 @@ export default function PainelCampanhas({ clientes }: { clientes: Cliente[] }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clienteId]);
 
-  // Paginado (20 por vez) — contas com muitas campanhas travavam a tela carregando tudo de uma
+  // Paginado (10 por vez) — contas com muitas campanhas travavam a tela carregando tudo de uma
   // vez só. `carregar()` recarrega a primeira página do zero; `carregarMais()` busca a próxima
   // leva e acrescenta na lista.
   function carregar() {

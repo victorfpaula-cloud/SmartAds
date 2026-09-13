@@ -48,6 +48,11 @@ create table if not exists smartads_contas_meta (
   instagram_username text,
 
   nome_exibicao text, -- como aparece no seletor do app; cai pro nome da conta/página se em branco
+  -- sigla curta (ex: "EXP") prefixada no nome de toda campanha criada pelo SmartAds nessa
+  -- associação — identifica de qual "grupo" a campanha veio no Gerenciador de Anúncios, já que a
+  -- MESMA conta de anúncio pode estar associada a mais de um cliente aqui dentro (ver comentário
+  -- abaixo sobre não ter mais índice único por meta_ad_account_id).
+  sigla_campanha text,
   ativo boolean not null default true,
 
   created_at timestamptz not null default now(),
@@ -56,9 +61,10 @@ create table if not exists smartads_contas_meta (
 
 create index if not exists smartads_contas_meta_cliente_idx on smartads_contas_meta(cliente_id);
 
--- uma conta de anúncio Meta não pode estar associada a dois clientes ao mesmo tempo
-create unique index if not exists smartads_contas_meta_ad_account_unico
-  on smartads_contas_meta(meta_ad_account_id);
+-- Sem índice único em meta_ad_account_id de propósito: uma agência pode usar a MESMA conta de
+-- anúncio + mesma Página/Instagram pra propósitos diferentes (ex: "Expansão" e "Principal" do
+-- mesmo cliente), associando ela a mais de um registro de smartads_clientes. A separação entre
+-- eles fica pela sigla_campanha no nome de cada campanha, não por uma trava no banco.
 
 alter table smartads_contas_meta enable row level security;
 

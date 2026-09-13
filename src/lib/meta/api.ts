@@ -507,7 +507,7 @@ export interface PaginaCampanhas {
   proximoCursor: string | null;
 }
 
-/** Paginado (padrão 20 por página) — contas com muitas campanhas (dezenas ou centenas) travavam
+/** Paginado (padrão 10 por página) — contas com muitas campanhas (dezenas ou centenas) travavam
  * a tela "Campanhas no ar" carregando tudo de uma vez só. Passa `after` (cursor devolvido na
  * página anterior) pra buscar a próxima leva. */
 export async function listarCampanhas(
@@ -516,7 +516,7 @@ export async function listarCampanhas(
 ): Promise<PaginaCampanhas> {
   const dados = await chamar<{ data: CampanhaMeta[]; paging?: { cursors?: { after?: string }; next?: string } }>(
     `${adAccountId}/campaigns`,
-    { query: { fields: CAMPOS_CAMPANHA, limit: opcoes.limit ?? 20, after: opcoes.after } }
+    { query: { fields: CAMPOS_CAMPANHA, limit: opcoes.limit ?? 10, after: opcoes.after } }
   );
   return {
     campanhas: dados.data,
