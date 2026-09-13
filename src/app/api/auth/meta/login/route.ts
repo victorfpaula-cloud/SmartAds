@@ -42,11 +42,16 @@ export async function GET(request: NextRequest) {
   url.searchParams.set("response_type", "code");
 
   const resposta = NextResponse.redirect(url.toString());
+  // 30 minutos — o fluxo "Login do Facebook para Empresas" pode ter várias telas de revisão
+  // (Página, conta de anúncios, Instagram, Pix, catálogo...), e os 10 minutos usados antes eram
+  // curtos demais pra alguém revisando com calma pela primeira vez: o cookie expirava antes da
+  // Meta devolver o código, e o callback recusava o login como "cancelado ou inválido" mesmo
+  // depois do usuário aprovar tudo certinho (achado em 12/09/2026 testando em produção).
   resposta.cookies.set("smartads_meta_oauth_state", state, {
     httpOnly: true,
     secure: true,
     sameSite: "lax",
-    maxAge: 600,
+    maxAge: 1800,
     path: "/",
   });
   return resposta;
