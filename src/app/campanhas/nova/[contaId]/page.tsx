@@ -65,7 +65,7 @@ export default async function EscolherModeloPage({ params }: { params: { contaId
         </p>
         <h1 className="mt-1 font-display text-2xl font-bold">Escolha o objetivo</h1>
         <p className="mt-1 text-sm text-neutral-400">
-          A campanha nasce pausada — você revisa tudo antes de ativar.
+          Você revisa tudo na última etapa antes de publicar — a campanha já entra ativa.
         </p>
 
         <div className="mt-6 grid grid-cols-1 gap-3.5 sm:grid-cols-2">

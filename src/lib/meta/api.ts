@@ -179,6 +179,12 @@ export function montarTargeting(publico: Publico, incluirFacebook: boolean): Rec
     age_max: publico.idadeMax ?? 65,
     publisher_platforms: incluirFacebook ? ["facebook", "instagram"] : ["instagram"],
     instagram_positions: ["stream", "story", "reels"],
+    // Passou a ser obrigatório sinalizar explicitamente se o público Advantage (expansão
+    // automática de público pela própria Meta) está ligado — "0" porque o SmartAds sempre
+    // trabalha com o público definido manualmente na tela (localizações + interesses), sem
+    // deixar a Meta expandir sozinha por cima (achado em 12/09/2026 publicando uma campanha de
+    // verdade: "sinalização de público Advantage é obrigatória").
+    targeting_automation: { advantage_audience: 0 },
   };
 
   if (incluirFacebook) {
@@ -227,14 +233,15 @@ export interface CriarCampanhaParams {
   objective: string; // "OUTCOME_ENGAGEMENT" | "OUTCOME_AWARENESS" | "OUTCOME_LEADS" | "OUTCOME_TRAFFIC"
 }
 
-/** Toda campanha nasce PAUSADA, sempre — é revisão de segurança do produto, não um detalhe opcional. */
+/** Campanha nasce ATIVA — pedido explícito do dono do produto (antes nascia pausada por
+ * segurança; decisão revertida em 12/09/2026 depois de testar o fluxo em produção). */
 export async function criarCampanha(adAccountId: string, params: CriarCampanhaParams): Promise<{ id: string }> {
   return chamar(`${adAccountId}/campaigns`, {
     metodo: "POST",
     corpo: {
       name: params.name,
       objective: params.objective,
-      status: "PAUSED",
+      status: "ACTIVE",
       special_ad_categories: [],
       // Campo da CAMPANHA, não do conjunto de anúncios (a primeira tentativa colocou no
       // conjunto e o erro continuou idêntico). Controla se os conjuntos dentro dela podem
@@ -284,7 +291,7 @@ export async function criarConjuntoDeAnuncios(
     optimization_goal: params.optimizationGoal,
     billing_event: params.billingEvent,
     targeting: params.targeting,
-    status: "PAUSED",
+    status: "ACTIVE",
     // Passou a ser obrigatório informar a estratégia de lance explicitamente — antes a Meta
     // assumia esse padrão sozinha sem precisar declarar nada (achado em 12/09/2026 publicando
     // uma campanha de verdade: "valor ou restrições de lance são obrigatórios"). Mantém o
@@ -426,7 +433,7 @@ export async function criarAnuncio(
       name: params.name,
       adset_id: params.adsetId,
       creative: { creative_id: params.creativeId },
-      status: "PAUSED",
+      status: "ACTIVE",
     },
   });
 }

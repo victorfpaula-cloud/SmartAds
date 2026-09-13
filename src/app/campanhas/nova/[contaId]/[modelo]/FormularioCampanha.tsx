@@ -588,8 +588,8 @@ export default function FormularioCampanha({
             </dl>
 
             <p className="text-xs text-neutral-500">
-              A campanha nasce <strong className="text-neutral-300">pausada</strong>. Revise no
-              painel de Campanhas antes de ativar.
+              A campanha entra <strong className="text-neutral-300">ativa</strong> ao publicar.
+              Acompanhe e pause a qualquer momento no painel de Campanhas.
             </p>
 
             {erro && (
@@ -603,7 +603,7 @@ export default function FormularioCampanha({
               disabled={publicando || !nomeCampanha.trim()}
               className="h-11 rounded-lg bg-accent text-sm font-bold text-white hover:bg-accent-strong disabled:opacity-50"
             >
-              {publicando ? "Publicando…" : "Publicar campanha (pausada)"}
+              {publicando ? "Publicando…" : "Publicar campanha"}
             </button>
           </div>
         )}
