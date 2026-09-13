@@ -371,18 +371,22 @@ export async function criarCriativoDePostExistente(
         page_id: params.pageId,
         instagram_user_id: params.instagramUserId,
         source_instagram_media_id: params.sourceInstagramMediaId,
-        // A Meta passou a exigir um link mesmo em anúncio de engajamento feito a partir de post
-        // existente, sem destino externo real (achado em 13/09/2026 publicando uma campanha de
-        // verdade) — mesma solução já usada em criarCriativoNovo: manda o perfil do Instagram
-        // como CTA, só pra satisfazer a validação, nunca redireciona ninguém de verdade porque o
-        // objetivo aqui é engajamento no post, não clique.
-        call_to_action: {
-          type: "LEARN_MORE",
-          value: {
-            link: params.instagramUsername
-              ? `https://www.instagram.com/${params.instagramUsername}/`
-              : "https://www.instagram.com/",
-          },
+      },
+      // A Meta passou a exigir um link mesmo em anúncio de engajamento feito a partir de post
+      // existente, sem destino externo real (achado em 13/09/2026 publicando uma campanha de
+      // verdade). A primeira tentativa colocou call_to_action DENTRO de object_story_spec — não
+      // funcionou (mesmo erro repetido), porque esse campo só é válido ali dentro de link_data,
+      // não junto de source_instagram_media_id. call_to_action é campo do criativo em si, irmão
+      // de object_story_spec, não filho dele — confirmado no SDK oficial (facebook_business/
+      // adobjects/adcreative.py). Manda o perfil do Instagram como CTA só pra satisfazer a
+      // validação, nunca redireciona ninguém de verdade porque o objetivo aqui é engajamento no
+      // post, não clique.
+      call_to_action: {
+        type: "LEARN_MORE",
+        value: {
+          link: params.instagramUsername
+            ? `https://www.instagram.com/${params.instagramUsername}/`
+            : "https://www.instagram.com/",
         },
       },
     },
