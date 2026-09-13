@@ -140,7 +140,7 @@ export async function POST(request: NextRequest) {
     if (corpo.criativo.usarPostExistente && corpo.criativo.postSelecionadoId) {
       const criativo = await criarCriativoDePostExistente(adAccountId, {
         pageId: conta.page_id,
-        instagramActorId: conta.instagram_business_id,
+        instagramUserId: conta.instagram_business_id,
         sourceInstagramMediaId: corpo.criativo.postSelecionadoId,
         name: `${corpo.nomeCampanha} - criativo`,
       });
@@ -161,7 +161,7 @@ export async function POST(request: NextRequest) {
         const criativo = await criarCriativoNovo(adAccountId, {
           name: `${corpo.nomeCampanha} - criativo${sufixo}`,
           pageId: conta.page_id,
-          instagramActorId: conta.instagram_business_id,
+          instagramUserId: conta.instagram_business_id,
           imageHash,
           mensagem: corpo.criativo.mensagem,
           titulo: corpo.criativo.titulo,

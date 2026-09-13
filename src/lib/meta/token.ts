@@ -1,6 +1,12 @@
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 
-export const VERSAO_API = process.env.META_API_VERSION || "v21.0";
+// v21.0 (o padrão original) já tinha passado do fim de vida — a Meta aposenta versões antigas
+// com o tempo, e ficar pra trás causa exatamente o tipo de erro obscuro que apareceu publicando
+// uma campanha de verdade (campos que a documentação da versão antiga não exigia, mas que a Meta
+// passou a exigir de qualquer forma; instagram_actor_id, que virou instagram_user_id a partir da
+// v22.0). Atualizado pra v26.0 (a mais recente em 12/09/2026) — reveja esse valor de tempos em
+// tempos, a Meta costuma aposentar versões a cada ~2 anos.
+export const VERSAO_API = process.env.META_API_VERSION || "v26.0";
 export const BASE_URL = `https://graph.facebook.com/${VERSAO_API}`;
 
 // Renova o token assim que faltar menos que isso pro vencimento — dá margem de sobra pro caso da
