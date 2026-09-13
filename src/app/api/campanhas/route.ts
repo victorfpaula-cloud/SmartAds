@@ -143,6 +143,7 @@ export async function POST(request: NextRequest) {
         instagramUserId: conta.instagram_business_id,
         sourceInstagramMediaId: corpo.criativo.postSelecionadoId,
         name: `${corpo.nomeCampanha} - criativo`,
+        instagramUsername: conta.instagram_username,
       });
       const anuncio = await criarAnuncio(adAccountId, {
         name: `${corpo.nomeCampanha} - anúncio`,
