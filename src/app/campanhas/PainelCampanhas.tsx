@@ -44,7 +44,9 @@ export default function PainelCampanhas({ clientes }: { clientes: Cliente[] }) {
   const [clienteId, setClienteId] = useState(clientesComConta[0]?.id ?? "");
   const [contaId, setContaId] = useState(clientesComConta[0]?.smartads_contas_meta[0]?.id ?? "");
   const [campanhas, setCampanhas] = useState<Campanha[]>([]);
+  const [proximoCursor, setProximoCursor] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(false);
+  const [carregandoMais, setCarregandoMais] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [executando, setExecutando] = useState<string | null>(null);
   const [campanhaComNotas, setCampanhaComNotas] = useState<Campanha | null>(null);
@@ -58,6 +60,9 @@ export default function PainelCampanhas({ clientes }: { clientes: Cliente[] }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clienteId]);
 
+  // Paginado (20 por vez) — contas com muitas campanhas travavam a tela carregando tudo de uma
+  // vez só. `carregar()` recarrega a primeira página do zero; `carregarMais()` busca a próxima
+  // leva e acrescenta na lista.
   function carregar() {
     if (!contaId) return;
     setCarregando(true);
@@ -67,9 +72,24 @@ export default function PainelCampanhas({ clientes }: { clientes: Cliente[] }) {
         const corpo = await r.json();
         if (!r.ok) throw new Error(corpo.erro || "Falha ao carregar campanhas.");
         setCampanhas(corpo.campanhas ?? []);
+        setProximoCursor(corpo.proximoCursor ?? null);
       })
       .catch((e) => setErro(e.message))
       .finally(() => setCarregando(false));
+  }
+
+  function carregarMais() {
+    if (!contaId || !proximoCursor) return;
+    setCarregandoMais(true);
+    fetch(`/api/campanhas/status?contaId=${contaId}&after=${proximoCursor}`)
+      .then(async (r) => {
+        const corpo = await r.json();
+        if (!r.ok) throw new Error(corpo.erro || "Falha ao carregar mais campanhas.");
+        setCampanhas((atual) => [...atual, ...(corpo.campanhas ?? [])]);
+        setProximoCursor(corpo.proximoCursor ?? null);
+      })
+      .catch((e) => setErro(e.message))
+      .finally(() => setCarregandoMais(false));
   }
 
   useEffect(() => {
@@ -238,6 +258,16 @@ export default function PainelCampanhas({ clientes }: { clientes: Cliente[] }) {
           </div>
         )}
       </div>
+
+      {proximoCursor && !carregando && (
+        <button
+          onClick={carregarMais}
+          disabled={carregandoMais}
+          className="w-fit rounded-lg border border-white/14 bg-ink-850 px-4 py-2 text-sm font-medium text-neutral-300 hover:text-neutral-100 disabled:opacity-40"
+        >
+          {carregandoMais ? "Carregando…" : "Carregar mais campanhas"}
+        </button>
+      )}
 
       <Link href="/campanhas/nova" className="w-fit rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-strong">
         + Nova campanha
