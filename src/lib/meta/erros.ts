@@ -39,8 +39,13 @@ export function traduzirErroMeta(erro: ErroGraphAPI | undefined): string {
       : erro.error_user_msg;
   }
 
+  // O código 100 ("parâmetro inválido") cobre dezenas de causas diferentes — a mensagem genérica
+  // sozinha escondia o motivo real quando a Meta não manda error_user_msg, tornando impossível
+  // diagnosticar qual campo era o problema (achado em 12/09/2026 publicando uma campanha de
+  // verdade). Agora sempre anexa o texto original da Meta como detalhe técnico.
   if (erro.code && MENSAGENS_POR_CODIGO[erro.code]) {
-    return MENSAGENS_POR_CODIGO[erro.code];
+    const base = MENSAGENS_POR_CODIGO[erro.code];
+    return erro.message ? `${base} Detalhe técnico: ${erro.message}` : base;
   }
 
   return erro.message || "Erro desconhecido ao falar com a Meta.";
