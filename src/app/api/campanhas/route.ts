@@ -6,7 +6,7 @@ import { montarTargeting } from "@/lib/meta/api";
 import {
   criarCampanha,
   criarConjuntoDeAnuncios,
-  criarCriativoDePostExistente,
+  obterPostInstagram,
   criarCriativoNovo,
   criarAnuncio,
   subirImagem,
@@ -138,11 +138,38 @@ export async function POST(request: NextRequest) {
     adsetId = adset.id;
 
     if (corpo.criativo.usarPostExistente && corpo.criativo.postSelecionadoId) {
-      const criativo = await criarCriativoDePostExistente(adAccountId, {
+      // "Usar publicação existente" NÃO reaproveita o post original pelo ID (source_instagram_
+      // media_id) — testado exaustivamente direto contra a API real em 13/09/2026 (~10 variações
+      // de payload) e confirmado: a Meta rejeita qualquer chamada pra ação nesse tipo de criativo
+      // ("O campo Chamada para ação deve ser usado com uma promoção de post existente", subcode
+      // 2238146) e o único jeito de satisfazer o "link obrigatório" que ela também exige
+      // (link_data) faz ela descartar o post original e criar um card genérico de link em cima
+      // dele — o oposto do que essa opção promete. O único campo feito sob medida pra isso,
+      // call_to_action_type, devolve "(#3) Application does not have the capability to make this
+      // API call" nesse app (recurso que exige App Review completo, incompatível com esse app,
+      // que fica em modo Desenvolvimento pra sempre de propósito). Então, em vez disso, busca a
+      // imagem e a legenda do post escolhido e publica como um anúncio novo (mesmo caminho já
+      // comprovado funcionando em "Nova imagem") — visualmente idêntico pra quem vê o anúncio,
+      // só que tecnicamente um post novo só-anúncio, não literalmente o post orgânico.
+      const post = await obterPostInstagram(corpo.criativo.postSelecionadoId);
+      if (post.media_type !== "IMAGE" || !post.media_url) {
+        throw new Error(
+          'Essa publicação é vídeo ou carrossel — ainda não dá pra reaproveitar aqui. Escolha uma publicação de imagem única, ou use a opção "Nova imagem".'
+        );
+      }
+      const respostaImagem = await fetch(post.media_url);
+      if (!respostaImagem.ok) {
+        throw new Error("Não foi possível baixar a imagem da publicação selecionada.");
+      }
+      const imagemBase64 = Buffer.from(await respostaImagem.arrayBuffer()).toString("base64");
+      const imageHash = await subirImagem(adAccountId, imagemBase64);
+
+      const criativo = await criarCriativoNovo(adAccountId, {
+        name: `${corpo.nomeCampanha} - criativo`,
         pageId: conta.page_id,
         instagramUserId: conta.instagram_business_id,
-        sourceInstagramMediaId: corpo.criativo.postSelecionadoId,
-        name: `${corpo.nomeCampanha} - criativo`,
+        imageHash,
+        mensagem: post.caption ?? "",
       });
       const anuncio = await criarAnuncio(adAccountId, {
         name: `${corpo.nomeCampanha} - anúncio`,

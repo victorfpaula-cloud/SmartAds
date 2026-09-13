@@ -64,6 +64,9 @@ export default function FormularioCampanha({
   );
   const [publicoNovo, setPublicoNovo] = useState<Publico>(valoresIniciais?.publico ?? PUBLICO_VAZIO);
   const [incluirFacebook, setIncluirFacebook] = useState(valoresIniciais?.incluirFacebook ?? false);
+  const [nomePublicoParaSalvar, setNomePublicoParaSalvar] = useState("");
+  const [salvandoPublico, setSalvandoPublico] = useState(false);
+  const [publicoSalvoFeedback, setPublicoSalvoFeedback] = useState<string | null>(null);
 
   // Passo 2 — orçamento
   const [tipoOrcamento, setTipoOrcamento] = useState<"diario" | "vitalicio">(
@@ -108,6 +111,32 @@ export default function FormularioCampanha({
       .then((r) => r.json())
       .then((corpo) => setPublicosSalvos(corpo.publicos ?? []));
   }, [clienteId]);
+
+  // Salva o público que está sendo montado nesse instante (sem precisar sair da tela nem terminar
+  // de publicar a campanha) — pra próxima vez dar pra escolher ele pronto em "Usar público salvo"
+  // em vez de remontar tudo de novo (achado em 13/09/2026: cada teste de campanha real exigia
+  // redigitar localização/interesse/idade do zero).
+  async function salvarPublicoAtual() {
+    if (!clienteId || !nomePublicoParaSalvar.trim()) return;
+    setSalvandoPublico(true);
+    setPublicoSalvoFeedback(null);
+    try {
+      const resposta = await fetch("/api/publicos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clienteId, nome: nomePublicoParaSalvar.trim(), publico: publicoNovo }),
+      });
+      const corpo = await resposta.json();
+      if (!resposta.ok) throw new Error(corpo.erro ?? "Falha ao salvar público.");
+      setPublicosSalvos((atual) => [...atual, corpo.publico].sort((a, b) => a.nome.localeCompare(b.nome)));
+      setPublicoSalvoFeedback(`Público "${corpo.publico.nome}" salvo — já aparece em "Usar público salvo".`);
+      setNomePublicoParaSalvar("");
+    } catch (erroSalvar) {
+      setPublicoSalvoFeedback(erroSalvar instanceof Error ? erroSalvar.message : "Falha ao salvar público.");
+    } finally {
+      setSalvandoPublico(false);
+    }
+  }
 
   useEffect(() => {
     if (etapa === 3 && usarPostExistente && instagramBusinessId && posts.length === 0) {
@@ -303,7 +332,32 @@ export default function FormularioCampanha({
                 </select>
               )
             ) : (
-              <ConstrutorDePublico valor={publicoNovo} onChange={setPublicoNovo} />
+              <div className="flex flex-col gap-4">
+                <ConstrutorDePublico valor={publicoNovo} onChange={setPublicoNovo} />
+                {clienteId && (
+                  <div className="flex flex-col gap-2 rounded-lg border border-white/10 bg-white/[0.02] p-4">
+                    <p className="text-sm font-medium text-neutral-200">Salvar esse público pra reaproveitar depois</p>
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <input
+                        type="text"
+                        value={nomePublicoParaSalvar}
+                        onChange={(e) => setNomePublicoParaSalvar(e.target.value)}
+                        placeholder="Nome do público (ex: Mulheres 25-40 Araçatuba)"
+                        className="h-10 flex-1 rounded-lg border border-white/14 bg-ink-850 px-3 text-sm text-neutral-100"
+                      />
+                      <button
+                        type="button"
+                        onClick={salvarPublicoAtual}
+                        disabled={!nomePublicoParaSalvar.trim() || salvandoPublico}
+                        className="h-10 rounded-lg border border-accent bg-accent/10 px-4 text-xs font-semibold text-accent-strong disabled:opacity-40"
+                      >
+                        {salvandoPublico ? "Salvando…" : "Salvar público"}
+                      </button>
+                    </div>
+                    {publicoSalvoFeedback && <p className="text-xs text-neutral-400">{publicoSalvoFeedback}</p>}
+                  </div>
+                )}
+              </div>
             )}
 
             <div className="mt-2 flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3">

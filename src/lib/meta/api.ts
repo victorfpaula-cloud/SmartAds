@@ -96,6 +96,14 @@ export async function listarPostsInstagram(instagramBusinessId: string): Promise
   return dados.data;
 }
 
+/** Um post específico — usado quando "usar publicação existente" precisa buscar de novo a
+ * imagem/legenda no momento de publicar (ver criarCriativoAPartirDePost em route.ts). */
+export async function obterPostInstagram(mediaId: string): Promise<PostInstagram> {
+  return chamar<PostInstagram>(mediaId, {
+    query: { fields: "id,caption,media_type,media_url,thumbnail_url,permalink,timestamp" },
+  });
+}
+
 // ============================================================================
 // Busca de localização e interesse (autocomplete do construtor de público)
 // ============================================================================
@@ -350,41 +358,6 @@ export async function obterOrcamentoConjunto(
 // ============================================================================
 // Criativo e anúncio
 // ============================================================================
-
-/** Anúncio a partir de uma publicação já existente do Instagram (modelos Engajamento/Alcance,
- * opção "usar publicação existente"). */
-export async function criarCriativoDePostExistente(
-  adAccountId: string,
-  params: {
-    pageId: string;
-    instagramUserId: string;
-    sourceInstagramMediaId: string;
-    name: string;
-  }
-): Promise<{ id: string }> {
-  return chamar(`${adAccountId}/adcreatives`, {
-    metodo: "POST",
-    corpo: {
-      name: params.name,
-      // source_instagram_media_id é campo do AdCreative em si (irmão de object_story_spec, não
-      // filho dele) — confirmado no SDK oficial da Meta (facebook_business/adobjects/
-      // adcreative.py, listado junto de object_story_id e object_story_spec como campos de
-      // primeiro nível). Ele estava aninhado DENTRO de object_story_spec até 13/09/2026 — como
-      // esse campo não existe no schema de object_story_spec, a Meta simplesmente ignorava ele
-      // ali (nunca dava erro nenhum sobre isso, só sobre "link obrigatório" depois), e por isso
-      // nenhuma tentativa de satisfazer esse "link obrigatório" (call_to_action em vários lugares,
-      // link_url) fazia diferença nenhuma: a Meta nunca reconhecia esse criativo como uma
-      // promoção de post JÁ existente pra começo de conversa, porque o campo que sinaliza isso
-      // nunca tinha chegado no lugar certo. object_story_spec fica só com o contexto de
-      // página/conta; source_instagram_media_id vai solto, no nível raiz.
-      object_story_spec: {
-        page_id: params.pageId,
-        instagram_user_id: params.instagramUserId,
-      },
-      source_instagram_media_id: params.sourceInstagramMediaId,
-    },
-  });
-}
 
 /** Anúncio novo ("dark post" — não aparece no feed orgânico, só roda como anúncio), com imagem e
  * link opcional (usado em Cliques no Link) ou sem link (Engajamento/Alcance/Visita ao perfil). */
