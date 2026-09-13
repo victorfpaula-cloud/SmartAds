@@ -355,7 +355,7 @@ export async function obterOrcamentoConjunto(
  * opção "usar publicação existente"). */
 export async function criarCriativoDePostExistente(
   adAccountId: string,
-  params: { pageId: string; instagramActorId: string; sourceInstagramMediaId: string; name: string }
+  params: { pageId: string; instagramUserId: string; sourceInstagramMediaId: string; name: string }
 ): Promise<{ id: string }> {
   return chamar(`${adAccountId}/adcreatives`, {
     metodo: "POST",
@@ -363,7 +363,7 @@ export async function criarCriativoDePostExistente(
       name: params.name,
       object_story_spec: {
         page_id: params.pageId,
-        instagram_actor_id: params.instagramActorId,
+        instagram_user_id: params.instagramUserId,
         source_instagram_media_id: params.sourceInstagramMediaId,
       },
     },
@@ -377,7 +377,7 @@ export async function criarCriativoNovo(
   params: {
     name: string;
     pageId: string;
-    instagramActorId?: string;
+    instagramUserId?: string;
     imageHash?: string;
     videoId?: string;
     mensagem: string;
@@ -414,7 +414,7 @@ export async function criarCriativoNovo(
       name: params.name,
       object_story_spec: {
         page_id: params.pageId,
-        instagram_actor_id: params.instagramActorId,
+        instagram_user_id: params.instagramUserId,
         ...(params.videoId
           ? { video_data: { video_id: params.videoId, message: params.mensagem, call_to_action: linkData.call_to_action } }
           : { link_data: linkData }),
