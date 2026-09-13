@@ -229,8 +229,13 @@ export async function POST(request: NextRequest) {
       // mensagem já traduzida não mostra esse detalhe na tela (ex: quando vem por error_user_msg,
       // que não tem "Detalhe técnico" anexado) — sem isso, alguns erros ficam impossíveis de
       // diagnosticar de novo (achado em 13/09/2026 numa campanha real que travava sempre na mesma
-      // etapa sem pista suficiente).
-      resultado: erro instanceof ErroGraphAPIException ? { erroOriginalMeta: erro.original } : undefined,
+      // etapa sem pista suficiente). Também guarda em qual etapa (campanha/conjunto/criativo)
+      // chegou antes de falhar — sem isso não dá pra saber se o erro veio da criação do conjunto
+      // de anúncios ou do criativo, já que os dois passam pelo mesmo catch.
+      resultado:
+        erro instanceof ErroGraphAPIException
+          ? { erroOriginalMeta: erro.original, etapaAlcancada: { campanhaId, adsetId, anuncioIds } }
+          : undefined,
     });
 
     const status = erro instanceof ErroMetaNaoConectado ? 409 : 502;
