@@ -285,6 +285,12 @@ export async function criarConjuntoDeAnuncios(
     billing_event: params.billingEvent,
     targeting: params.targeting,
     status: "PAUSED",
+    // Passou a ser obrigatório informar a estratégia de lance explicitamente — antes a Meta
+    // assumia esse padrão sozinha sem precisar declarar nada (achado em 12/09/2026 publicando
+    // uma campanha de verdade: "valor ou restrições de lance são obrigatórios"). Mantém o
+    // comportamento de sempre: deixa a Meta buscar o menor custo por resultado, sem teto de
+    // lance manual — a opção mais simples e a que o SmartAds sempre pretendeu usar.
+    bid_strategy: "LOWEST_COST_WITHOUT_CAP",
   };
 
   if (params.destinationType) corpo.destination_type = params.destinationType;
