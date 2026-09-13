@@ -236,6 +236,13 @@ export async function criarCampanha(adAccountId: string, params: CriarCampanhaPa
       objective: params.objective,
       status: "PAUSED",
       special_ad_categories: [],
+      // Campo da CAMPANHA, não do conjunto de anúncios (a primeira tentativa colocou no
+      // conjunto e o erro continuou idêntico). Controla se os conjuntos dentro dela podem
+      // compartilhar orçamento entre si; "false" porque o SmartAds sempre dá um
+      // orçamento fixo e independente pra cada conjunto (ABO), nunca deixa a Meta realocar
+      // sozinha. Obrigatório desde que a conta não usa orçamento no nível da campanha (achado em
+      // 12/09/2026 publicando uma campanha de verdade).
+      is_adset_budget_sharing_enabled: false,
     },
   });
 }
@@ -278,12 +285,6 @@ export async function criarConjuntoDeAnuncios(
     billing_event: params.billingEvent,
     targeting: params.targeting,
     status: "PAUSED",
-    // Passou a ser obrigatório quando o orçamento vive no conjunto (nosso caso sempre — ver
-    // comentário acima da seção) em vez de na campanha: sem isso a Meta recusa a criação com
-    // "É necessário especificar True ou False no campo is_adset_budget_sharing_enabled" (achado
-    // em 12/09/2026 publicando uma campanha de verdade). "false" mantém o comportamento de
-    // sempre — cada conjunto com seu próprio orçamento fixo, sem compartilhar entre conjuntos.
-    is_adset_budget_sharing_enabled: false,
   };
 
   if (params.destinationType) corpo.destination_type = params.destinationType;
