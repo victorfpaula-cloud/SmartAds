@@ -360,7 +360,6 @@ export async function criarCriativoDePostExistente(
     instagramUserId: string;
     sourceInstagramMediaId: string;
     name: string;
-    instagramUsername?: string;
   }
 ): Promise<{ id: string }> {
   return chamar(`${adAccountId}/adcreatives`, {
@@ -372,23 +371,18 @@ export async function criarCriativoDePostExistente(
         instagram_user_id: params.instagramUserId,
         source_instagram_media_id: params.sourceInstagramMediaId,
       },
-      // A Meta passou a exigir um link mesmo em anúncio de engajamento feito a partir de post
-      // existente, sem destino externo real (achado em 13/09/2026 publicando uma campanha de
-      // verdade). A primeira tentativa colocou call_to_action DENTRO de object_story_spec — não
-      // funcionou (mesmo erro repetido), porque esse campo só é válido ali dentro de link_data,
-      // não junto de source_instagram_media_id. call_to_action é campo do criativo em si, irmão
-      // de object_story_spec, não filho dele — confirmado no SDK oficial (facebook_business/
-      // adobjects/adcreative.py). Manda o perfil do Instagram como CTA só pra satisfazer a
-      // validação, nunca redireciona ninguém de verdade porque o objetivo aqui é engajamento no
-      // post, não clique.
-      call_to_action: {
-        type: "LEARN_MORE",
-        value: {
-          link: params.instagramUsername
-            ? `https://www.instagram.com/${params.instagramUsername}/`
-            : "https://www.instagram.com/",
-        },
-      },
+      // A Meta passou a exigir uma chamada pra ação mesmo em anúncio de engajamento feito a
+      // partir de post existente (achado em 13/09/2026 publicando uma campanha de verdade). Duas
+      // tentativas anteriores não funcionaram: 1) call_to_action DENTRO de object_story_spec —
+      // esse campo só é válido ali dentro de link_data; 2) call_to_action (objeto completo com
+      // type+value.link) como irmão de object_story_spec — a própria Meta respondeu "o campo
+      // Chamada para ação deve ser usado com uma promoção de post existente" (subcode 2238146),
+      // porque esse campo é pro fluxo de criativo NOVO (link_data), não pra promoção de post já
+      // existente. O SDK oficial da Meta (facebook_business/adobjects/adcreative.py) tem DOIS
+      // campos de CTA separados: call_to_action (objeto, exige link) e call_to_action_type (só a
+      // string do tipo do botão, sem link) — esse segundo é o usado quando o destino do clique já
+      // é o próprio post (destination_type ON_POST), sem link nenhum envolvido.
+      call_to_action_type: "LEARN_MORE",
     },
   });
 }
