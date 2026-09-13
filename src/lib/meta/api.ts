@@ -236,6 +236,13 @@ export async function criarCampanha(adAccountId: string, params: CriarCampanhaPa
       objective: params.objective,
       status: "PAUSED",
       special_ad_categories: [],
+      // Campo da CAMPANHA, não do conjunto de anúncios (a primeira tentativa colocou no
+      // conjunto e o erro continuou idêntico). Controla se os conjuntos dentro dela podem
+      // compartilhar orçamento entre si; "false" porque o SmartAds sempre dá um
+      // orçamento fixo e independente pra cada conjunto (ABO), nunca deixa a Meta realocar
+      // sozinha. Obrigatório desde que a conta não usa orçamento no nível da campanha (achado em
+      // 12/09/2026 publicando uma campanha de verdade).
+      is_adset_budget_sharing_enabled: false,
     },
   });
 }
@@ -515,9 +522,24 @@ export interface CampanhaMeta {
   budget_remaining?: string;
 }
 
-export async function listarCampanhas(adAccountId: string): Promise<CampanhaMeta[]> {
-  const dados = await chamar<{ data: CampanhaMeta[] }>(`${adAccountId}/campaigns`, {
-    query: { fields: CAMPOS_CAMPANHA, limit: 200 },
-  });
-  return dados.data;
+export interface PaginaCampanhas {
+  campanhas: CampanhaMeta[];
+  proximoCursor: string | null;
+}
+
+/** Paginado (padrão 10 por página) — contas com muitas campanhas (dezenas ou centenas) travavam
+ * a tela "Campanhas no ar" carregando tudo de uma vez só. Passa `after` (cursor devolvido na
+ * página anterior) pra buscar a próxima leva. */
+export async function listarCampanhas(
+  adAccountId: string,
+  opcoes: { limit?: number; after?: string } = {}
+): Promise<PaginaCampanhas> {
+  const dados = await chamar<{ data: CampanhaMeta[]; paging?: { cursors?: { after?: string }; next?: string } }>(
+    `${adAccountId}/campaigns`,
+    { query: { fields: CAMPOS_CAMPANHA, limit: opcoes.limit ?? 10, after: opcoes.after } }
+  );
+  return {
+    campanhas: dados.data,
+    proximoCursor: dados.paging?.next ? dados.paging.cursors?.after ?? null : null,
+  };
 }

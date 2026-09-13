@@ -102,6 +102,12 @@ export async function POST(request: NextRequest) {
 
   const adAccountId = conta.meta_ad_account_id as string;
   const targeting = montarTargeting(corpo.publico, corpo.incluirFacebook);
+  // Prefixo só no nome da campanha (não nos objetos internos dela) — identifica de qual "grupo"
+  // ela veio no Gerenciador de Anúncios quando a mesma conta de anúncio está associada a mais de
+  // um cliente aqui dentro (ver sigla_campanha em smartads_contas_meta).
+  const nomeCampanhaFinal = conta.sigla_campanha
+    ? `(${conta.sigla_campanha}) ${corpo.nomeCampanha}`
+    : corpo.nomeCampanha;
 
   let campanhaId: string | undefined;
   let adsetId: string | undefined;
@@ -109,7 +115,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const campanha = await criarCampanha(adAccountId, {
-      name: corpo.nomeCampanha,
+      name: nomeCampanhaFinal,
       objective: modelo.objective,
     });
     campanhaId = campanha.id;

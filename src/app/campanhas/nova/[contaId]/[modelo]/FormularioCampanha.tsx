@@ -90,8 +90,14 @@ export default function FormularioCampanha({
   const [leadGenFormId, setLeadGenFormId] = useState("");
 
   // Passo 4 — revisão
+  // Nasce preenchido com a sugestão (cliente + objetivo), editável — antes era só "placeholder"
+  // (texto fantasma do campo vazio), e alguém que não reparasse a cor mais apagada achava que já
+  // tinha um nome ali e ficava sem entender por que o botão de publicar continuava desabilitado
+  // (achado em 12/09/2026 testando em produção).
   const [nomeCampanha, setNomeCampanha] = useState(
-    valoresIniciais?.nomeCampanha ? `${valoresIniciais.nomeCampanha} (cópia)` : ""
+    valoresIniciais?.nomeCampanha
+      ? `${valoresIniciais.nomeCampanha} (cópia)`
+      : `${clienteNome} - ${modelo.nomeExibicao}`
   );
   const [publicando, setPublicando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
