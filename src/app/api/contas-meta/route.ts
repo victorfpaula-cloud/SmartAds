@@ -13,6 +13,7 @@ export async function POST(request: NextRequest) {
     instagramBusinessId,
     instagramUsername,
     nomeExibicao,
+    siglaCampanha,
   } = corpo ?? {};
 
   if (!clienteId || !metaAdAccountId || !pageId) {
@@ -35,17 +36,13 @@ export async function POST(request: NextRequest) {
       instagram_business_id: instagramBusinessId,
       instagram_username: instagramUsername,
       nome_exibicao: nomeExibicao,
+      sigla_campanha: siglaCampanha?.trim() || null,
     })
     .select()
     .single();
 
   if (error) {
-    // unique_violation na conta de anúncio (já associada a outro cliente)
-    const mensagem =
-      error.code === "23505"
-        ? "Essa conta de anúncio já está associada a outro cliente."
-        : error.message;
-    return NextResponse.json({ erro: mensagem }, { status: 400 });
+    return NextResponse.json({ erro: error.message }, { status: 400 });
   }
 
   return NextResponse.json({ conta: data }, { status: 201 });

@@ -10,6 +10,7 @@ export const dynamic = "force-dynamic";
  * ID da campanha na Meta — alimenta o painel "Campanhas no ar". */
 export async function GET(request: NextRequest) {
   const contaId = request.nextUrl.searchParams.get("contaId");
+  const after = request.nextUrl.searchParams.get("after") ?? undefined;
   if (!contaId) {
     return NextResponse.json({ erro: "Informe a conta." }, { status: 400 });
   }
@@ -26,9 +27,12 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const [campanhas, insights, { data: cache }] = await Promise.all([
-      listarCampanhas(conta.meta_ad_account_id),
-      obterInsightsConta(conta.meta_ad_account_id, { nivel: "campaign", datePreset: "maximum" }),
+    const [{ campanhas, proximoCursor }, insights, { data: cache }] = await Promise.all([
+      listarCampanhas(conta.meta_ad_account_id, { after }),
+      // `porDia: false` agrega tudo num total só por campanha — sem isso, "maximum" (todo o
+      // histórico) devolvia uma linha POR DIA de cada campanha, o que travava a tela em contas
+      // com muitas campanhas rodando há meses (achado em 12/09/2026 testando com conta real).
+      obterInsightsConta(conta.meta_ad_account_id, { nivel: "campaign", datePreset: "maximum", porDia: false }),
       supabase.from("smartads_campanhas_criadas").select("id, meta_campaign_id, meta_adset_id, tipo_modelo").eq("conta_id", contaId),
     ]);
 
@@ -41,7 +45,7 @@ export async function GET(request: NextRequest) {
       local: cachePorCampanha.get(campanha.id) ?? null,
     }));
 
-    return NextResponse.json({ campanhas: linhas });
+    return NextResponse.json({ campanhas: linhas, proximoCursor });
   } catch (erro) {
     if (erro instanceof ErroMetaNaoConectado) {
       return NextResponse.json({ erro: erro.message, naoConectado: true }, { status: 409 });

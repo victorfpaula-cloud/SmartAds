@@ -10,6 +10,7 @@ interface ContaMeta {
   page_nome: string | null;
   instagram_username: string | null;
   nome_exibicao: string | null;
+  sigla_campanha: string | null;
 }
 
 interface Cliente {
@@ -200,6 +201,11 @@ export default function PainelContas({
                           </span>
                           {conta.page_nome && <span>· {conta.page_nome}</span>}
                           {conta.instagram_username && <span>· @{conta.instagram_username}</span>}
+                          {conta.sigla_campanha && (
+                            <span className="rounded-full bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-semibold text-neutral-300">
+                              {conta.sigla_campanha}
+                            </span>
+                          )}
                         </div>
 
                         {saude[conta.id]?.status === "atencao" && (
@@ -399,6 +405,7 @@ function AdicionarConta({
   const [contaSelecionada, setContaSelecionada] = useState("");
   const [paginaSelecionada, setPaginaSelecionada] = useState("");
   const [nomeExibicao, setNomeExibicao] = useState("");
+  const [siglaCampanha, setSiglaCampanha] = useState("");
   const [salvando, setSalvando] = useState(false);
 
   useEffect(() => {
@@ -433,6 +440,7 @@ function AdicionarConta({
         instagramBusinessId: pagina?.instagram_business_account?.id,
         instagramUsername: pagina?.instagram_business_account?.username,
         nomeExibicao: nomeExibicao.trim() || undefined,
+        siglaCampanha: siglaCampanha.trim() || undefined,
       }),
     });
     const corpo = await resposta.json();
@@ -499,6 +507,23 @@ function AdicionarConta({
           onChange={(e) => setNomeExibicao(e.target.value)}
           className="mt-1 h-9 w-full rounded-lg border border-white/14 bg-ink-850 px-2.5 text-sm text-neutral-100"
         />
+      </div>
+
+      <div>
+        <label className="text-xs font-semibold text-neutral-400">Sigla nas campanhas (opcional)</label>
+        <input
+          value={siglaCampanha}
+          onChange={(e) => setSiglaCampanha(e.target.value.toUpperCase())}
+          placeholder="Ex: EXP"
+          maxLength={10}
+          className="mt-1 h-9 w-full rounded-lg border border-white/14 bg-ink-850 px-2.5 text-sm text-neutral-100"
+        />
+        <p className="mt-1 text-[11px] leading-relaxed text-neutral-500">
+          Toda campanha criada pelo SmartAds pra esse cliente nasce com essa sigla entre
+          parênteses no nome — útil quando a mesma conta de anúncio é usada em mais de um cliente
+          aqui (ex: "Expansão" e "Principal" da mesma loja), pra identificar de onde veio direto no
+          Gerenciador de Anúncios.
+        </p>
       </div>
 
       <button
