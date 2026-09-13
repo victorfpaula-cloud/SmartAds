@@ -355,7 +355,13 @@ export async function obterOrcamentoConjunto(
  * opção "usar publicação existente"). */
 export async function criarCriativoDePostExistente(
   adAccountId: string,
-  params: { pageId: string; instagramUserId: string; sourceInstagramMediaId: string; name: string }
+  params: {
+    pageId: string;
+    instagramUserId: string;
+    sourceInstagramMediaId: string;
+    name: string;
+    instagramUsername?: string;
+  }
 ): Promise<{ id: string }> {
   return chamar(`${adAccountId}/adcreatives`, {
     metodo: "POST",
@@ -365,6 +371,19 @@ export async function criarCriativoDePostExistente(
         page_id: params.pageId,
         instagram_user_id: params.instagramUserId,
         source_instagram_media_id: params.sourceInstagramMediaId,
+        // A Meta passou a exigir um link mesmo em anúncio de engajamento feito a partir de post
+        // existente, sem destino externo real (achado em 13/09/2026 publicando uma campanha de
+        // verdade) — mesma solução já usada em criarCriativoNovo: manda o perfil do Instagram
+        // como CTA, só pra satisfazer a validação, nunca redireciona ninguém de verdade porque o
+        // objetivo aqui é engajamento no post, não clique.
+        call_to_action: {
+          type: "LEARN_MORE",
+          value: {
+            link: params.instagramUsername
+              ? `https://www.instagram.com/${params.instagramUsername}/`
+              : "https://www.instagram.com/",
+          },
+        },
       },
     },
   });
