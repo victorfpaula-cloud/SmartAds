@@ -3,6 +3,7 @@ import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { obterDiagnosticoSaldoConta } from "@/lib/meta/api";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 /** TEMPORÁRIO — investigando se dá pra buscar o "Fundos disponíveis" real de contas com Pix (ver
  * conversa: o cálculo por spend_cap deu errado). Bate direto na Meta com vários campos/edges
