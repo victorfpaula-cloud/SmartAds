@@ -7,6 +7,9 @@ import {
   criarCampanha,
   criarConjuntoDeAnuncios,
   obterPostInstagram,
+  obterTokenDePagina,
+  encontrarPostDaPaginaCorrespondente,
+  criarCriativoDoPostDaPagina,
   criarCriativoNovo,
   criarAnuncio,
   subirImagem,
@@ -120,7 +123,13 @@ export async function POST(request: NextRequest) {
     });
     campanhaId = campanha.id;
 
-    const promotedObject = modelo.exigeFormulario ? { page_id: conta.page_id } : undefined;
+    // promoted_object com o page_id também é obrigatório pro conjunto de anúncios quando vai
+    // turbinar publicação existente (não só no Formulário) — sem isso a Meta nunca reconhece o
+    // conjunto como "isso é pra promover um post dessa Página", e nenhuma tentativa no CRIATIVO
+    // resolve, porque o problema real tava aqui, não lá (achado em 23/09/2026 testando direto
+    // contra a API real via Windsor.ai).
+    const promotedObject =
+      modelo.exigeFormulario || corpo.criativo.usarPostExistente ? { page_id: conta.page_id } : undefined;
 
     const adset = await criarConjuntoDeAnuncios(adAccountId, {
       name: `${corpo.nomeCampanha} - conjunto`,
@@ -138,39 +147,55 @@ export async function POST(request: NextRequest) {
     adsetId = adset.id;
 
     if (corpo.criativo.usarPostExistente && corpo.criativo.postSelecionadoId) {
-      // "Usar publicação existente" NÃO reaproveita o post original pelo ID (source_instagram_
-      // media_id) — testado exaustivamente direto contra a API real em 13/09/2026 (~10 variações
-      // de payload) e confirmado: a Meta rejeita qualquer chamada pra ação nesse tipo de criativo
-      // ("O campo Chamada para ação deve ser usado com uma promoção de post existente", subcode
-      // 2238146) e o único jeito de satisfazer o "link obrigatório" que ela também exige
-      // (link_data) faz ela descartar o post original e criar um card genérico de link em cima
-      // dele — o oposto do que essa opção promete. O único campo feito sob medida pra isso,
-      // call_to_action_type, devolve "(#3) Application does not have the capability to make this
-      // API call" nesse app (recurso que exige App Review completo, incompatível com esse app,
-      // que fica em modo Desenvolvimento pra sempre de propósito). Então, em vez disso, busca a
-      // imagem e a legenda do post escolhido e publica como um anúncio novo (mesmo caminho já
-      // comprovado funcionando em "Nova imagem") — visualmente idêntico pra quem vê o anúncio,
-      // só que tecnicamente um post novo só-anúncio, não literalmente o post orgânico.
       const post = await obterPostInstagram(corpo.criativo.postSelecionadoId);
-      if (post.media_type !== "IMAGE" || !post.media_url) {
-        throw new Error(
-          'Essa publicação é vídeo ou carrossel — ainda não dá pra reaproveitar aqui. Escolha uma publicação de imagem única, ou use a opção "Nova imagem".'
-        );
-      }
-      const respostaImagem = await fetch(post.media_url);
-      if (!respostaImagem.ok) {
-        throw new Error("Não foi possível baixar a imagem da publicação selecionada.");
-      }
-      const imagemBase64 = Buffer.from(await respostaImagem.arrayBuffer()).toString("base64");
-      const imageHash = await subirImagem(adAccountId, imagemBase64);
 
-      const criativo = await criarCriativoNovo(adAccountId, {
-        name: `${corpo.nomeCampanha} - criativo`,
-        pageId: conta.page_id,
-        instagramUserId: conta.instagram_business_id,
-        imageHash,
-        mensagem: post.caption ?? "",
-      });
+      // Tenta achar o mesmo post cross-postado na Página (comum em Reels) pra turbinar o post de
+      // verdade — engajamento acumulando nele, sem duplicar conteúdo. A Meta nunca aceita o ID do
+      // Instagram como referência de "post existente" (testado exaustivamente em 13/09/2026 e
+      // 23/09/2026), só o ID do post da própria Página. Qualquer falha nessa busca (token, post
+      // não encontrado) cai no caminho de baixo, sem quebrar a criação da campanha.
+      let postDaPaginaId: string | null = null;
+      try {
+        const tokenPagina = await obterTokenDePagina(conta.page_id);
+        if (tokenPagina) {
+          postDaPaginaId = await encontrarPostDaPaginaCorrespondente(conta.page_id, tokenPagina, post.timestamp);
+        }
+      } catch {
+        // Segue sem cross-post encontrado — cai no fallback abaixo.
+      }
+
+      let criativo: { id: string };
+      if (postDaPaginaId) {
+        criativo = await criarCriativoDoPostDaPagina(adAccountId, {
+          objectStoryId: postDaPaginaId,
+          name: `${corpo.nomeCampanha} - criativo`,
+        });
+      } else {
+        // Sem cross-post pra Página (comum em posts de imagem única, que não replicam sozinhos)
+        // — recria a imagem/legenda como anúncio novo (mesmo caminho de "Nova imagem").
+        // Visualmente idêntico pra quem vê, só que o engajamento acumula nesse anúncio, não no
+        // post original.
+        if (post.media_type !== "IMAGE" || !post.media_url) {
+          throw new Error(
+            'Essa publicação é vídeo ou carrossel sem cross-post pra Página — ainda não dá pra reaproveitar aqui. Escolha uma publicação de imagem única, ou use a opção "Nova imagem".'
+          );
+        }
+        const respostaImagem = await fetch(post.media_url);
+        if (!respostaImagem.ok) {
+          throw new Error("Não foi possível baixar a imagem da publicação selecionada.");
+        }
+        const imagemBase64 = Buffer.from(await respostaImagem.arrayBuffer()).toString("base64");
+        const imageHash = await subirImagem(adAccountId, imagemBase64);
+
+        criativo = await criarCriativoNovo(adAccountId, {
+          name: `${corpo.nomeCampanha} - criativo`,
+          pageId: conta.page_id,
+          instagramUserId: conta.instagram_business_id,
+          imageHash,
+          mensagem: post.caption ?? "",
+        });
+      }
+
       const anuncio = await criarAnuncio(adAccountId, {
         name: `${corpo.nomeCampanha} - anúncio`,
         adsetId: adset.id,

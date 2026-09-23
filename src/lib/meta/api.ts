@@ -12,9 +12,16 @@ type Metodo = "GET" | "POST" | "DELETE";
  */
 async function chamar<T = any>(
   caminho: string,
-  opcoes: { metodo?: Metodo; corpo?: Record<string, unknown>; query?: Record<string, unknown> } = {}
+  opcoes: {
+    metodo?: Metodo;
+    corpo?: Record<string, unknown>;
+    query?: Record<string, unknown>;
+    /** Usa esse token em vez do token de usuário salvo — só pra chamadas que exigem token de
+     * Página (ver obterTokenDePagina). */
+    tokenExplicito?: string;
+  } = {}
 ): Promise<T> {
-  const token = await obterTokenValido();
+  const token = opcoes.tokenExplicito ?? (await obterTokenValido());
   const { metodo = "GET", corpo, query } = opcoes;
 
   const url = new URL(`${BASE_URL}/${caminho}`);
@@ -102,6 +109,54 @@ export async function obterPostInstagram(mediaId: string): Promise<PostInstagram
   return chamar<PostInstagram>(mediaId, {
     query: { fields: "id,caption,media_type,media_url,thumbnail_url,permalink,timestamp" },
   });
+}
+
+/** Token de acesso da própria Página — contas que migraram pra "nova experiência de Páginas" da
+ * Meta exigem token de Página (não o token de usuário comum) pra ler o feed de posts dela
+ * (achado em 13/09/2026: "é necessário um token de acesso à Página para esta ligação na nova
+ * experiência de Páginas"). Deriva na hora a partir do token de usuário já salvo — não precisa
+ * guardar nada novo no banco nem renovar nada à parte, já que herda a validade do token de
+ * usuário original. */
+export async function obterTokenDePagina(pageId: string): Promise<string | null> {
+  const dados = await chamar<{ data: Array<{ id: string; access_token: string }> }>("me/accounts", {
+    query: { fields: "id,access_token", limit: 500 },
+  });
+  return dados.data.find((pagina) => pagina.id === pageId)?.access_token ?? null;
+}
+
+/** Procura, entre os posts recentes da Página, um publicado bem perto do horário do post do
+ * Instagram selecionado em "usar publicação existente" — cobre o caso comum (principalmente
+ * Reels) em que a própria Meta replica automaticamente o conteúdo do Instagram pra Página
+ * quando o cross-post tá ligado na conta. Sem achar esse post da Página não tem como turbinar o
+ * post de verdade: testado direto contra a API real em 23/09/2026 (via ação boost_post do
+ * Windsor.ai) que a Meta rejeita o ID do Instagram como referência de "post existente" pra criar
+ * anúncio, mas aceita o ID do post da Página normalmente. Janela apertada (10 min) porque
+ * cross-post acontece quase simultâneo à publicação original; fora dela, melhor não arriscar
+ * casar com o post errado — devolve null e quem chamar cai no caminho de recriar o conteúdo como
+ * anúncio novo (ver route.ts). */
+export async function encontrarPostDaPaginaCorrespondente(
+  pageId: string,
+  tokenPagina: string,
+  timestampPostInstagram: string
+): Promise<string | null> {
+  const alvo = new Date(timestampPostInstagram).getTime();
+  const janelaMs = 10 * 60 * 1000;
+  const desde = new Date(alvo - janelaMs).toISOString().slice(0, 10);
+  const ate = new Date(alvo + janelaMs).toISOString().slice(0, 10);
+
+  const dados = await chamar<{ data: Array<{ id: string; created_time: string }> }>(`${pageId}/posts`, {
+    tokenExplicito: tokenPagina,
+    query: { fields: "id,created_time", since: desde, until: ate, limit: 50 },
+  });
+
+  let melhor: { id: string; diffMs: number } | null = null;
+  for (const post of dados.data) {
+    const diffMs = Math.abs(new Date(post.created_time).getTime() - alvo);
+    if (diffMs <= janelaMs && (!melhor || diffMs < melhor.diffMs)) {
+      melhor = { id: post.id, diffMs };
+    }
+  }
+  return melhor?.id ?? null;
 }
 
 // ============================================================================
@@ -358,6 +413,24 @@ export async function obterOrcamentoConjunto(
 // ============================================================================
 // Criativo e anúncio
 // ============================================================================
+
+/** Anúncio a partir de um post que JÁ existe na Página (achado via encontrarPostDaPaginaCorrespondente)
+ * — usa object_story_id direto, sem call_to_action nem link nenhum. Validado direto contra a API
+ * real em 23/09/2026 (via ação boost_post do Windsor.ai): isso funciona exatamente assim quando o
+ * conjunto de anúncios tem destination_type ON_POST + promoted_object com o page_id (ver route.ts)
+ * — a Meta não pede mais nada além disso, e o engajamento acumula no post de verdade, não num
+ * post novo. Nenhuma das tentativas anteriores com source_instagram_media_id funcionava porque a
+ * Meta nunca reconhece o ID do Instagram como "post existente" pra esse fim — só o ID do post da
+ * própria Página. */
+export async function criarCriativoDoPostDaPagina(
+  adAccountId: string,
+  params: { objectStoryId: string; name: string }
+): Promise<{ id: string }> {
+  return chamar(`${adAccountId}/adcreatives`, {
+    metodo: "POST",
+    corpo: { name: params.name, object_story_id: params.objectStoryId },
+  });
+}
 
 /** Anúncio novo ("dark post" — não aparece no feed orgânico, só roda como anúncio), com imagem e
  * link opcional (usado em Cliques no Link) ou sem link (Engajamento/Alcance/Visita ao perfil). */
