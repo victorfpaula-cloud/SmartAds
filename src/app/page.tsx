@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Cabecalho from "@/components/Cabecalho";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
-import { Storefront, Buildings, ArrowRight } from "@phosphor-icons/react/dist/ssr";
+import { Storefront, Buildings, Wallet, ArrowRight } from "@phosphor-icons/react/dist/ssr";
 
 export const dynamic = "force-dynamic";
 
@@ -54,12 +54,21 @@ export default async function Home() {
               Selecione uma unidade pra criar campanhas, ver diagnóstico ou dados.
             </p>
           </div>
-          <Link
-            href="/contas"
-            className="rounded-lg bg-accent px-3.5 py-2 text-xs font-semibold text-white hover:bg-accent-strong"
-          >
-            + Empresa ou cliente
-          </Link>
+          <div className="flex gap-2">
+            <Link
+              href="/financeiro"
+              className="flex items-center gap-1.5 rounded-lg border border-white/14 px-3.5 py-2 text-xs font-semibold text-neutral-300 hover:bg-white/[0.04]"
+            >
+              <Wallet size={14} />
+              Financeiro
+            </Link>
+            <Link
+              href="/contas"
+              className="rounded-lg bg-accent px-3.5 py-2 text-xs font-semibold text-white hover:bg-accent-strong"
+            >
+              + Empresa ou cliente
+            </Link>
+          </div>
         </div>
 
         {lista.length === 0 ? (
