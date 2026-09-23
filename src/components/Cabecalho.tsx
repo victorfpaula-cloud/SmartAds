@@ -1,5 +1,6 @@
 import Link from "next/link";
 import {
+  House,
   Buildings,
   Megaphone,
   Target,
@@ -10,6 +11,7 @@ import {
 } from "@phosphor-icons/react/dist/ssr";
 
 const LINKS = [
+  { href: "/", label: "Início", Icone: House },
   { href: "/contas", label: "Contas", Icone: Buildings },
   { href: "/campanhas", label: "Campanhas", Icone: Megaphone },
   { href: "/publicos", label: "Públicos", Icone: Target },
@@ -72,7 +74,7 @@ export default function Cabecalho({ ativo }: { ativo: string }) {
         className="barra-vidro fixed inset-x-0 bottom-0 z-20 border-t sm:hidden"
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 6px)" }}
       >
-        <div className="grid grid-cols-6">
+        <div className="grid grid-cols-7">
           {LINKS.map(({ href, label, Icone }) => (
             <Link
               key={href}

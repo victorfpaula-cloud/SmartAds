@@ -14,10 +14,18 @@ interface ContaMeta {
   sigla_campanha: string | null;
 }
 
+interface Empresa {
+  id: string;
+  nome: string;
+  tipo: "individual" | "franquia";
+}
+
 interface Cliente {
   id: string;
   nome: string;
   ativo: boolean;
+  empresa_id: string;
+  smartads_empresas: Empresa | null;
   smartads_contas_meta: ContaMeta[];
 }
 
@@ -60,22 +68,30 @@ interface PaginaDisponivel {
   instagram_business_account?: { id: string; username?: string };
 }
 
+const NOVA_EMPRESA = "__nova__";
+
 export default function PainelContas({
   clientesIniciais,
+  empresasIniciais,
   statusMetaInicial,
   anunciosPorConta,
   avisoConexao,
   mensagemErro,
 }: {
   clientesIniciais: Cliente[];
+  empresasIniciais: Empresa[];
   statusMetaInicial: StatusMeta;
   anunciosPorConta: Record<string, number>;
   avisoConexao: "conectado" | "erro" | null;
   mensagemErro?: string;
 }) {
   const [clientes, setClientes] = useState(clientesIniciais);
+  const [empresas, setEmpresas] = useState(empresasIniciais);
   const [statusMeta] = useState(statusMetaInicial);
   const [nomeNovoCliente, setNomeNovoCliente] = useState("");
+  const [empresaSelecionada, setEmpresaSelecionada] = useState(empresasIniciais[0]?.id ?? NOVA_EMPRESA);
+  const [nomeNovaEmpresa, setNomeNovaEmpresa] = useState("");
+  const [tipoNovaEmpresa, setTipoNovaEmpresa] = useState<"individual" | "franquia">("individual");
   const [criandoCliente, setCriandoCliente] = useState(false);
   const [clienteExpandidoId, setClienteExpandidoId] = useState<string | null>(null);
   const [saude, setSaude] = useState<Record<string, SaudeConta>>({});
@@ -93,18 +109,54 @@ export default function PainelContas({
   async function criarCliente(evento: React.FormEvent) {
     evento.preventDefault();
     if (!nomeNovoCliente.trim()) return;
+    const criandoEmpresaNova = empresaSelecionada === NOVA_EMPRESA;
+    if (criandoEmpresaNova && !nomeNovaEmpresa.trim()) {
+      alert("Informe o nome da empresa.");
+      return;
+    }
     setCriandoCliente(true);
+
+    let empresa: Empresa | null = null;
+    if (criandoEmpresaNova) {
+      const respostaEmpresa = await fetch("/api/empresas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nome: nomeNovaEmpresa.trim(), tipo: tipoNovaEmpresa }),
+      });
+      const corpoEmpresa = await respostaEmpresa.json();
+      if (!respostaEmpresa.ok) {
+        setCriandoCliente(false);
+        alert(corpoEmpresa.erro || "Falha ao criar a empresa.");
+        return;
+      }
+      empresa = corpoEmpresa.empresa;
+    } else {
+      empresa = empresas.find((e) => e.id === empresaSelecionada) ?? null;
+    }
+    if (!empresa) {
+      setCriandoCliente(false);
+      alert("Selecione ou cadastre uma empresa.");
+      return;
+    }
 
     const resposta = await fetch("/api/clientes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nome: nomeNovoCliente.trim() }),
+      body: JSON.stringify({ nome: nomeNovoCliente.trim(), empresaId: empresa.id }),
     });
     const corpo = await resposta.json();
     setCriandoCliente(false);
 
     if (resposta.ok) {
-      setClientes((atual) => [...atual, { ...corpo.cliente, smartads_contas_meta: [] }]);
+      if (criandoEmpresaNova) {
+        setEmpresas((atual) => [...atual, empresa!]);
+        setEmpresaSelecionada(empresa!.id);
+        setNomeNovaEmpresa("");
+      }
+      setClientes((atual) => [
+        ...atual,
+        { ...corpo.cliente, smartads_empresas: empresa, smartads_contas_meta: [] },
+      ]);
       setNomeNovoCliente("");
     } else {
       alert(corpo.erro || "Falha ao criar cliente.");
@@ -149,20 +201,58 @@ export default function PainelContas({
           <h2 className="text-sm font-semibold text-neutral-200">Clientes</h2>
         </div>
 
-        <form onSubmit={criarCliente} className="flex flex-col gap-2 border-b border-white/10 px-5 py-4 sm:flex-row">
-          <input
-            value={nomeNovoCliente}
-            onChange={(e) => setNomeNovoCliente(e.target.value)}
-            placeholder="Nome do novo cliente"
-            className="h-10 flex-1 rounded-lg border border-white/14 bg-ink-850 px-3.5 text-sm text-neutral-100 outline-none focus:border-accent focus:ring-[3px] focus:ring-accent/20"
-          />
-          <button
-            type="submit"
-            disabled={criandoCliente}
-            className="h-10 shrink-0 rounded-lg bg-accent px-4 text-sm font-semibold text-white transition active:scale-[0.98] hover:bg-accent-strong disabled:opacity-60"
-          >
-            {criandoCliente ? "Criando…" : "Adicionar cliente"}
-          </button>
+        <form onSubmit={criarCliente} className="flex flex-col gap-2.5 border-b border-white/10 px-5 py-4">
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input
+              value={nomeNovoCliente}
+              onChange={(e) => setNomeNovoCliente(e.target.value)}
+              placeholder="Nome do novo cliente (ex: Dona Baunilha - Expansão)"
+              className="h-10 flex-1 rounded-lg border border-white/14 bg-ink-850 px-3.5 text-sm text-neutral-100 outline-none focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+            />
+            <select
+              value={empresaSelecionada}
+              onChange={(e) => setEmpresaSelecionada(e.target.value)}
+              className="h-10 rounded-lg border border-white/14 bg-ink-850 px-3 text-sm text-neutral-100"
+            >
+              {empresas.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.nome} ({e.tipo === "franquia" ? "franquia" : "individual"})
+                </option>
+              ))}
+              <option value={NOVA_EMPRESA}>+ Nova empresa…</option>
+            </select>
+            <button
+              type="submit"
+              disabled={criandoCliente}
+              className="h-10 shrink-0 rounded-lg bg-accent px-4 text-sm font-semibold text-white transition active:scale-[0.98] hover:bg-accent-strong disabled:opacity-60"
+            >
+              {criandoCliente ? "Criando…" : "Adicionar cliente"}
+            </button>
+          </div>
+
+          {empresaSelecionada === NOVA_EMPRESA && (
+            <div className="flex flex-col gap-2 rounded-lg border border-white/10 bg-white/[0.02] p-3 sm:flex-row">
+              <input
+                value={nomeNovaEmpresa}
+                onChange={(e) => setNomeNovaEmpresa(e.target.value)}
+                placeholder="Nome da empresa (ex: Dona Baunilha)"
+                className="h-9 flex-1 rounded-lg border border-white/14 bg-ink-850 px-3 text-sm text-neutral-100"
+              />
+              <select
+                value={tipoNovaEmpresa}
+                onChange={(e) => setTipoNovaEmpresa(e.target.value as "individual" | "franquia")}
+                className="h-9 rounded-lg border border-white/14 bg-ink-850 px-3 text-sm text-neutral-100"
+              >
+                <option value="individual">Empresa individual (unidade única)</option>
+                <option value="franquia">Franquia (várias unidades)</option>
+              </select>
+            </div>
+          )}
+          <p className="text-[11px] leading-relaxed text-neutral-500">
+            Franquia libera comparação entre unidades (semáforo, mediana da rede no diagnóstico).
+            Empresa individual fica com o essencial: campanhas, insights do Gemini e piloto
+            automático, sem comparação com outros negócios.
+          </p>
         </form>
 
         {clientes.length === 0 ? (
@@ -174,7 +264,15 @@ export default function PainelContas({
             {clientes.map((cliente) => (
               <li key={cliente.id} className="cartao-vidro-interno px-4 py-3.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-sm font-semibold text-neutral-100">{cliente.nome}</span>
+                  <span className="flex items-center gap-2 text-sm font-semibold text-neutral-100">
+                    {cliente.nome}
+                    {cliente.smartads_empresas && (
+                      <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-medium text-neutral-400">
+                        {cliente.smartads_empresas.nome}
+                        {cliente.smartads_empresas.tipo === "franquia" ? " · franquia" : " · individual"}
+                      </span>
+                    )}
+                  </span>
                   <button
                     onClick={() =>
                       setClienteExpandidoId(clienteExpandidoId === cliente.id ? null : cliente.id)
