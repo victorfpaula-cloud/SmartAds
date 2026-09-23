@@ -30,6 +30,31 @@ export async function enviarRelatorioSemanal(): Promise<{ enviado: boolean; moti
 
   if (!clientes?.length) return { enviado: false, motivo: "Nenhum cliente ativo." };
 
+  // Etapas de Campanha-Mãe marcadas "oficial" mas sem mídia definida ainda — o único canal de
+  // aviso recorrente que o app tem hoje é esse e-mail semanal, então continua listando até alguém
+  // definir o criativo (não guarda "já avisei", intencional: se ainda está pendente, avisa de novo).
+  const { data: criativosPendentes } = await supabase
+    .from("smartads_campanha_mae_criativos")
+    .select("campanha_mae_id, smartads_campanhas_mae(nome), smartads_estrategia_etapas(nome_etapa)")
+    .eq("modo", "oficial_upload")
+    .is("criativo_imagem_base64", null);
+
+  const secaoCriativosPendentes =
+    criativosPendentes && criativosPendentes.length > 0
+      ? `
+        <div style="margin-bottom:32px;padding:16px;border-radius:8px;background:#fffbeb;border:1px solid #fde68a">
+          <h2 style="font-size:15px;margin:0 0 8px;color:#92400e">Criativos pendentes em Campanhas-Mãe</h2>
+          <ul style="font-size:13px;margin:0;padding-left:18px;color:#78350f">
+            ${criativosPendentes
+              .map((c: any) => {
+                const base = process.env.NEXT_PUBLIC_APP_URL ?? "";
+                return `<li><a href="${base}/estrategias/campanhas-mae/${c.campanha_mae_id}" style="color:#78350f">${c.smartads_campanhas_mae?.nome ?? "Campanha"} — ${c.smartads_estrategia_etapas?.nome_etapa ?? "etapa"}</a></li>`;
+              })
+              .join("")}
+          </ul>
+        </div>`
+      : "";
+
   const secoes: string[] = [];
 
   for (const cliente of clientes) {
@@ -127,6 +152,7 @@ export async function enviarRelatorioSemanal(): Promise<{ enviado: boolean; moti
 <html><body style="font-family:-apple-system,sans-serif;color:#111;max-width:600px;margin:0 auto;padding:24px">
   <h1 style="font-size:20px;margin:0 0 4px">Relatório semanal — SmartAds</h1>
   <p style="font-size:13px;color:#888;margin:0 0 24px">Semana de ${new Date().toLocaleDateString("pt-BR")}</p>
+  ${secaoCriativosPendentes}
   ${secoes.join("")}
 </body></html>`;
 

@@ -24,7 +24,7 @@ export default async function NovaCampanhaDoPlanoPage({
   const { data: planoEtapa } = await supabase
     .from("smartads_plano_etapas")
     .select(
-      "*, smartads_estrategia_etapas(*), smartads_planos_execucao(*, smartads_contas_meta(*, smartads_clientes(id, nome)), smartads_campanhas_mae(titulo:criativo_titulo, mensagem:criativo_mensagem, imagemBase64:criativo_imagem_base64, cta:criativo_cta))"
+      "*, smartads_estrategia_etapas(*), smartads_planos_execucao(*, smartads_contas_meta(*, smartads_clientes(id, nome)))"
     )
     .eq("id", planoEtapaId)
     .single();
@@ -64,7 +64,29 @@ export default async function NovaCampanhaDoPlanoPage({
       }
     : { tipo: "diario", valorCentavos: valorEtapaCentavos };
 
-  const campanhaMae = (plano as any).smartads_campanhas_mae;
+  // Criativo oficial da Campanha-Mãe, se essa etapa específica tiver um definido — o link é por
+  // (campanha_mae_id, estrategia_etapa_id), não algo embutido no plano, porque cada etapa da
+  // mesma estratégia pode ter um criativo diferente (ou nenhum, se for "livre por unidade"). Uma
+  // etapa marcada "oficial" mas ainda sem mídia definida (pendente) cai pro fluxo normal, sem
+  // travar nada — não faz sentido bloquear a publicação por causa disso.
+  let criativoOficial: ValoresIniciaisCampanha["criativoOficial"];
+  if (plano.campanha_mae_id) {
+    const { data: criativo } = await supabase
+      .from("smartads_campanha_mae_criativos")
+      .select("modo, criativo_titulo, criativo_mensagem, criativo_imagem_base64, criativo_cta")
+      .eq("campanha_mae_id", plano.campanha_mae_id)
+      .eq("estrategia_etapa_id", planoEtapa.estrategia_etapa_id)
+      .maybeSingle();
+
+    if (criativo?.modo === "oficial_upload" && criativo.criativo_imagem_base64 && criativo.criativo_mensagem) {
+      criativoOficial = {
+        titulo: criativo.criativo_titulo,
+        mensagem: criativo.criativo_mensagem,
+        imagemBase64: criativo.criativo_imagem_base64,
+        cta: criativo.criativo_cta ?? "LEARN_MORE",
+      };
+    }
+  }
 
   const valoresIniciais: ValoresIniciaisCampanha = {
     publico,
@@ -72,14 +94,7 @@ export default async function NovaCampanhaDoPlanoPage({
     incluirFacebook: plano.incluir_facebook,
     orcamento,
     nomeCampanha: `${plano.nome} - ${etapa.nome_etapa}`,
-    criativoOficial: campanhaMae
-      ? {
-          titulo: campanhaMae.titulo,
-          mensagem: campanhaMae.mensagem,
-          imagemBase64: campanhaMae.imagemBase64,
-          cta: campanhaMae.cta,
-        }
-      : undefined,
+    criativoOficial,
   };
 
   return (
