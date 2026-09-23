@@ -34,6 +34,11 @@ export interface ValoresIniciaisCampanha {
   incluirFacebook: boolean;
   orcamento: { tipo: "diario" | "vitalicio"; valorCentavos: number; dataInicio?: string; dataFim?: string };
   nomeCampanha?: string;
+  /** Preenchido quando essa campanha nasce de uma etapa de Plano ligada a uma Campanha-Mãe — o
+   * criativo já vem pronto E TRAVADO (a unidade não escolhe imagem/texto/botão próprios, é o
+   * "padrão" que a franqueadora definiu). Só `link` e o ID do formulário de Leads continuam
+   * editáveis, porque são específicos de cada unidade. */
+  criativoOficial?: { titulo: string | null; mensagem: string; imagemBase64: string; cta: string };
 }
 
 export default function FormularioCampanha({
@@ -84,17 +89,18 @@ export default function FormularioCampanha({
   const [dataFim, setDataFim] = useState(valoresIniciais?.orcamento.dataFim ?? "");
 
   // Passo 3 — criativo
-  const [usarPostExistente, setUsarPostExistente] = useState(modelo.permiteUsarPostExistente);
+  const criativoOficial = valoresIniciais?.criativoOficial;
+  const [usarPostExistente, setUsarPostExistente] = useState(!criativoOficial && modelo.permiteUsarPostExistente);
   const [posts, setPosts] = useState<PostInstagram[]>([]);
   const [carregandoPosts, setCarregandoPosts] = useState(false);
   const [postSelecionadoId, setPostSelecionadoId] = useState("");
-  const [mensagem, setMensagem] = useState("");
-  const [titulo, setTitulo] = useState("");
+  const [mensagem, setMensagem] = useState(criativoOficial?.mensagem ?? "");
+  const [titulo, setTitulo] = useState(criativoOficial?.titulo ?? "");
   // Uma imagem = um Anúncio depois (ver hierarquia explicada na tela) — todas as variações
   // entram no MESMO Conjunto de Anúncios, nunca um conjunto por imagem.
-  const [imagens, setImagens] = useState<string[]>([]);
+  const [imagens, setImagens] = useState<string[]>(criativoOficial ? [criativoOficial.imagemBase64] : []);
   const [link, setLink] = useState("");
-  const [callToAction, setCallToAction] = useState("LEARN_MORE");
+  const [callToAction, setCallToAction] = useState(criativoOficial?.cta ?? "LEARN_MORE");
   const [leadGenFormId, setLeadGenFormId] = useState("");
 
   // Passo 4 — revisão
@@ -455,7 +461,27 @@ export default function FormularioCampanha({
 
         {etapa === 3 && (
           <div className="flex flex-col gap-4">
-            {modelo.permiteUsarPostExistente && (
+            {criativoOficial && (
+              <div className="cartao-vidro-interno flex gap-3 p-4">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`data:image/jpeg;base64,${criativoOficial.imagemBase64}`}
+                  alt=""
+                  className="h-16 w-16 shrink-0 rounded-lg border border-white/10 object-cover"
+                />
+                <div className="text-xs">
+                  <p className="font-semibold uppercase tracking-wide text-neutral-500">
+                    Criativo oficial da Campanha-Mãe — travado
+                  </p>
+                  {criativoOficial.titulo && (
+                    <p className="mt-1 font-semibold text-neutral-200">{criativoOficial.titulo}</p>
+                  )}
+                  <p className="mt-0.5 text-neutral-400">{criativoOficial.mensagem}</p>
+                </div>
+              </div>
+            )}
+
+            {!criativoOficial && modelo.permiteUsarPostExistente && (
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -500,74 +526,78 @@ export default function FormularioCampanha({
               )
             ) : (
               <>
-                <div className="cartao-vidro-interno px-4 py-3.5 text-xs leading-relaxed text-neutral-400">
-                  <p className="font-semibold text-neutral-300">
-                    Campanha → Conjunto de Anúncios → Anúncio
-                  </p>
-                  <p className="mt-1.5">
-                    Cada imagem que você adicionar aqui vira um <strong className="text-neutral-300">Anúncio</strong> separado,
-                    mas todos dentro do <strong className="text-neutral-300">mesmo Conjunto de Anúncios</strong> desta
-                    campanha — nunca um conjunto novo por imagem. É assim que a Meta testa sozinha
-                    qual variação funciona melhor e direciona mais verba pra ela. Separar em
-                    conjuntos diferentes divide o público/orçamento à toa e atrapalha esse teste.
-                  </p>
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-neutral-400">
-                    Imagens {imagens.length > 0 && `(${imagens.length} ${imagens.length > 1 ? "variações" : "variação"} = ${imagens.length} anúncio${imagens.length > 1 ? "s" : ""})`}
-                  </label>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={(e) => e.target.files && adicionarImagens(e.target.files)}
-                    className="mt-1 block w-full text-xs text-neutral-400"
-                  />
-                  <p className="mt-1 text-xs text-neutral-500">
-                    Pode selecionar várias de uma vez — inclusive as variações que o Meta AI sugere.
-                  </p>
-
-                  {imagens.length > 0 && (
-                    <div className="mt-3 grid grid-cols-4 gap-2 sm:grid-cols-6">
-                      {imagens.map((imagem, indice) => (
-                        <div key={indice} className="group relative aspect-square overflow-hidden rounded-lg border border-white/10">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={`data:image/jpeg;base64,${imagem}`}
-                            alt=""
-                            className="h-full w-full object-cover"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => removerImagem(indice)}
-                            aria-label="Remover imagem"
-                            className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/70 text-[11px] font-bold text-white"
-                          >
-                            ×
-                          </button>
-                        </div>
-                      ))}
+                {!criativoOficial && (
+                  <>
+                    <div className="cartao-vidro-interno px-4 py-3.5 text-xs leading-relaxed text-neutral-400">
+                      <p className="font-semibold text-neutral-300">
+                        Campanha → Conjunto de Anúncios → Anúncio
+                      </p>
+                      <p className="mt-1.5">
+                        Cada imagem que você adicionar aqui vira um <strong className="text-neutral-300">Anúncio</strong> separado,
+                        mas todos dentro do <strong className="text-neutral-300">mesmo Conjunto de Anúncios</strong> desta
+                        campanha — nunca um conjunto novo por imagem. É assim que a Meta testa sozinha
+                        qual variação funciona melhor e direciona mais verba pra ela. Separar em
+                        conjuntos diferentes divide o público/orçamento à toa e atrapalha esse teste.
+                      </p>
                     </div>
-                  )}
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-neutral-400">Texto do anúncio</label>
-                  <textarea
-                    value={mensagem}
-                    onChange={(e) => setMensagem(e.target.value)}
-                    rows={3}
-                    className="mt-1 w-full rounded-lg border border-white/14 bg-ink-850 px-3 py-2 text-sm text-neutral-100"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-neutral-400">Título (opcional)</label>
-                  <input
-                    value={titulo}
-                    onChange={(e) => setTitulo(e.target.value)}
-                    className="mt-1 h-10 w-full rounded-lg border border-white/14 bg-ink-850 px-3 text-sm text-neutral-100"
-                  />
-                </div>
+
+                    <div>
+                      <label className="text-xs font-semibold text-neutral-400">
+                        Imagens {imagens.length > 0 && `(${imagens.length} ${imagens.length > 1 ? "variações" : "variação"} = ${imagens.length} anúncio${imagens.length > 1 ? "s" : ""})`}
+                      </label>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={(e) => e.target.files && adicionarImagens(e.target.files)}
+                        className="mt-1 block w-full text-xs text-neutral-400"
+                      />
+                      <p className="mt-1 text-xs text-neutral-500">
+                        Pode selecionar várias de uma vez — inclusive as variações que o Meta AI sugere.
+                      </p>
+
+                      {imagens.length > 0 && (
+                        <div className="mt-3 grid grid-cols-4 gap-2 sm:grid-cols-6">
+                          {imagens.map((imagem, indice) => (
+                            <div key={indice} className="group relative aspect-square overflow-hidden rounded-lg border border-white/10">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={`data:image/jpeg;base64,${imagem}`}
+                                alt=""
+                                className="h-full w-full object-cover"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => removerImagem(indice)}
+                                aria-label="Remover imagem"
+                                className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/70 text-[11px] font-bold text-white"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-neutral-400">Texto do anúncio</label>
+                      <textarea
+                        value={mensagem}
+                        onChange={(e) => setMensagem(e.target.value)}
+                        rows={3}
+                        className="mt-1 w-full rounded-lg border border-white/14 bg-ink-850 px-3 py-2 text-sm text-neutral-100"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-neutral-400">Título (opcional)</label>
+                      <input
+                        value={titulo}
+                        onChange={(e) => setTitulo(e.target.value)}
+                        className="mt-1 h-10 w-full rounded-lg border border-white/14 bg-ink-850 px-3 text-sm text-neutral-100"
+                      />
+                    </div>
+                  </>
+                )}
 
                 {modelo.exigeLink && (
                   <>
@@ -582,16 +612,23 @@ export default function FormularioCampanha({
                     </div>
                     <div>
                       <label className="text-xs font-semibold text-neutral-400">Botão</label>
-                      <select
-                        value={callToAction}
-                        onChange={(e) => setCallToAction(e.target.value)}
-                        className="mt-1 h-10 w-full rounded-lg border border-white/14 bg-ink-850 px-3 text-sm text-neutral-100"
-                      >
-                        <option value="LEARN_MORE">Saiba mais</option>
-                        <option value="SHOP_NOW">Comprar agora</option>
-                        <option value="SIGN_UP">Cadastre-se</option>
-                        <option value="CONTACT_US">Fale conosco</option>
-                      </select>
+                      {criativoOficial ? (
+                        <p className="mt-1 h-10 flex items-center rounded-lg border border-white/10 bg-white/[0.02] px-3 text-sm text-neutral-400">
+                          {{ LEARN_MORE: "Saiba mais", SHOP_NOW: "Comprar agora", SIGN_UP: "Cadastre-se", CONTACT_US: "Fale conosco" }[callToAction] ?? callToAction}{" "}
+                          <span className="ml-1.5 text-[11px]">(definido pela Campanha-Mãe)</span>
+                        </p>
+                      ) : (
+                        <select
+                          value={callToAction}
+                          onChange={(e) => setCallToAction(e.target.value)}
+                          className="mt-1 h-10 w-full rounded-lg border border-white/14 bg-ink-850 px-3 text-sm text-neutral-100"
+                        >
+                          <option value="LEARN_MORE">Saiba mais</option>
+                          <option value="SHOP_NOW">Comprar agora</option>
+                          <option value="SIGN_UP">Cadastre-se</option>
+                          <option value="CONTACT_US">Fale conosco</option>
+                        </select>
+                      )}
                     </div>
                   </>
                 )}

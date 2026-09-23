@@ -108,10 +108,10 @@ export default async function Home() {
                     </div>
                     {empresa.tipo === "franquia" && (
                       <Link
-                        href="/estrategias/semaforo"
-                        className="rounded-lg border border-white/14 px-3 py-1.5 text-xs font-medium text-neutral-300 hover:bg-white/[0.04]"
+                        href="/estrategias"
+                        className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-accent-strong"
                       >
-                        Semáforo das unidades
+                        Central da rede
                       </Link>
                     )}
                   </div>

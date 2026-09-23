@@ -23,7 +23,9 @@ export default async function NovaCampanhaDoPlanoPage({
 
   const { data: planoEtapa } = await supabase
     .from("smartads_plano_etapas")
-    .select("*, smartads_estrategia_etapas(*), smartads_planos_execucao(*, smartads_contas_meta(*, smartads_clientes(id, nome)))")
+    .select(
+      "*, smartads_estrategia_etapas(*), smartads_planos_execucao(*, smartads_contas_meta(*, smartads_clientes(id, nome)), smartads_campanhas_mae(titulo:criativo_titulo, mensagem:criativo_mensagem, imagemBase64:criativo_imagem_base64, cta:criativo_cta))"
+    )
     .eq("id", planoEtapaId)
     .single();
 
@@ -62,12 +64,22 @@ export default async function NovaCampanhaDoPlanoPage({
       }
     : { tipo: "diario", valorCentavos: valorEtapaCentavos };
 
+  const campanhaMae = (plano as any).smartads_campanhas_mae;
+
   const valoresIniciais: ValoresIniciaisCampanha = {
     publico,
     publicoId: plano.publico_id ?? undefined,
     incluirFacebook: plano.incluir_facebook,
     orcamento,
     nomeCampanha: `${plano.nome} - ${etapa.nome_etapa}`,
+    criativoOficial: campanhaMae
+      ? {
+          titulo: campanhaMae.titulo,
+          mensagem: campanhaMae.mensagem,
+          imagemBase64: campanhaMae.imagemBase64,
+          cta: campanhaMae.cta,
+        }
+      : undefined,
   };
 
   return (
