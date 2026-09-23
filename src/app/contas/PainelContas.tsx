@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Sparkle } from "@phosphor-icons/react";
 
 interface ContaMeta {
@@ -206,6 +207,12 @@ export default function PainelContas({
                               {conta.sigla_campanha}
                             </span>
                           )}
+                          <Link
+                            href={`/estrategias/diagnostico/${conta.id}`}
+                            className="ml-auto shrink-0 text-[11px] font-semibold text-accent-strong hover:underline"
+                          >
+                            Diagnóstico
+                          </Link>
                         </div>
 
                         {saude[conta.id]?.status === "atencao" && (
