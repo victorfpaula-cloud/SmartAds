@@ -738,31 +738,76 @@ async function probe(fn: () => Promise<unknown>): Promise<ProbeResultado> {
   }
 }
 
+/** Confirmado: `funding_event_successful` (extra_data.amount) é dinheiro ENTRANDO na conta (ex:
+ * Pix) e `ad_account_billing_charge` (extra_data.new_value) é dinheiro SAINDO (cobrança quase
+ * diária) — ambos em centavos. A Meta não filtra esse edge por event_type (nem `event_type` solto
+ * nem `filters` funcionaram nos testes), então pagina TUDO e filtra aqui.
+ *
+ * Sem trava de "isso vem tal dia": só dá pra saber o saldo real somando o histórico completo que o
+ * edge devolver. `maxPaginas` é só uma trava de segurança contra loop/custo runaway — se bater nela,
+ * `atingiuLimite` avisa que o resultado pode estar incompleto (subestimado). */
+async function paginarAtividadesFinanceiras(
+  adAccountId: string,
+  maxPaginas = 60
+): Promise<{ totalFundingCentavos: number; totalChargeCentavos: number; paginasLidas: number; atingiuLimite: boolean }> {
+  let totalFundingCentavos = 0;
+  let totalChargeCentavos = 0;
+  let after: string | undefined;
+  let paginasLidas = 0;
+
+  while (paginasLidas < maxPaginas) {
+    const dados = await chamar<{
+      data: Array<{ event_type: string; extra_data?: string }>;
+      paging?: { cursors?: { after?: string }; next?: string };
+    }>(`${adAccountId}/activities`, { query: { limit: 100, fields: "event_type,extra_data", after } });
+    paginasLidas++;
+
+    for (const item of dados.data) {
+      if (!item.extra_data) continue;
+      if (item.event_type === "funding_event_successful") {
+        const extra = JSON.parse(item.extra_data);
+        if (typeof extra.amount === "number") totalFundingCentavos += extra.amount;
+      } else if (item.event_type === "ad_account_billing_charge") {
+        const extra = JSON.parse(item.extra_data);
+        if (typeof extra.new_value === "number") totalChargeCentavos += extra.new_value;
+      }
+    }
+
+    if (!dados.paging?.next || !dados.paging.cursors?.after) {
+      return { totalFundingCentavos, totalChargeCentavos, paginasLidas, atingiuLimite: false };
+    }
+    after = dados.paging.cursors.after;
+  }
+
+  return { totalFundingCentavos, totalChargeCentavos, paginasLidas, atingiuLimite: true };
+}
+
 export async function obterDiagnosticoSaldoConta(adAccountId: string) {
-  const [atividadesComValor, atividadesComFiltro] = await Promise.all([
-    // A rodada anterior achou dois event_type promissores: funding_event_successful (dinheiro
-    // ENTRANDO na conta) e ad_account_billing_charge (dinheiro SAINDO, cobrança quase diária) — mas
-    // sem o valor de cada evento. extra_data/translated_event_type devem carregar isso.
-    probe(() =>
-      chamar(`${adAccountId}/activities`, {
-        query: { limit: 60, fields: "event_type,event_time,extra_data,translated_event_type" },
-      })
-    ),
-    // Teste separado: o `event_type` como query param solto (tentativa anterior) não filtrou nada —
-    // testando a sintaxe de `filters` (igual à usada em outros edges da Marketing API) pra ver se
-    // filtra de verdade, o que ajudaria a paginar só os eventos de dinheiro em vez de tudo.
-    probe(() =>
-      chamar(`${adAccountId}/activities`, {
-        query: {
-          limit: 60,
-          fields: "event_type,event_time,extra_data",
-          filters: JSON.stringify([
-            { field: "event_type", operator: "IN", value: ["ad_account_billing_charge", "funding_event_successful"] },
-          ]),
-        },
-      })
-    ),
+  const [camposConhecidos, ledger] = await Promise.all([
+    probe(() => chamar(adAccountId, { query: { fields: "balance,amount_spent,currency" } })),
+    probe(() => paginarAtividadesFinanceiras(adAccountId)),
   ]);
 
-  return { atividadesComValor, atividadesComFiltro };
+  // Conferência: se somar TODAS as cobranças (ad_account_billing_charge) achadas no histórico
+  // paginado, isso deveria bater com amount_spent (gasto acumulado da conta desde sempre) — se
+  // bater, prova que o histórico paginado está completo (não tem retenção limitando quanto dá pra
+  // ver pra trás). Se não bater, o cálculo de saldo abaixo pode estar incompleto.
+  let conferencia: unknown = null;
+  if (camposConhecidos.ok && ledger.ok) {
+    const amountSpent = Number((camposConhecidos.dados as any).amount_spent ?? 0);
+    const balance = Number((camposConhecidos.dados as any).balance ?? 0);
+    const { totalFundingCentavos, totalChargeCentavos, paginasLidas, atingiuLimite } = ledger.dados as any;
+    conferencia = {
+      amountSpentLifetimeCentavos: amountSpent,
+      totalChargeEncontradoCentavos: totalChargeCentavos,
+      diferenca: amountSpent - totalChargeCentavos,
+      totalFundingEncontradoCentavos: totalFundingCentavos,
+      balanceAtualCentavos: balance,
+      saldoDisponivelEstimadoCentavos: totalFundingCentavos - totalChargeCentavos - balance,
+      paginasLidas,
+      atingiuLimite,
+    };
+  }
+
+  return { camposConhecidos, ledger, conferencia };
 }
