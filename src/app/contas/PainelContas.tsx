@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { Sparkle, Buildings, Storefront } from "@phosphor-icons/react";
 
 interface ContaMeta {
@@ -194,7 +193,8 @@ export default function PainelContas({
       <div>
         <h1 className="font-display text-2xl font-bold">Contas</h1>
         <p className="mt-1 text-sm text-neutral-400">
-          Clientes da agência e as contas de anúncio Meta associadas a cada um.
+          Cadastro e conexão — clientes, empresas e contas de anúncio Meta. Pra criar campanha ou
+          ver diagnóstico no dia a dia, isso é no Início.
         </p>
       </div>
 
@@ -328,16 +328,10 @@ export default function PainelContas({
                           {conta.page_nome && <span>· {conta.page_nome}</span>}
                           {conta.instagram_username && <span>· @{conta.instagram_username}</span>}
                           {conta.sigla_campanha && (
-                            <span className="rounded-full bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-semibold text-neutral-300">
+                            <span className="ml-auto rounded-full bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-semibold text-neutral-300">
                               {conta.sigla_campanha}
                             </span>
                           )}
-                          <Link
-                            href={`/estrategias/diagnostico/${conta.id}`}
-                            className="ml-auto shrink-0 text-[11px] font-semibold text-accent-strong hover:underline"
-                          >
-                            Diagnóstico
-                          </Link>
                         </div>
 
                         {saude[conta.id]?.status === "atencao" && (
