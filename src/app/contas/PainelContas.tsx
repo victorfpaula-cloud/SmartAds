@@ -15,6 +15,7 @@ interface ContaMeta {
   boost_automatico_ativo: boolean;
   boost_automatico_publico_id: string | null;
   boost_automatico_orcamento_centavos: number | null;
+  boost_automatico_duracao_dias: number;
 }
 
 interface Empresa {
@@ -635,6 +636,7 @@ function ModalBoostAutomatico({
       ? (conta.boost_automatico_orcamento_centavos / 100).toFixed(2).replace(".", ",")
       : ""
   );
+  const [duracaoDias, setDuracaoDias] = useState(conta.boost_automatico_duracao_dias ?? 3);
   const [publicos, setPublicos] = useState<PublicoSalvo[] | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -660,7 +662,7 @@ function ModalBoostAutomatico({
     const resposta = await fetch(`/api/contas-meta/${conta.id}/boost-automatico`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ativo, publicoId: publicoId || null, orcamentoCentavos: valorCentavos }),
+      body: JSON.stringify({ ativo, publicoId: publicoId || null, orcamentoCentavos: valorCentavos, duracaoDias }),
     });
     const corpo = await resposta.json();
     setSalvando(false);
@@ -673,6 +675,7 @@ function ModalBoostAutomatico({
       boost_automatico_ativo: ativo,
       boost_automatico_publico_id: publicoId || null,
       boost_automatico_orcamento_centavos: valorCentavos,
+      boost_automatico_duracao_dias: duracaoDias,
     });
   }
 
@@ -695,8 +698,8 @@ function ModalBoostAutomatico({
           <p className="text-xs leading-relaxed text-neutral-400">
             Todo dia, depois da janela de postagem (por volta das 15h), o SmartAds confere o post
             mais recente do Instagram dessa conta. Se for de hoje e ainda não tiver sido turbinado,
-            dispara sozinho uma campanha de engajamento nele, rodando por 3 dias, sempre com o
-            mesmo público e o mesmo orçamento diário configurados abaixo.
+            dispara sozinho uma campanha de engajamento nele, sempre com o público, o orçamento
+            diário e a duração configurados abaixo.
           </p>
 
           <label className="flex items-center gap-2.5">
@@ -743,6 +746,18 @@ function ModalBoostAutomatico({
               placeholder="0,00"
               className="mt-1 h-9 w-full rounded-lg border border-white/14 bg-ink-850 px-2.5 text-sm text-neutral-100"
             />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-neutral-400">Duração da campanha</label>
+            <select
+              value={duracaoDias}
+              onChange={(e) => setDuracaoDias(Number(e.target.value))}
+              className="mt-1 h-9 w-full rounded-lg border border-white/14 bg-ink-850 px-2.5 text-sm text-neutral-100"
+            >
+              <option value={3}>3 dias</option>
+              <option value={7}>7 dias</option>
+            </select>
           </div>
 
           {erro && (
