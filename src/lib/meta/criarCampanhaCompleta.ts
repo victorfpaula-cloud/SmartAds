@@ -114,12 +114,13 @@ export async function criarCampanhaCompleta(corpo: ParametrosCriarCampanha): Pro
 
   const adAccountId = conta.meta_ad_account_id as string;
   const targeting = montarTargeting(corpo.publico, corpo.incluirFacebook);
-  // Prefixo só no nome da campanha (não nos objetos internos dela) — identifica de qual "grupo"
-  // ela veio no Gerenciador de Anúncios quando a mesma conta de anúncio está associada a mais de
-  // um cliente aqui dentro (ver sigla_campanha em smartads_contas_meta).
+  // Regra máxima: TODA campanha criada pelo SmartAds nasce com 🤖 na frente de tudo, sempre — é o
+  // jeito de bater o olho no Gerenciador de Anúncios e saber na hora que essa campanha veio do
+  // app, mesmo antes da sigla (ver sigla_campanha em smartads_contas_meta, que identifica de qual
+  // "grupo" ela veio quando a mesma conta está associada a mais de um cliente aqui dentro).
   const nomeCampanhaFinal = conta.sigla_campanha
-    ? `(${conta.sigla_campanha}) ${corpo.nomeCampanha}`
-    : corpo.nomeCampanha;
+    ? `🤖 (${conta.sigla_campanha}) ${corpo.nomeCampanha}`
+    : `🤖 ${corpo.nomeCampanha}`;
 
   let campanhaId: string | undefined;
   let adsetId: string | undefined;
