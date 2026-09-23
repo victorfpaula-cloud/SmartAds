@@ -94,13 +94,22 @@ export default function PainelEstrategias() {
 
   return (
     <div className="flex flex-col gap-5">
-      <Link
-        href="/estrategias/planos"
-        className="cartao-vidro-interno flex items-center justify-between px-4 py-3 text-sm font-medium text-neutral-200 hover:border-accent/40"
-      >
-        Ver planos já aplicados nas unidades
-        <span className="text-neutral-500">→</span>
-      </Link>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Link
+          href="/estrategias/semaforo"
+          className="cartao-vidro-interno flex flex-1 items-center justify-between px-4 py-3 text-sm font-medium text-neutral-200 hover:border-accent/40"
+        >
+          Semáforo das unidades
+          <span className="text-neutral-500">→</span>
+        </Link>
+        <Link
+          href="/estrategias/planos"
+          className="cartao-vidro-interno flex flex-1 items-center justify-between px-4 py-3 text-sm font-medium text-neutral-200 hover:border-accent/40"
+        >
+          Planos já aplicados
+          <span className="text-neutral-500">→</span>
+        </Link>
+      </div>
 
       <section className="cartao-vidro overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 px-5 py-3.5">
