@@ -518,3 +518,42 @@ alter table smartads_empresas enable row level security;
 
 alter table smartads_clientes add column if not exists empresa_id uuid references smartads_empresas(id) on delete restrict;
 create index if not exists smartads_clientes_empresa_idx on smartads_clientes(empresa_id);
+
+-- ============================================================================
+-- Campanha-Mãe — o "padrão de campanha" da franqueadora: uma Estratégia (molde já existente) +
+-- período fixo + faixa de investimento permitida por unidade + o criativo oficial da rede (mesma
+-- imagem/texto pra todo mundo, não é escolha da unidade). Disparar uma Campanha-Mãe pra N unidades
+-- cria um Plano de Execução por unidade (mesmo mecanismo de "aplicar estratégia" que já existe),
+-- todos marcados com `campanha_mae_id` — isso que dá o rollup ("Páscoa Dona Baunilha 2027: 16
+-- unidades, quanto cada uma já gastou, como cada uma está performando"). Guarda a imagem oficial
+-- como base64 (mesmo formato que já trafega em toda campanha criada pelo app, ver
+-- FormularioCampanha) em vez de um storage próprio — uma imagem por Campanha-Mãe, sem volume que
+-- justifique outra peça de infra.
+-- ============================================================================
+create table if not exists smartads_campanhas_mae (
+  id uuid primary key default gen_random_uuid(),
+  estrategia_id uuid not null references smartads_estrategias(id) on delete restrict,
+
+  nome text not null,
+  data_inicio date not null, -- igual pra todas as unidades participantes — é um dos "padrões"
+
+  investimento_minimo_centavos integer not null check (investimento_minimo_centavos > 0),
+  investimento_maximo_centavos integer not null check (investimento_maximo_centavos >= investimento_minimo_centavos),
+
+  -- Criativo oficial — obrigatório, travado no formulário de campanha de cada unidade (ver
+  -- ValoresIniciaisCampanha.criativoOficial em FormularioCampanha.tsx).
+  criativo_titulo text,
+  criativo_mensagem text not null,
+  criativo_imagem_base64 text not null,
+  criativo_cta text not null default 'LEARN_MORE',
+
+  status text not null default 'ativa' check (status in ('ativa', 'encerrada')),
+
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table smartads_campanhas_mae enable row level security;
+
+alter table smartads_planos_execucao add column if not exists campanha_mae_id uuid references smartads_campanhas_mae(id) on delete set null;
+create index if not exists smartads_planos_execucao_campanha_mae_idx on smartads_planos_execucao(campanha_mae_id);

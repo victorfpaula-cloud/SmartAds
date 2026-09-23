@@ -59,3 +59,23 @@ export interface PlanoExecucao {
   etapas: EtapaPlanoExecucao[];
   criadoEm: string;
 }
+
+export type StatusCampanhaMae = "ativa" | "encerrada";
+
+/** O "padrão de campanha" da franqueadora — uma Estratégia (molde) + período fixo + faixa de
+ * investimento permitida + o criativo oficial, disparada pra várias unidades de uma vez. Cada
+ * unidade participante vira um PlanoExecucao com `campanhaMaeId` preenchido. */
+export interface CampanhaMae {
+  id: string;
+  estrategiaId: string;
+  nome: string;
+  dataInicio: string;
+  investimentoMinimoCentavos: number;
+  investimentoMaximoCentavos: number;
+  criativoTitulo: string | null;
+  criativoMensagem: string;
+  criativoImagemBase64: string;
+  criativoCta: string;
+  status: StatusCampanhaMae;
+  criadoEm: string;
+}

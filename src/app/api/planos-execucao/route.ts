@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
+import { criarPlanoExecucao } from "@/lib/estrategias/criarPlanoExecucao";
 import type { Publico } from "@/lib/meta/tipos";
 
 export const dynamic = "force-dynamic";
@@ -56,60 +57,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ erro: "Faltam campos obrigatórios." }, { status: 400 });
   }
 
-  const supabase = criarClienteAdmin();
-
-  const { data: etapasEstrategia, error: erroEtapas } = await supabase
-    .from("smartads_estrategia_etapas")
-    .select("*")
-    .eq("estrategia_id", corpo.estrategiaId)
-    .order("ordem");
-
-  if (erroEtapas || !etapasEstrategia?.length) {
-    return NextResponse.json({ erro: "Estratégia sem etapas — não dá pra aplicar." }, { status: 400 });
+  try {
+    const plano = await criarPlanoExecucao({
+      estrategiaId: corpo.estrategiaId,
+      clienteId: corpo.clienteId,
+      contaId: corpo.contaId,
+      nome: corpo.nome,
+      publicoId: corpo.publicoId,
+      publico: corpo.publico,
+      incluirFacebook: corpo.incluirFacebook,
+      investimentoTotalCentavos: corpo.investimentoTotalCentavos,
+      dataInicio: corpo.dataInicio,
+      metaNegocio: corpo.metaNegocio,
+    });
+    return NextResponse.json({ plano }, { status: 201 });
+  } catch (erro) {
+    return NextResponse.json(
+      { erro: erro instanceof Error ? erro.message : "Falha ao criar o plano." },
+      { status: 500 }
+    );
   }
-
-  const { data: plano, error: erroPlano } = await supabase
-    .from("smartads_planos_execucao")
-    .insert({
-      estrategia_id: corpo.estrategiaId,
-      cliente_id: corpo.clienteId,
-      conta_id: corpo.contaId,
-      nome: corpo.nome.trim(),
-      publico_id: corpo.publicoId ?? null,
-      publico: corpo.publico ?? null,
-      incluir_facebook: corpo.incluirFacebook,
-      investimento_total_centavos: corpo.investimentoTotalCentavos,
-      data_inicio: corpo.dataInicio,
-      meta_negocio: corpo.metaNegocio ?? null,
-    })
-    .select()
-    .single();
-
-  if (erroPlano || !plano) {
-    return NextResponse.json({ erro: erroPlano?.message ?? "Falha ao criar o plano." }, { status: 500 });
-  }
-
-  const hoje = new Date().toISOString().slice(0, 10);
-  const dataInicioMs = new Date(`${corpo.dataInicio}T00:00:00Z`).getTime();
-
-  const linhasEtapas = etapasEstrategia.map((etapa) => {
-    const dataPrevista = new Date(dataInicioMs + etapa.offset_dias_inicio * 86_400_000)
-      .toISOString()
-      .slice(0, 10);
-    return {
-      plano_id: plano.id,
-      estrategia_etapa_id: etapa.id,
-      data_prevista_inicio: dataPrevista,
-      status: dataPrevista <= hoje ? "aguardando_admin" : "aguardando",
-      observacao: dataPrevista <= hoje ? "Pronta pra disparar — escolha o criativo." : null,
-    };
-  });
-
-  const { error: erroPlanoEtapas } = await supabase.from("smartads_plano_etapas").insert(linhasEtapas);
-  if (erroPlanoEtapas) {
-    await supabase.from("smartads_planos_execucao").delete().eq("id", plano.id);
-    return NextResponse.json({ erro: erroPlanoEtapas.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ plano }, { status: 201 });
 }

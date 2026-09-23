@@ -6,18 +6,20 @@ import {
   Target,
   ChartLineUp,
   Robot,
-  Compass,
   Wallet,
   SignOut,
 } from "@phosphor-icons/react/dist/ssr";
 
+// "Estratégias" (moldes, Campanhas-Mãe, Semáforo, Planos) saiu daqui de propósito — é uma pauta de
+// rede, só faz sentido pra empresa franquia, e ficar fixa na barra pra todo mundo (inclusive quem
+// só tem empresa individual) era o principal motivo da barra parecer lotada. Mora agora dentro da
+// "Central da rede", acessada a partir do card da própria empresa franquia na tela inicial.
 const LINKS = [
   { href: "/", label: "Início", Icone: House },
   { href: "/contas", label: "Contas", Icone: Buildings },
   { href: "/campanhas", label: "Campanhas", Icone: Megaphone },
   { href: "/financeiro", label: "Financeiro", Icone: Wallet },
   { href: "/publicos", label: "Públicos", Icone: Target },
-  { href: "/estrategias", label: "Estratégias", Icone: Compass },
   { href: "/automacao", label: "Automação", Icone: Robot },
   { href: "/relatorios", label: "Relatórios", Icone: ChartLineUp },
 ];
@@ -76,7 +78,7 @@ export default function Cabecalho({ ativo }: { ativo: string }) {
         className="barra-vidro fixed inset-x-0 bottom-0 z-20 border-t sm:hidden"
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 6px)" }}
       >
-        <div className="grid grid-cols-8">
+        <div className="grid grid-cols-7">
           {LINKS.map(({ href, label, Icone }) => (
             <Link
               key={href}
