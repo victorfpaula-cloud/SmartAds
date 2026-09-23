@@ -1,6 +1,7 @@
 import Cabecalho from "@/components/Cabecalho";
 import { coletarFinanceiro } from "@/lib/financeiro/coletarFinanceiro";
 import { Wallet, Info } from "@phosphor-icons/react/dist/ssr";
+import EditarSaldo from "./EditarSaldo";
 
 export const dynamic = "force-dynamic";
 
@@ -21,9 +22,10 @@ function formatarAtualizacao(iso: string | null): string {
 export default async function FinanceiroPage() {
   const contas = await coletarFinanceiro();
 
-  const totalFaturaEmAberto = contas.reduce((s, c) => s + (c.faturaEmAbertoCentavos ?? 0), 0);
+  const totalSaldoDisponivel = contas.reduce((s, c) => s + (c.saldoDisponivelCentavos ?? 0), 0);
   const totalGasto7d = contas.reduce((s, c) => s + c.gasto7diasCentavos, 0);
   const totalPlanejado = contas.reduce((s, c) => s + c.investimentoPlanejadoCentavos, 0);
+  const semSaldoConfigurado = contas.filter((c) => c.saldoDisponivelCentavos === null && !c.erro).length;
 
   return (
     <>
@@ -36,7 +38,7 @@ export default async function FinanceiroPage() {
           <div>
             <h1 className="font-display text-2xl font-bold">Financeiro</h1>
             <p className="mt-0.5 text-sm text-neutral-400">
-              Fatura em aberto de cada conta na Meta e ritmo de gasto. Atualiza sozinho 1x por dia.
+              Saldo disponível de cada conta e ritmo de gasto. Atualiza sozinho 1x por dia.
             </p>
           </div>
         </div>
@@ -44,19 +46,28 @@ export default async function FinanceiroPage() {
         <div className="cartao-vidro mt-4 flex items-start gap-2.5 border border-white/10 px-4 py-3 text-xs text-neutral-400">
           <Info size={15} className="mt-0.5 shrink-0 text-neutral-500" />
           <p>
-            A Meta não deixa nenhum app externo ver o "Fundos" disponível (saldo pré-pago via Pix)
-            de uma conta — testamos calcular isso por outro campo e o número deu errado, então
-            tiramos do ar. "Fatura em aberto" é outra coisa: quanto já acumulou desde a última
-            cobrança e vai virar a próxima. Pra ver o fundo disponível de verdade, use o botão "Ver
-            faturamento na Meta" em cada conta. Os números vêm de um cache atualizado 1x por dia —
-            não a cada vez que a tela é aberta, pra não gastar requisição à toa.
+            A Meta não deixa nenhum app externo ver o "Fundos" disponível de uma conta em nenhum
+            campo — nem a fórmula que outras ferramentas usam pra contas pré-pagas funcionou pra
+            vocês, e o histórico de cobranças/recargas só fica disponível uns 6 dias pra trás, sem
+            dar pra reconstruir o saldo inteiro do zero. Por isso o SmartAds mantém um saldo
+            próprio: você digita o valor real (visto no Gerenciador) uma vez, e a cada dia o cron
+            ajusta sozinho somando só o que entrou/saiu desde então. Se algo sair do previsto
+            (reembolso, cupom), é só corrigir na mão de novo.
           </p>
         </div>
 
+        {semSaldoConfigurado > 0 && (
+          <div className="cartao-vidro mt-3 border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-xs text-amber-200">
+            {semSaldoConfigurado} conta{semSaldoConfigurado !== 1 ? "s" : ""} ainda sem saldo
+            configurado — abra o Gerenciador de Anúncios, veja o valor em "Fundos" e digite abaixo,
+            em cada conta.
+          </div>
+        )}
+
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
           <div className="cartao-vidro px-4 py-3.5">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-neutral-500">Fatura em aberto (total)</p>
-            <p className="mt-1 text-lg font-bold text-neutral-100">{reais(totalFaturaEmAberto)}</p>
+            <p className="text-[11px] font-medium uppercase tracking-wide text-neutral-500">Saldo disponível (total)</p>
+            <p className="mt-1 text-lg font-bold text-neutral-100">{reais(totalSaldoDisponivel)}</p>
           </div>
           <div className="cartao-vidro px-4 py-3.5">
             <p className="text-[11px] font-medium uppercase tracking-wide text-neutral-500">Gasto últimos 7 dias</p>
@@ -96,18 +107,23 @@ export default async function FinanceiroPage() {
                 {conta.erro ? (
                   <p className="px-5 py-4 text-xs text-danger">{conta.erro}</p>
                 ) : (
-                  <div className="grid grid-cols-2 gap-3 px-5 py-4 sm:grid-cols-3 lg:grid-cols-5">
-                    <Metrica
-                      rotulo="Fatura em aberto"
-                      valor={conta.faturaEmAbertoCentavos !== null ? reais(conta.faturaEmAbertoCentavos) : "—"}
-                    />
-                    <Metrica rotulo="Gasto 7 dias" valor={reais(conta.gasto7diasCentavos)} />
-                    <Metrica rotulo="Média diária" valor={reais(conta.mediaDiariaCentavos)} />
-                    <Metrica rotulo="Projeção mensal" valor={reais(conta.projecaoMensalCentavos)} />
-                    <Metrica
-                      rotulo="Planejado + sugerido"
-                      valor={reais(conta.investimentoPlanejadoCentavos + conta.ajusteOrcamentoSugeridoCentavos)}
-                    />
+                  <div className="flex flex-col gap-3 px-5 py-4">
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+                      <div>
+                        <p className="text-[10.5px] font-medium uppercase tracking-wide text-neutral-500">Saldo disponível</p>
+                        <p className="mt-0.5 text-sm font-semibold text-accent-strong">
+                          {conta.saldoDisponivelCentavos !== null ? reais(conta.saldoDisponivelCentavos) : "—"}
+                        </p>
+                      </div>
+                      <Metrica rotulo="Gasto 7 dias" valor={reais(conta.gasto7diasCentavos)} />
+                      <Metrica rotulo="Média diária" valor={reais(conta.mediaDiariaCentavos)} />
+                      <Metrica rotulo="Projeção mensal" valor={reais(conta.projecaoMensalCentavos)} />
+                      <Metrica
+                        rotulo="Planejado + sugerido"
+                        valor={reais(conta.investimentoPlanejadoCentavos + conta.ajusteOrcamentoSugeridoCentavos)}
+                      />
+                    </div>
+                    <EditarSaldo contaId={conta.contaId} saldoAtualCentavos={conta.saldoDisponivelCentavos} />
                   </div>
                 )}
               </div>

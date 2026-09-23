@@ -717,52 +717,41 @@ export async function listarCampanhas(
 }
 
 // ============================================================================
-// Diagnóstico temporário — investigando se dá pra buscar o "Fundos disponíveis" real de alguma
-// forma (ver conversa: cálculo por spend_cap deu errado pra contas com Pix). Cada probe é isolado
-// num try/catch próprio, porque um nome de campo inválido derruba a chamada INTEIRA da Meta (ela
-// não ignora campo desconhecido, recusa o request todo) — assim um probe que falha não impede ver
-// o resultado dos outros. Remover depois de decidir o caminho certo.
+// Ledger incremental do saldo disponível — a Meta não expõe "Fundos disponíveis" em nenhum campo
+// (confirmado: nem balance, nem spend_cap, nem funding_source_details) e o log de atividades da
+// conta (/activities) só guarda uns 6 dias de histórico pra trás (confirmado ao vivo: paginação
+// parou sozinha depois de 1 página só, bem longe do gasto acumulado da conta desde sempre). Então
+// reconstruir o saldo inteiro do zero não dá — mas dá pra MANTER um saldo próprio: a pessoa digita
+// o valor real (visto no Gerenciador) uma vez, e a cada dia esse valor é ajustado somando só o que
+// aconteceu DESDE o último cálculo (janela curta, sempre dentro da retenção de ~6 dias).
 // ============================================================================
 
-interface ProbeResultado {
-  ok: boolean;
-  dados?: unknown;
-  erro?: string;
-}
-
-async function probe(fn: () => Promise<unknown>): Promise<ProbeResultado> {
-  try {
-    return { ok: true, dados: await fn() };
-  } catch (e) {
-    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
-  }
-}
-
-/** Confirmado: `funding_event_successful` (extra_data.amount) é dinheiro ENTRANDO na conta (ex:
- * Pix) e `ad_account_billing_charge` (extra_data.new_value) é dinheiro SAINDO (cobrança quase
- * diária) — ambos em centavos. A Meta não filtra esse edge por event_type (nem `event_type` solto
- * nem `filters` funcionaram nos testes), então pagina TUDO e filtra aqui.
- *
- * Sem trava de "isso vem tal dia": só dá pra saber o saldo real somando o histórico completo que o
- * edge devolver. `maxPaginas` é só uma trava de segurança contra loop/custo runaway — se bater nela,
- * `atingiuLimite` avisa que o resultado pode estar incompleto (subestimado). */
-async function paginarAtividadesFinanceiras(
+/** Cada evento de dinheiro entrando/saindo da conta, com o valor já extraído do extra_data.
+ * `funding_event_successful` = Pix/boleto caindo na conta; `ad_account_billing_charge` = cobrança
+ * automática (quase diária) que desconta do saldo. */
+async function somarMovimentacaoFinanceiraDesde(
   adAccountId: string,
-  maxPaginas = 60
-): Promise<{ totalFundingCentavos: number; totalChargeCentavos: number; paginasLidas: number; atingiuLimite: boolean }> {
+  desde: Date
+): Promise<{ totalFundingCentavos: number; totalChargeCentavos: number }> {
   let totalFundingCentavos = 0;
   let totalChargeCentavos = 0;
   let after: string | undefined;
-  let paginasLidas = 0;
 
-  while (paginasLidas < maxPaginas) {
+  // A Meta não filtra esse edge por event_type (testado com o parâmetro solto e com `filters`,
+  // nenhum funcionou) — vem sempre em ordem do mais recente pro mais antigo, então pagina só até
+  // passar de `desde`; como a janela é curta (1 dia normalmente), quase sempre para na 1ª página.
+  for (let pagina = 0; pagina < 10; pagina++) {
     const dados = await chamar<{
-      data: Array<{ event_type: string; extra_data?: string }>;
+      data: Array<{ event_type: string; event_time: string; extra_data?: string }>;
       paging?: { cursors?: { after?: string }; next?: string };
-    }>(`${adAccountId}/activities`, { query: { limit: 100, fields: "event_type,extra_data", after } });
-    paginasLidas++;
+    }>(`${adAccountId}/activities`, { query: { limit: 100, fields: "event_type,event_time,extra_data", after } });
 
+    let passouDoLimite = false;
     for (const item of dados.data) {
+      if (new Date(item.event_time).getTime() <= desde.getTime()) {
+        passouDoLimite = true;
+        break;
+      }
       if (!item.extra_data) continue;
       if (item.event_type === "funding_event_successful") {
         const extra = JSON.parse(item.extra_data);
@@ -773,41 +762,26 @@ async function paginarAtividadesFinanceiras(
       }
     }
 
-    if (!dados.paging?.next || !dados.paging.cursors?.after) {
-      return { totalFundingCentavos, totalChargeCentavos, paginasLidas, atingiuLimite: false };
-    }
+    if (passouDoLimite || !dados.paging?.next || !dados.paging.cursors?.after) break;
     after = dados.paging.cursors.after;
   }
 
-  return { totalFundingCentavos, totalChargeCentavos, paginasLidas, atingiuLimite: true };
+  return { totalFundingCentavos, totalChargeCentavos };
 }
 
-export async function obterDiagnosticoSaldoConta(adAccountId: string) {
-  const [camposConhecidos, ledger] = await Promise.all([
-    probe(() => chamar(adAccountId, { query: { fields: "balance,amount_spent,currency" } })),
-    probe(() => paginarAtividadesFinanceiras(adAccountId)),
-  ]);
-
-  // Conferência: se somar TODAS as cobranças (ad_account_billing_charge) achadas no histórico
-  // paginado, isso deveria bater com amount_spent (gasto acumulado da conta desde sempre) — se
-  // bater, prova que o histórico paginado está completo (não tem retenção limitando quanto dá pra
-  // ver pra trás). Se não bater, o cálculo de saldo abaixo pode estar incompleto.
-  let conferencia: unknown = null;
-  if (camposConhecidos.ok && ledger.ok) {
-    const amountSpent = Number((camposConhecidos.dados as any).amount_spent ?? 0);
-    const balance = Number((camposConhecidos.dados as any).balance ?? 0);
-    const { totalFundingCentavos, totalChargeCentavos, paginasLidas, atingiuLimite } = ledger.dados as any;
-    conferencia = {
-      amountSpentLifetimeCentavos: amountSpent,
-      totalChargeEncontradoCentavos: totalChargeCentavos,
-      diferenca: amountSpent - totalChargeCentavos,
-      totalFundingEncontradoCentavos: totalFundingCentavos,
-      balanceAtualCentavos: balance,
-      saldoDisponivelEstimadoCentavos: totalFundingCentavos - totalChargeCentavos - balance,
-      paginasLidas,
-      atingiuLimite,
-    };
-  }
-
-  return { camposConhecidos, ledger, conferencia };
+/** Novo saldo disponível = saldo anterior + o que entrou - o que foi cobrado, desde a última vez
+ * que isso foi calculado. `null` quando ainda não tem um saldo anterior (conta nova, ninguém
+ * digitou o valor inicial ainda) — quem chama decide o que fazer nesse caso (não dá pra "estimar"
+ * um ponto de partida sem informação real, é exatamente esse o problema que motivou esse desenho). */
+export async function calcularSaldoIncremental(
+  adAccountId: string,
+  saldoAnteriorCentavos: number | null,
+  calculadoAnteriormenteEm: Date | null
+): Promise<number | null> {
+  if (saldoAnteriorCentavos === null || calculadoAnteriormenteEm === null) return null;
+  const { totalFundingCentavos, totalChargeCentavos } = await somarMovimentacaoFinanceiraDesde(
+    adAccountId,
+    calculadoAnteriormenteEm
+  );
+  return saldoAnteriorCentavos + totalFundingCentavos - totalChargeCentavos;
 }

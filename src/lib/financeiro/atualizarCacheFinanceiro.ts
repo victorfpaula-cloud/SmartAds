@@ -1,5 +1,5 @@
 import { criarClienteAdmin } from "@/lib/supabase/admin";
-import { obterSaldoConta, obterInsightsConta } from "@/lib/meta/api";
+import { obterSaldoConta, obterInsightsConta, calcularSaldoIncremental } from "@/lib/meta/api";
 
 export interface FinanceiroCacheLinha {
   saldoDisponivelCentavos: number | null;
@@ -15,7 +15,14 @@ export interface FinanceiroCacheLinha {
  * (smartads_financeiro_cache) — usado pelo cron diário (todas as contas, ver
  * atualizarCacheFinanceiroDeTodasAsContas) e por coletarFinanceiro.ts como fallback pontual só
  * quando uma conta nunca foi cacheada ainda (nunca numa visita repetida — cache já preenchido, mesmo
- * que velho, não dispara isso de novo). */
+ * que velho, não dispara isso de novo).
+ *
+ * `saldoDisponivelCentavos` NÃO é buscado direto na Meta — ela não expõe esse número em nenhum
+ * campo (ver comentários em src/lib/meta/api.ts: já tentamos balance, spend_cap e o log de
+ * atividades completo, nenhum funcionou pra reconstruir do zero). Em vez disso, mantém um saldo
+ * PRÓPRIO: parte do valor salvo na rodada anterior + o que entrou/saiu desde então (ledger
+ * incremental, cabe na janela curta que a Meta retém). Enquanto ninguém digitar o valor inicial
+ * real (ver PATCH /api/financeiro/saldo), fica `null` — nunca inventa um número de partida. */
 export async function atualizarCacheFinanceiroDaConta(
   contaId: string,
   metaAdAccountId: string
@@ -24,7 +31,18 @@ export async function atualizarCacheFinanceiroDaConta(
   let linha: FinanceiroCacheLinha;
 
   try {
-    const [saldo, insights] = await Promise.all([
+    const { data: cacheAnterior } = await supabase
+      .from("smartads_financeiro_cache")
+      .select("saldo_disponivel_centavos, calculado_em")
+      .eq("conta_id", contaId)
+      .maybeSingle();
+
+    const [saldoDisponivelCentavos, saldo, insights] = await Promise.all([
+      calcularSaldoIncremental(
+        metaAdAccountId,
+        cacheAnterior?.saldo_disponivel_centavos ?? null,
+        cacheAnterior?.calculado_em ? new Date(cacheAnterior.calculado_em) : null
+      ),
       obterSaldoConta(metaAdAccountId),
       obterInsightsConta(metaAdAccountId, { nivel: "account", datePreset: "last_7d", porDia: false }),
     ]);
@@ -33,7 +51,7 @@ export async function atualizarCacheFinanceiroDaConta(
     const mediaDiariaCentavos = Math.round(gasto7diasCentavos / 7);
 
     linha = {
-      saldoDisponivelCentavos: saldo.saldoDisponivelCentavos,
+      saldoDisponivelCentavos,
       faturaEmAbertoCentavos: saldo.faturaEmAbertoCentavos,
       gasto7diasCentavos,
       mediaDiariaCentavos,
@@ -82,4 +100,20 @@ export async function atualizarCacheFinanceiroDeTodasAsContas(): Promise<{ conta
   );
 
   return { contasAtualizadas: resultados.filter((r) => r.status === "fulfilled").length };
+}
+
+/** Grava o saldo disponível digitado à mão — seed inicial (primeira vez, sem cache nenhum ainda)
+ * ou correção manual (algo saiu do previsto: reembolso, cupom, cobrança fora do padrão). A partir
+ * daqui o ledger incremental (atualizarCacheFinanceiroDaConta) continua sozinho, somando só o que
+ * mudar dali pra frente. */
+export async function definirSaldoDisponivelManual(contaId: string, saldoCentavos: number): Promise<void> {
+  const supabase = criarClienteAdmin();
+  await supabase.from("smartads_financeiro_cache").upsert(
+    {
+      conta_id: contaId,
+      saldo_disponivel_centavos: saldoCentavos,
+      calculado_em: new Date().toISOString(),
+    },
+    { onConflict: "conta_id", ignoreDuplicates: false }
+  );
 }
