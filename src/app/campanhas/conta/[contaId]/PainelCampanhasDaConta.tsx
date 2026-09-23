@@ -57,7 +57,10 @@ const STATUS_INFO: Record<string, { rotulo: string; cor: string }> = {
  * confundir com uma pausa manual. */
 function statusExibicao(campanha: Campanha): { rotulo: string; cor: string; clicavel: boolean } {
   const prazoEncerrado = campanha.stop_time ? new Date(campanha.stop_time).getTime() < Date.now() : false;
-  if (prazoEncerrado && campanha.effective_status !== "ACTIVE") {
+  // Prazo vencido manda mesmo quando a Meta ainda devolve effective_status "ACTIVE" — foi
+  // exatamente esse o caso relatado (campanha com fim em 15/09 aparecendo como "Ativa" em 23/09):
+  // a condição anterior excluía justo esse caso (`!== "ACTIVE"`), invertida por engano.
+  if (prazoEncerrado) {
     return { rotulo: "Encerrada (prazo)", cor: "bg-white/[0.06] text-neutral-500", clicavel: false };
   }
   const info = STATUS_INFO[campanha.effective_status] ?? {
