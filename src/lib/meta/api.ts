@@ -716,28 +716,46 @@ export async function listarCampanhas(
   };
 }
 
-/** Soma o orçamento diário (daily_budget) de toda campanha ATIVA da conta — usado só como
- * comparação pro boost automático ("isso é quanto % do orçamento diário total da conta"), por isso
- * só é chamado pra conta com boost ligado (ver /api/saude), não pra todas. Campanha com orçamento
- * vitalício (lifetime_budget, sem daily_budget) não entra nessa soma — não tem como converter isso
- * numa taxa diária confiável sem saber quanto já rodou do período. Pagina até 5 páginas (250
- * campanhas) como trava de segurança; raríssima conta de agência chega perto disso. */
-export async function obterOrcamentoDiarioAtivo(adAccountId: string): Promise<number> {
-  let total = 0;
+/** "Ativa" de verdade — não só effective_status "ACTIVE" sozinho: uma campanha com stop_time no
+ * passado continua voltando como ACTIVE da Meta às vezes (mesmo caso corrigido em
+ * PainelCampanhasDaConta/statusExibicao, campanha com fim no passado marcada como "Ativa"), então o
+ * prazo é checado aqui também. */
+function campanhaAtivaAgora(campanha: Pick<CampanhaMeta, "effective_status" | "stop_time">): boolean {
+  if (campanha.effective_status !== "ACTIVE") return false;
+  if (campanha.stop_time && new Date(campanha.stop_time).getTime() < Date.now()) return false;
+  return true;
+}
+
+export interface ResumoCampanhasAtivas {
+  quantidade: number;
+  orcamentoDiarioCentavos: number;
+}
+
+/** Quantas campanhas estão realmente ativas agora (não "teve gasto nos últimos 30 dias", que é
+ * outra coisa — uma campanha pausada ou encerrada há semanas também tem gasto nesse período) e a
+ * soma do orçamento diário (daily_budget) delas. Alimenta tanto o "Campanhas ativas" do Início
+ * quanto a comparação do boost automático ("isso é quanto % do orçamento diário total da conta").
+ * Campanha com orçamento vitalício (lifetime_budget, sem daily_budget) entra na contagem mas não na
+ * soma de orçamento — não tem como converter isso numa taxa diária confiável sem saber quanto já
+ * rodou do período. Pagina até 5 páginas (250 campanhas) como trava de segurança; raríssima conta
+ * de agência chega perto disso. */
+export async function obterResumoCampanhasAtivas(adAccountId: string): Promise<ResumoCampanhasAtivas> {
+  let quantidade = 0;
+  let orcamentoDiarioCentavos = 0;
   let after: string | undefined;
 
   for (let pagina = 0; pagina < 5; pagina++) {
     const { campanhas, proximoCursor } = await listarCampanhas(adAccountId, { limit: 50, after });
     for (const campanha of campanhas) {
-      if (campanha.effective_status === "ACTIVE" && campanha.daily_budget) {
-        total += Number(campanha.daily_budget);
-      }
+      if (!campanhaAtivaAgora(campanha)) continue;
+      quantidade += 1;
+      if (campanha.daily_budget) orcamentoDiarioCentavos += Number(campanha.daily_budget);
     }
     if (!proximoCursor) break;
     after = proximoCursor;
   }
 
-  return total;
+  return { quantidade, orcamentoDiarioCentavos };
 }
 
 // ============================================================================
