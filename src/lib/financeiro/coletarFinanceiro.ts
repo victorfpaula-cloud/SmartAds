@@ -8,23 +8,28 @@ export interface ContaFinanceiro {
   clienteNome: string;
   empresaNome: string;
   metaAdAccountId: string;
-  saldoCentavos: number | null;
+  faturaEmAbertoCentavos: number | null;
   gasto7diasCentavos: number;
   mediaDiariaCentavos: number;
   projecaoMensalCentavos: number;
-  diasRestantes: number | null;
   investimentoPlanejadoCentavos: number;
   ajusteOrcamentoSugeridoCentavos: number;
   linkAdicionarCredito: string;
   erro: string | null;
 }
 
-/** Junta o financeiro de cada conta ativa: saldo direto da Meta (o crédito de cada unidade cai
- * na própria conta dela lá, via Pix feito no Gerenciador de Anúncios — não existe "caixa" nosso
- * pra manter em sincronia), ritmo de gasto real dos últimos 7 dias, e quanto já está planejado
- * pra sair mas ainda não começou a gastar (etapas de Plano de Execução aguardando + ajustes de
- * orçamento sugeridos pelo Diagnóstico ainda não decididos). `saldoCentavos` vem `null` quando a
- * conta não é pré-paga na Meta (aí não existe esse conceito) — não é erro. */
+/** Junta o financeiro de cada conta ativa: fatura em aberto na Meta, ritmo de gasto real dos
+ * últimos 7 dias, e quanto já está planejado pra sair mas ainda não começou a gastar (etapas de
+ * Plano de Execução aguardando + ajustes de orçamento sugeridos pelo Diagnóstico ainda não
+ * decididos).
+ *
+ * IMPORTANTE — o que `faturaEmAbertoCentavos` NÃO é: não é "quanto de crédito ainda resta pra
+ * gastar". É o valor já acumulado desde a última cobrança, que vai virar a PRÓXIMA fatura (é
+ * literalmente assim que a Meta descreve o campo `balance` da API). Quem usa fundo pré-pago via
+ * Pix na conta (comum no Brasil) tem um saldo de "Fundos" separado dentro do Gerenciador de
+ * Anúncios — a Meta não expõe esse número pela API pública, então o SmartAds não tem como buscar
+ * sozinho quanto realmente resta disponível. Pra ver isso de verdade, é só abrir o link
+ * `linkAdicionarCredito` (já leva direto pra tela de Faturamento, onde "Fundos" aparece). */
 export async function coletarFinanceiro(): Promise<ContaFinanceiro[]> {
   const supabase = criarClienteAdmin();
 
@@ -77,7 +82,7 @@ export async function coletarFinanceiro(): Promise<ContaFinanceiro[]> {
   return Promise.all(
     contas.map(async ({ cliente, conta }): Promise<ContaFinanceiro> => {
       const idNumerico = conta.meta_ad_account_id.replace(/^act_/, "");
-      let saldoCentavos: number | null = null;
+      let faturaEmAbertoCentavos: number | null = null;
       let spend7dReais = 0;
       let erro: string | null = null;
 
@@ -86,7 +91,7 @@ export async function coletarFinanceiro(): Promise<ContaFinanceiro[]> {
           obterSaldoConta(conta.meta_ad_account_id),
           obterInsightsConta(conta.meta_ad_account_id, { nivel: "account", datePreset: "last_7d", porDia: false }),
         ]);
-        saldoCentavos = saldo.saldoCentavos;
+        faturaEmAbertoCentavos = saldo.faturaEmAbertoCentavos;
         spend7dReais = Number(insights[0]?.spend ?? 0);
       } catch (e) {
         erro = e instanceof Error ? e.message : "Falha ao buscar dados financeiros na Meta.";
@@ -95,8 +100,6 @@ export async function coletarFinanceiro(): Promise<ContaFinanceiro[]> {
       const gasto7diasCentavos = Math.round(spend7dReais * 100);
       const mediaDiariaCentavos = Math.round(gasto7diasCentavos / 7);
       const projecaoMensalCentavos = mediaDiariaCentavos * 30;
-      const diasRestantes =
-        saldoCentavos != null && mediaDiariaCentavos > 0 ? Math.floor(saldoCentavos / mediaDiariaCentavos) : null;
 
       return {
         contaId: conta.id,
@@ -105,16 +108,16 @@ export async function coletarFinanceiro(): Promise<ContaFinanceiro[]> {
         clienteNome: cliente.nome,
         empresaNome: cliente.smartads_empresas?.nome ?? "—",
         metaAdAccountId: conta.meta_ad_account_id,
-        saldoCentavos,
+        faturaEmAbertoCentavos,
         gasto7diasCentavos,
         mediaDiariaCentavos,
         projecaoMensalCentavos,
-        diasRestantes,
         investimentoPlanejadoCentavos: planejadoPorConta.get(conta.id) ?? 0,
         ajusteOrcamentoSugeridoCentavos: ajustePorConta.get(conta.id) ?? 0,
         // Não existe API pública da Meta pra criar a cobrança Pix por fora — quem gera o QR code é
         // o próprio Gerenciador de Anúncios. Esse link já abre direto na tela de faturamento da
-        // conta certa, então poupa o trabalho de achar a conta certa entre várias.
+        // conta certa (onde "Fundos" também aparece), poupando o trabalho de achar a conta certa
+        // entre várias.
         linkAdicionarCredito: `https://www.facebook.com/ads/manager/account_settings/account_billing/?act=${idNumerico}`,
         erro,
       };
