@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
-import { obterInsightsConta, obterOrcamentoDiarioAtivo } from "@/lib/meta/api";
+import { obterInsightsConta, obterResumoCampanhasAtivas } from "@/lib/meta/api";
 import { calcularSaudeConta } from "@/lib/saude";
 import { detectarAnomalia, janelasDeComparacao, type Anomalia } from "@/lib/anomalia";
 import { obterBoostInsightsPorConta, obterCampanhaMaeAtivaPorConta } from "@/lib/inicio/boostInsights";
@@ -33,8 +33,10 @@ interface SaudeContaResultado {
  * O selo de saúde compara o período atual com o anterior (ver src/lib/anomalia.ts) — quando algo
  * foge do normal, essa comparação vence o limiar simples (src/lib/saude.ts) porque é mais
  * específica e acionável ("CTR caiu 45%" diz mais que "CTR baixo"). Já "campanhasAtivas" é a
- * contagem de campanhas com QUALQUER atividade nos últimos 30 dias (mesma definição usada pra
- * filtrar a lista em /campanhas/conta/[contaId] — uma campanha pausada há 6 meses não conta).
+ * contagem de campanhas REALMENTE ativas agora (effective_status "ACTIVE" e sem prazo vencido, ver
+ * obterResumoCampanhasAtivas) — não confundir com "gasto30dCentavos", que soma o gasto de QUALQUER
+ * campanha com atividade nos últimos 30 dias, ativa ou não (uma campanha pausada ontem ainda entra
+ * nessa soma, mas não na contagem de ativas).
  *
  * Os insights do boost automático (quantas campanhas do boost ainda estão no período, previsão de
  * gasto) e a Campanha-Mãe ativa vêm de fora desse cache — são consulta pura no Supabase (sem Meta),
@@ -43,10 +45,7 @@ export async function GET() {
   const supabase = criarClienteAdmin();
 
   const [{ data: contas, error: erroContas }, { data: cache }] = await Promise.all([
-    supabase
-      .from("smartads_contas_meta")
-      .select("id, meta_ad_account_id, boost_automatico_ativo")
-      .eq("ativo", true),
+    supabase.from("smartads_contas_meta").select("id, meta_ad_account_id").eq("ativo", true),
     supabase.from("smartads_saude_contas").select("*"),
   ]);
 
@@ -82,7 +81,7 @@ export async function GET() {
       }
 
       try {
-        const [atual, anterior, campanhas30d, orcamentoDiarioAtivoCentavos] = await Promise.all([
+        const [atual, anterior, campanhas30d, resumoCampanhasAtivas] = await Promise.all([
           obterInsightsConta(conta.meta_ad_account_id, {
             nivel: "account",
             intervalo: janelas.atual,
@@ -98,9 +97,7 @@ export async function GET() {
             datePreset: "last_30d",
             porDia: false,
           }),
-          // Só pra conta com boost ligado — é o único lugar que usa esse número, não vale a chamada
-          // extra pras demais.
-          conta.boost_automatico_ativo ? obterOrcamentoDiarioAtivo(conta.meta_ad_account_id) : Promise.resolve(null),
+          obterResumoCampanhasAtivas(conta.meta_ad_account_id),
         ]);
 
         const anomalia = detectarAnomalia(atual, anterior);
@@ -108,7 +105,8 @@ export async function GET() {
           ? { status: "atencao" as const, motivo: anomalia.mensagem }
           : calcularSaudeConta(atual);
 
-        const campanhasAtivas = campanhas30d.length;
+        const campanhasAtivas = resumoCampanhasAtivas.quantidade;
+        const orcamentoDiarioAtivoCentavos = resumoCampanhasAtivas.orcamentoDiarioCentavos;
         const gasto30dCentavos = Math.round(
           campanhas30d.reduce((soma, c) => soma + Number(c.spend ?? 0), 0) * 100
         );
