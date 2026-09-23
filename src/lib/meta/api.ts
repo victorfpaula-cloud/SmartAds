@@ -66,14 +66,26 @@ export async function listarContasDeAnuncio(): Promise<ContaDeAnuncioMeta[]> {
   return dados.data;
 }
 
+// A Meta não deixa o campo `spend_cap` em branco quando ninguém configurou um limite — devolve um
+// número-sentinela enorme (próximo do máximo de um int64) em vez de omitir o campo. Qualquer valor
+// acima disso é "sem limite definido", nunca um limite real (nenhuma conta de agência gasta bilhões
+// de reais) — usado pra distinguir "conta com fundo pré-pago" (spend_cap = total carregado, um
+// número plausível) de "conta pós-paga sem limite" (spend_cap = o sentinela).
+const SPEND_CAP_SENTINELA_MINIMO = 1_000_000_000_00; // R$ 1 bilhão em centavos
+
 export interface SaldoContaMeta {
+  /** Quanto a conta ainda pode gastar antes de precisar de mais fundo/crédito — só existe quando a
+   * conta tem um `spend_cap` configurado (caso das contas com fundo pré-pago via Pix/boleto, onde a
+   * Meta ajusta o limite pra refletir o total carregado): `spend_cap - amount_spent`. Formato usado
+   * por ferramentas de terceiros pra calcular exatamente esse número (ex: Stract, agência de
+   * relatórios pra Facebook Ads no Brasil) — é o equivalente real ao "Fundos disponíveis" que
+   * aparece no Gerenciador de Anúncios, algo que a Meta não expõe direto em nenhum campo. */
+  saldoDisponivelCentavos: number | null;
   /** O campo `balance` da Meta NÃO é "quanto você tem disponível pra gastar" — é o valor JÁ
    * ACUMULADO desde a última cobrança, que vai virar a PRÓXIMA fatura (confirmado direto na
-   * documentação de campo da Meta: "Bill amount due for this Ad Account"; bateu também com o
-   * "Saldo atual" que aparece no Gerenciador de Anúncios, separado da seção "Fundos"). Quem tem
-   * um fundo pré-pago (Pix) na conta, o valor disponível de verdade fica em "Fundos" dentro do
-   * Gerenciador — a Meta NÃO expõe esse número pela API pública, então o SmartAds não consegue
-   * buscar sozinho (nome do campo já avisa isso: não é "saldo", é fatura em aberto). */
+   * documentação de campo da Meta: "Bill amount due for this Ad Account"). Pra conta pós-paga (sem
+   * spend_cap configurado, cobrada por fatura/limite de crédito), é o único número relevante que dá
+   * pra buscar — não existe conceito de "saldo disponível" nesse tipo de conta. */
   faturaEmAbertoCentavos: number | null;
   /** Gasto acumulado da conta desde sempre (lifetime), em centavos — a Meta devolve isso em
    * centavos, diferente do campo `spend` dos insights (que já vem em reais). */
@@ -82,10 +94,10 @@ export interface SaldoContaMeta {
   moeda: string;
 }
 
-/** Fatura em aberto (o que já acumulou desde a última cobrança e vai ser cobrado a seguir) da
- * própria conta de anúncio na Meta — NÃO é o fundo disponível pra gastar (ver comentário em
- * SaldoContaMeta.faturaEmAbertoCentavos). Ainda assim, útil: mostra o ritmo de cobrança, mesmo
- * sem mostrar quanto de crédito pré-pago ainda resta (isso só dá pra ver direto no Gerenciador). */
+/** Saldo/fatura da conta de anúncio na Meta. Duas contas, dois números diferentes: com fundo
+ * pré-pago (spend_cap configurado de verdade) devolve `saldoDisponivelCentavos`; sem isso (conta
+ * pós-paga, cobrada por fatura) devolve só `faturaEmAbertoCentavos`. Ver os comentários de
+ * SaldoContaMeta pra por que não dá pra misturar os dois num "saldo" só. */
 export async function obterSaldoConta(adAccountId: string): Promise<SaldoContaMeta> {
   const dados = await chamar<{
     balance?: string;
@@ -94,10 +106,16 @@ export async function obterSaldoConta(adAccountId: string): Promise<SaldoContaMe
     currency?: string;
   }>(adAccountId, { query: { fields: "balance,amount_spent,spend_cap,currency" } });
 
+  const spendCapBruto = dados.spend_cap != null ? Number(dados.spend_cap) : null;
+  const spendCapCentavos =
+    spendCapBruto != null && spendCapBruto < SPEND_CAP_SENTINELA_MINIMO ? spendCapBruto : null;
+  const gastoAcumuladoCentavos = Number(dados.amount_spent ?? 0);
+
   return {
-    faturaEmAbertoCentavos: dados.balance != null ? Number(dados.balance) : null,
-    gastoAcumuladoCentavos: Number(dados.amount_spent ?? 0),
-    spendCapCentavos: dados.spend_cap != null ? Number(dados.spend_cap) : null,
+    saldoDisponivelCentavos: spendCapCentavos != null ? spendCapCentavos - gastoAcumuladoCentavos : null,
+    faturaEmAbertoCentavos: spendCapCentavos == null && dados.balance != null ? Number(dados.balance) : null,
+    gastoAcumuladoCentavos,
+    spendCapCentavos,
     moeda: dados.currency ?? "BRL",
   };
 }
@@ -673,7 +691,7 @@ export async function obterInsightsConta(
 // ============================================================================
 
 const CAMPOS_CAMPANHA =
-  "id,name,status,effective_status,objective,daily_budget,lifetime_budget,budget_remaining";
+  "id,name,status,effective_status,objective,daily_budget,lifetime_budget,budget_remaining,start_time,stop_time";
 
 export interface CampanhaMeta {
   id: string;
@@ -684,6 +702,8 @@ export interface CampanhaMeta {
   daily_budget?: string;
   lifetime_budget?: string;
   budget_remaining?: string;
+  start_time?: string;
+  stop_time?: string;
 }
 
 export interface PaginaCampanhas {

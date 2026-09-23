@@ -13,6 +13,8 @@ interface Campanha {
   daily_budget?: string;
   lifetime_budget?: string;
   spend: string;
+  start_time?: string;
+  stop_time?: string;
   local: {
     id: string;
     meta_adset_id: string | null;
@@ -28,6 +30,51 @@ const NOME_MODELO: Record<string, string> = {
   visita_perfil: "Visita ao perfil",
   cliques_link: "Cliques no link",
 };
+
+/** Rótulo + cor de cada effective_status que a Meta devolve — bem mais que só ativa/pausada: uma
+ * campanha pode estar esperando aprovação, ter sido reprovada, ou estar com problema de pagamento
+ * (a Meta não distingue "sem saldo" das outras causas num status próprio, então cai aqui também).
+ * "Ativa"/"Pausada" são as únicas clicáveis (viram o botão de pausar/ativar) — o resto só muda
+ * direto no Gerenciador de Anúncios, então aparece como selo, não botão. */
+const STATUS_INFO: Record<string, { rotulo: string; cor: string }> = {
+  ACTIVE: { rotulo: "Ativa", cor: "bg-ok/15 text-ok" },
+  PAUSED: { rotulo: "Pausada", cor: "bg-white/[0.06] text-neutral-400" },
+  CAMPAIGN_PAUSED: { rotulo: "Pausada", cor: "bg-white/[0.06] text-neutral-400" },
+  ARCHIVED: { rotulo: "Arquivada", cor: "bg-white/[0.06] text-neutral-500" },
+  DELETED: { rotulo: "Excluída", cor: "bg-white/[0.06] text-neutral-500" },
+  PENDING_REVIEW: { rotulo: "Em análise", cor: "bg-amber-500/15 text-amber-400" },
+  IN_PROCESS: { rotulo: "Processando", cor: "bg-amber-500/15 text-amber-400" },
+  PREAPPROVED: { rotulo: "Pré-aprovada", cor: "bg-amber-500/15 text-amber-400" },
+  DISAPPROVED: { rotulo: "Reprovada", cor: "bg-danger/15 text-danger" },
+  PENDING_BILLING_INFO: { rotulo: "Falta pagamento", cor: "bg-danger/15 text-danger" },
+  WITH_ISSUES: { rotulo: "Com problema (pagamento)", cor: "bg-danger/15 text-danger" },
+  ADSET_PAUSED: { rotulo: "Pausada", cor: "bg-white/[0.06] text-neutral-400" },
+};
+
+/** Rótulo real de exibição — cobre o caso que a Meta não distingue num status próprio: campanha
+ * com data de término no passado continua aparecendo como "Pausada" ou até "Ativa" no
+ * effective_status, então aqui checa o stop_time direto pra mostrar "Encerrada (prazo)" em vez de
+ * confundir com uma pausa manual. */
+function statusExibicao(campanha: Campanha): { rotulo: string; cor: string; clicavel: boolean } {
+  const prazoEncerrado = campanha.stop_time ? new Date(campanha.stop_time).getTime() < Date.now() : false;
+  if (prazoEncerrado && campanha.effective_status !== "ACTIVE") {
+    return { rotulo: "Encerrada (prazo)", cor: "bg-white/[0.06] text-neutral-500", clicavel: false };
+  }
+  const info = STATUS_INFO[campanha.effective_status] ?? {
+    rotulo: campanha.effective_status,
+    cor: "bg-white/[0.06] text-neutral-400",
+  };
+  const clicavel = campanha.effective_status === "ACTIVE" || campanha.effective_status === "PAUSED";
+  return { ...info, clicavel };
+}
+
+function formatarPeriodo(campanha: Campanha): string {
+  const formato = (iso: string) => new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" });
+  const inicio = campanha.start_time ? formato(campanha.start_time) : null;
+  const fim = campanha.stop_time ? formato(campanha.stop_time) : null;
+  if (!inicio) return "";
+  return fim ? `${inicio} – ${fim}` : `Desde ${inicio}, sem data de término`;
+}
 
 function formatarReais(centavosTexto?: string): string {
   if (!centavosTexto) return "-";
@@ -83,7 +130,17 @@ export default function PainelCampanhasDaConta({ contaId }: { contaId: string })
   }, [contaId]);
 
   const campanhasRelevantes = useMemo(
-    () => campanhas.filter((c) => c.effective_status === "ACTIVE" || Number(c.spend) > 0),
+    () =>
+      campanhas.filter(
+        (c) =>
+          c.effective_status === "ACTIVE" ||
+          Number(c.spend) > 0 ||
+          // Estados de problema/espera aparecem mesmo sem gasto — é justamente por causa deles que
+          // não tem gasto, e são os que mais precisam de atenção (ex: sem saldo pra veicular).
+          ["WITH_ISSUES", "PENDING_REVIEW", "PENDING_BILLING_INFO", "DISAPPROVED", "IN_PROCESS"].includes(
+            c.effective_status
+          )
+      ),
     [campanhas]
   );
   const campanhasExibidas = verTodas ? campanhas : campanhasRelevantes;
@@ -143,7 +200,10 @@ export default function PainelCampanhasDaConta({ contaId }: { contaId: string })
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-neutral-500">Gasto dos últimos 30 dias.</p>
+        <p className="text-xs text-neutral-500">
+          Gasto dos últimos 30 dias. Clique no status pra pausar/ativar — os outros estados (análise,
+          problema, encerrada) só mudam direto no Gerenciador de Anúncios.
+        </p>
         {escondidas > 0 && (
           <button
             onClick={() => setVerTodas(!verTodas)}
@@ -175,24 +235,32 @@ export default function PainelCampanhasDaConta({ contaId }: { contaId: string })
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
-              {campanhasExibidas.map((campanha) => (
+              {campanhasExibidas.map((campanha) => {
+                const status = statusExibicao(campanha);
+                const periodo = formatarPeriodo(campanha);
+                return (
                 <tr key={campanha.id}>
-                  <td className="px-4 py-3 font-medium text-neutral-100">{campanha.name}</td>
+                  <td className="px-4 py-3">
+                    <p className="font-medium text-neutral-100">{campanha.name}</p>
+                    {periodo && <p className="mt-0.5 text-[10.5px] text-neutral-600">{periodo}</p>}
+                  </td>
                   <td className="px-4 py-3 text-neutral-400">
                     {campanha.local ? NOME_MODELO[campanha.local.tipo_modelo] : "-"}
                   </td>
                   <td className="px-4 py-3">
-                    <button
-                      onClick={() => alternarStatus(campanha)}
-                      disabled={executando === campanha.id}
-                      className={
-                        campanha.effective_status === "ACTIVE"
-                          ? "rounded-full bg-ok/15 px-2.5 py-1 text-xs font-semibold text-ok"
-                          : "rounded-full bg-white/[0.06] px-2.5 py-1 text-xs font-semibold text-neutral-400"
-                      }
-                    >
-                      {campanha.effective_status === "ACTIVE" ? "Ativa" : "Pausada"}
-                    </button>
+                    {status.clicavel ? (
+                      <button
+                        onClick={() => alternarStatus(campanha)}
+                        disabled={executando === campanha.id}
+                        className={`rounded-full px-2.5 py-1 text-xs font-semibold ${status.cor}`}
+                      >
+                        {status.rotulo}
+                      </button>
+                    ) : (
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${status.cor}`}>
+                        {status.rotulo}
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-neutral-300">
                     {formatarReais(campanha.daily_budget ?? campanha.lifetime_budget)}
@@ -233,7 +301,8 @@ export default function PainelCampanhasDaConta({ contaId }: { contaId: string })
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
           </div>
