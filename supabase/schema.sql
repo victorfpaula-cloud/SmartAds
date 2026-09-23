@@ -613,3 +613,30 @@ create table if not exists smartads_financeiro_cache (
 );
 
 alter table smartads_financeiro_cache enable row level security;
+
+-- ============================================================================
+-- Boost automático: quando ligado numa conta, todo dia (depois da janela de postagem) o cron
+-- confere o post mais recente do Instagram da conta e, se for de hoje e ainda não tiver sido
+-- turbinado, dispara sozinho uma campanha de engajamento nele.
+-- ============================================================================
+alter table smartads_contas_meta add column if not exists boost_automatico_ativo boolean not null default false;
+alter table smartads_contas_meta add column if not exists boost_automatico_publico_id uuid references smartads_publicos_salvos(id) on delete set null;
+alter table smartads_contas_meta add column if not exists boost_automatico_orcamento_centavos integer;
+
+-- Um post só é turbinado automaticamente UMA vez — unique(conta_id, instagram_media_id) trava isso
+-- mesmo que o cron rode mais de uma vez ou o post continue sendo "o mais recente" em dias seguintes
+-- (sem post novo, não teria como saber se é de hoje mesmo, mas a trava é redundante de propósito).
+create table if not exists smartads_boost_automatico_log (
+  id uuid primary key default gen_random_uuid(),
+  conta_id uuid not null references smartads_contas_meta(id) on delete cascade,
+  instagram_media_id text not null,
+  campanha_criada_id uuid references smartads_campanhas_criadas(id) on delete set null,
+  sucesso boolean not null,
+  erro_mensagem text,
+  created_at timestamptz not null default now(),
+  unique (conta_id, instagram_media_id)
+);
+
+create index if not exists smartads_boost_automatico_log_conta_idx on smartads_boost_automatico_log(conta_id);
+
+alter table smartads_boost_automatico_log enable row level security;
