@@ -716,6 +716,30 @@ export async function listarCampanhas(
   };
 }
 
+/** Soma o orçamento diário (daily_budget) de toda campanha ATIVA da conta — usado só como
+ * comparação pro boost automático ("isso é quanto % do orçamento diário total da conta"), por isso
+ * só é chamado pra conta com boost ligado (ver /api/saude), não pra todas. Campanha com orçamento
+ * vitalício (lifetime_budget, sem daily_budget) não entra nessa soma — não tem como converter isso
+ * numa taxa diária confiável sem saber quanto já rodou do período. Pagina até 5 páginas (250
+ * campanhas) como trava de segurança; raríssima conta de agência chega perto disso. */
+export async function obterOrcamentoDiarioAtivo(adAccountId: string): Promise<number> {
+  let total = 0;
+  let after: string | undefined;
+
+  for (let pagina = 0; pagina < 5; pagina++) {
+    const { campanhas, proximoCursor } = await listarCampanhas(adAccountId, { limit: 50, after });
+    for (const campanha of campanhas) {
+      if (campanha.effective_status === "ACTIVE" && campanha.daily_budget) {
+        total += Number(campanha.daily_budget);
+      }
+    }
+    if (!proximoCursor) break;
+    after = proximoCursor;
+  }
+
+  return total;
+}
+
 // ============================================================================
 // Ledger incremental do saldo disponível — a Meta não expõe "Fundos disponíveis" em nenhum campo
 // (confirmado: nem balance, nem spend_cap, nem funding_source_details) e o log de atividades da
