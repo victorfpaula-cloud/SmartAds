@@ -521,14 +521,10 @@ create index if not exists smartads_clientes_empresa_idx on smartads_clientes(em
 
 -- ============================================================================
 -- Campanha-Mãe — o "padrão de campanha" da franqueadora: uma Estratégia (molde já existente) +
--- período fixo + faixa de investimento permitida por unidade + o criativo oficial da rede (mesma
--- imagem/texto pra todo mundo, não é escolha da unidade). Disparar uma Campanha-Mãe pra N unidades
--- cria um Plano de Execução por unidade (mesmo mecanismo de "aplicar estratégia" que já existe),
--- todos marcados com `campanha_mae_id` — isso que dá o rollup ("Páscoa Dona Baunilha 2027: 16
--- unidades, quanto cada uma já gastou, como cada uma está performando"). Guarda a imagem oficial
--- como base64 (mesmo formato que já trafega em toda campanha criada pelo app, ver
--- FormularioCampanha) em vez de um storage próprio — uma imagem por Campanha-Mãe, sem volume que
--- justifique outra peça de infra.
+-- período fixo + faixa de investimento permitida por unidade. Disparar uma Campanha-Mãe pra N
+-- unidades cria um Plano de Execução por unidade (mesmo mecanismo de "aplicar estratégia" que já
+-- existe), todos marcados com `campanha_mae_id` — isso que dá o rollup ("Páscoa Dona Baunilha
+-- 2027: 16 unidades, quanto cada uma já gastou, como cada uma está performando").
 -- ============================================================================
 create table if not exists smartads_campanhas_mae (
   id uuid primary key default gen_random_uuid(),
@@ -540,13 +536,6 @@ create table if not exists smartads_campanhas_mae (
   investimento_minimo_centavos integer not null check (investimento_minimo_centavos > 0),
   investimento_maximo_centavos integer not null check (investimento_maximo_centavos >= investimento_minimo_centavos),
 
-  -- Criativo oficial — obrigatório, travado no formulário de campanha de cada unidade (ver
-  -- ValoresIniciaisCampanha.criativoOficial em FormularioCampanha.tsx).
-  criativo_titulo text,
-  criativo_mensagem text not null,
-  criativo_imagem_base64 text not null,
-  criativo_cta text not null default 'LEARN_MORE',
-
   status text not null default 'ativa' check (status in ('ativa', 'encerrada')),
 
   created_at timestamptz not null default now(),
@@ -557,3 +546,40 @@ alter table smartads_campanhas_mae enable row level security;
 
 alter table smartads_planos_execucao add column if not exists campanha_mae_id uuid references smartads_campanhas_mae(id) on delete set null;
 create index if not exists smartads_planos_execucao_campanha_mae_idx on smartads_planos_execucao(campanha_mae_id);
+
+-- ============================================================================
+-- Criativo por ETAPA da Campanha-Mãe, não mais um só pra campanha inteira — uma etapa de Alcance
+-- e uma de Engajamento pedem criativos diferentes na prática (achado reportado ao vivo: uma etapa
+-- de engajamento usa um post que já existe no feed com um botão específico, tipo webinar, que não
+-- faz sentido reaproveitar como "o criativo oficial de tudo"). `modo` decide o comportamento:
+-- 'oficial_upload' trava o mesmo criativo (imagem/texto/botão) pra toda unidade que passar por essa
+-- etapa (ver ValoresIniciaisCampanha.criativoOficial em FormularioCampanha.tsx); 'livre_por_unidade'
+-- não trava nada — cada unidade escolhe o próprio criativo (inclusive "usar publicação existente")
+-- na hora de publicar, exatamente como já funciona fora de uma Campanha-Mãe. Os campos de criativo
+-- ficam nullable de propósito: dá pra criar a Campanha-Mãe com o criativo de uma etapa futura ainda
+-- "a definir", e preencher depois — ver aviso de criativo pendente no relatório semanal e na tela
+-- da Campanha-Mãe.
+-- ============================================================================
+create table if not exists smartads_campanha_mae_criativos (
+  id uuid primary key default gen_random_uuid(),
+  campanha_mae_id uuid not null references smartads_campanhas_mae(id) on delete cascade,
+  estrategia_etapa_id uuid not null references smartads_estrategia_etapas(id) on delete cascade,
+
+  modo text not null default 'livre_por_unidade' check (modo in ('oficial_upload', 'livre_por_unidade')),
+
+  -- Só preenchidos quando modo = 'oficial_upload'. Imagem em base64 (mesmo formato que já trafega
+  -- em toda campanha criada pelo app, ver FormularioCampanha) em vez de storage próprio — poucas
+  -- imagens por Campanha-Mãe, sem volume que justifique outra peça de infra.
+  criativo_titulo text,
+  criativo_mensagem text,
+  criativo_imagem_base64 text,
+  criativo_cta text,
+
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+
+  unique (campanha_mae_id, estrategia_etapa_id)
+);
+
+alter table smartads_campanha_mae_criativos enable row level security;
+create index if not exists smartads_campanha_mae_criativos_campanha_idx on smartads_campanha_mae_criativos(campanha_mae_id);

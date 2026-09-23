@@ -63,8 +63,10 @@ export interface PlanoExecucao {
 export type StatusCampanhaMae = "ativa" | "encerrada";
 
 /** O "padrão de campanha" da franqueadora — uma Estratégia (molde) + período fixo + faixa de
- * investimento permitida + o criativo oficial, disparada pra várias unidades de uma vez. Cada
- * unidade participante vira um PlanoExecucao com `campanhaMaeId` preenchido. */
+ * investimento permitida, disparada pra várias unidades de uma vez. Cada unidade participante vira
+ * um PlanoExecucao com `campanhaMaeId` preenchido. O criativo NÃO mora aqui — cada etapa da
+ * Estratégia usada tem o próprio (ver CampanhaMaeCriativo), porque etapas de objetivo diferente
+ * (Alcance vs Engajamento) geralmente pedem criativos diferentes. */
 export interface CampanhaMae {
   id: string;
   estrategiaId: string;
@@ -72,10 +74,24 @@ export interface CampanhaMae {
   dataInicio: string;
   investimentoMinimoCentavos: number;
   investimentoMaximoCentavos: number;
-  criativoTitulo: string | null;
-  criativoMensagem: string;
-  criativoImagemBase64: string;
-  criativoCta: string;
   status: StatusCampanhaMae;
   criadoEm: string;
+}
+
+export type ModoCriativoCampanhaMae = "oficial_upload" | "livre_por_unidade";
+
+/** Criativo de UMA etapa dentro de UMA Campanha-Mãe. `oficial_upload` trava o mesmo criativo pra
+ * toda unidade nessa etapa; `livre_por_unidade` deixa cada unidade escolher o próprio na hora de
+ * publicar (inclusive "usar publicação existente"), como já acontecia antes de existir Campanha-
+ * Mãe. Os campos de criativo só vêm preenchidos quando `modo` é 'oficial_upload' E alguém já
+ * definiu — pode ficar "a definir depois" por um tempo (ver aviso de criativo pendente). */
+export interface CampanhaMaeCriativo {
+  id: string;
+  campanhaMaeId: string;
+  estrategiaEtapaId: string;
+  modo: ModoCriativoCampanhaMae;
+  criativoTitulo: string | null;
+  criativoMensagem: string | null;
+  criativoImagemBase64: string | null;
+  criativoCta: string | null;
 }

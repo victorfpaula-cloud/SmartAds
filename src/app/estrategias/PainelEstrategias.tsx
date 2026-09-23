@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Crown, Gauge, ListChecks, type Icon } from "@phosphor-icons/react";
+import { Crown, Gauge, ListChecks, Sparkle, type Icon } from "@phosphor-icons/react";
 import { MODELOS_CAMPANHA } from "@/lib/meta/modelos";
 import type { TipoModeloCampanha } from "@/lib/meta/tipos";
-import type { Estrategia } from "@/lib/estrategias/tipos";
+import type { Estrategia, EtapaEstrategia } from "@/lib/estrategias/tipos";
 
 const ATALHOS: { href: string; nome: string; descricao: string; Icone: Icon }[] = [
   {
@@ -28,16 +28,86 @@ const ATALHOS: { href: string; nome: string; descricao: string; Icone: Icon }[] 
   },
 ];
 
+// Opacidade decrescente por índice — a mesma cor (accent), variações de intensidade, em vez de um
+// arco-íris de cores diferentes por etapa. Cobre até 6 etapas antes de repetir o padrão, mais que
+// suficiente (estratégia com mais de 4-5 etapas já é incomum).
+const OPACIDADE_ETAPA = [1, 0.8, 0.62, 0.46, 0.32, 0.2];
+
 interface EtapaForm {
   nomeEtapa: string;
   tipoModelo: TipoModeloCampanha;
-  percentualOrcamento: string;
-  offsetDiasInicio: string;
-  duracaoDias: string; // vazio = contínua até pausar manualmente
+  duracaoDias: string;
 }
 
 function etapaVazia(): EtapaForm {
-  return { nomeEtapa: "", tipoModelo: "alcance", percentualOrcamento: "", offsetDiasInicio: "0", duracaoDias: "" };
+  return { nomeEtapa: "", tipoModelo: "alcance", duracaoDias: "3" };
+}
+
+const PRESETS: { nome: string; descricao: string; etapas: EtapaForm[] }[] = [
+  {
+    nome: "Reconhecimento → Conversão",
+    descricao: "Aquece a audiência antes de pedir a ação — bom ponto de partida padrão.",
+    etapas: [
+      { nomeEtapa: "Reconhecimento", tipoModelo: "alcance", duracaoDias: "5" },
+      { nomeEtapa: "Conversão", tipoModelo: "cliques_link", duracaoDias: "5" },
+    ],
+  },
+  {
+    nome: "Funil completo",
+    descricao: "Reconhecimento → Engajamento → Conversão — pra campanhas maiores, mais tempo de maturação.",
+    etapas: [
+      { nomeEtapa: "Reconhecimento", tipoModelo: "alcance", duracaoDias: "4" },
+      { nomeEtapa: "Engajamento", tipoModelo: "engajamento", duracaoDias: "3" },
+      { nomeEtapa: "Conversão", tipoModelo: "cliques_link", duracaoDias: "3" },
+    ],
+  },
+  {
+    nome: "Captação de leads direta",
+    descricao: "Só formulário, sem aquecimento — pra quando o público já chega com intenção alta.",
+    etapas: [{ nomeEtapa: "Captação de leads", tipoModelo: "formulario", duracaoDias: "7" }],
+  },
+];
+
+/** Barra proporcional + legenda — mostra a "forma" de uma sequência de etapas de relance (quantos
+ * dias cada uma leva, em que ordem) em vez de só números soltos numa lista. Usada tanto no
+ * construtor (com os valores sendo editados) quanto na listagem de estratégias já salvas. */
+function BarraDeEtapas({ etapas }: { etapas: { nomeEtapa: string; duracaoDias: number }[] }) {
+  const duracaoTotal = etapas.reduce((soma, e) => soma + e.duracaoDias, 0);
+  if (duracaoTotal <= 0) return null;
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-white/[0.04]">
+        {etapas.map((etapa, indice) =>
+          etapa.duracaoDias > 0 ? (
+            <div
+              key={indice}
+              style={{
+                width: `${(etapa.duracaoDias / duracaoTotal) * 100}%`,
+                opacity: OPACIDADE_ETAPA[indice % OPACIDADE_ETAPA.length],
+              }}
+              className="h-full bg-accent"
+              title={`${etapa.nomeEtapa || `Etapa ${indice + 1}`} — ${etapa.duracaoDias} dia(s)`}
+            />
+          ) : null
+        )}
+      </div>
+      <div className="flex flex-wrap gap-x-3.5 gap-y-1">
+        {etapas.map((etapa, indice) => (
+          <span key={indice} className="flex items-center gap-1.5 text-[11px] text-neutral-400">
+            <span
+              className="h-2 w-2 shrink-0 rounded-full bg-accent"
+              style={{ opacity: OPACIDADE_ETAPA[indice % OPACIDADE_ETAPA.length] }}
+            />
+            {etapa.nomeEtapa || `Etapa ${indice + 1}`} · {etapa.duracaoDias}d
+          </span>
+        ))}
+      </div>
+      <p className="text-[11px] text-neutral-500">
+        Duração total: {duracaoTotal} dia{duracaoTotal !== 1 ? "s" : ""}
+      </p>
+    </div>
+  );
 }
 
 export default function PainelEstrategias() {
@@ -50,6 +120,12 @@ export default function PainelEstrategias() {
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
+  const [sugerindoComIa, setSugerindoComIa] = useState(false);
+  const [objetivoIa, setObjetivoIa] = useState("");
+  const [duracaoIa, setDuracaoIa] = useState("10");
+  const [carregandoIa, setCarregandoIa] = useState(false);
+  const [erroIa, setErroIa] = useState<string | null>(null);
+
   function carregar() {
     setCarregando(true);
     fetch("/api/estrategias")
@@ -60,23 +136,74 @@ export default function PainelEstrategias() {
 
   useEffect(carregar, []);
 
-  const somaPercentual = etapas.reduce((soma, e) => soma + (Number(e.percentualOrcamento) || 0), 0);
+  const duracaoTotal = etapas.reduce((soma, e) => soma + (Number(e.duracaoDias) || 0), 0);
 
   function atualizarEtapa(indice: number, campo: keyof EtapaForm, valor: string) {
     setEtapas((atual) => atual.map((e, i) => (i === indice ? { ...e, [campo]: valor } : e)));
   }
 
+  function aplicarPreset(preset: (typeof PRESETS)[number]) {
+    setNome(preset.nome);
+    setDescricao(preset.descricao);
+    setEtapas(preset.etapas.map((e) => ({ ...e })));
+    setErro(null);
+  }
+
+  async function sugerirComIa() {
+    setErroIa(null);
+    const duracao = Number(duracaoIa);
+    if (!objetivoIa.trim() || !duracao || duracao <= 0) {
+      setErroIa("Descreva o objetivo e informe uma duração total em dias.");
+      return;
+    }
+    setCarregandoIa(true);
+    const resposta = await fetch("/api/estrategias/sugerir", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ objetivo: objetivoIa.trim(), duracaoTotalDias: duracao }),
+    });
+    const corpo = await resposta.json();
+    setCarregandoIa(false);
+
+    if (!resposta.ok) {
+      setErroIa(corpo.erro || "Não deu pra gerar uma sugestão agora.");
+      return;
+    }
+    setEtapas(
+      corpo.etapas.map((e: { nomeEtapa: string; tipoModelo: TipoModeloCampanha; duracaoDias: number }) => ({
+        nomeEtapa: e.nomeEtapa,
+        tipoModelo: e.tipoModelo,
+        duracaoDias: String(e.duracaoDias),
+      }))
+    );
+    setSugerindoComIa(false);
+    setErro(null);
+  }
+
   async function salvar(evento: React.FormEvent) {
     evento.preventDefault();
     setErro(null);
-    if (!nome.trim() || etapas.some((e) => !e.nomeEtapa.trim() || !e.percentualOrcamento)) {
-      setErro("Preencha o nome da estratégia e o nome/orçamento de cada etapa.");
+    if (!nome.trim() || etapas.some((e) => !e.nomeEtapa.trim() || !Number(e.duracaoDias))) {
+      setErro("Preencha o nome da estratégia e o nome/duração de cada etapa.");
       return;
     }
-    if (Math.round(somaPercentual) !== 100) {
-      setErro(`A soma do orçamento das etapas precisa fechar 100% (está em ${somaPercentual}%).`);
-      return;
-    }
+
+    // % de orçamento e o dia de início de cada etapa agora são derivados da duração em dias — o
+    // dono não precisa mais fazer essa conta de cabeça, só dizer quanto tempo cada pedaço leva.
+    let offsetAcumulado = 0;
+    const etapasParaEnviar = etapas.map((e) => {
+      const duracao = Number(e.duracaoDias);
+      const percentual = Math.round((duracao / duracaoTotal) * 10000) / 100;
+      const linha = {
+        nomeEtapa: e.nomeEtapa.trim(),
+        tipoModelo: e.tipoModelo,
+        percentualOrcamento: percentual,
+        offsetDiasInicio: offsetAcumulado,
+        duracaoDias: duracao,
+      };
+      offsetAcumulado += duracao;
+      return linha;
+    });
 
     setSalvando(true);
     const resposta = await fetch("/api/estrategias", {
@@ -85,13 +212,7 @@ export default function PainelEstrategias() {
       body: JSON.stringify({
         nome: nome.trim(),
         descricao: descricao.trim() || undefined,
-        etapas: etapas.map((e) => ({
-          nomeEtapa: e.nomeEtapa.trim(),
-          tipoModelo: e.tipoModelo,
-          percentualOrcamento: Number(e.percentualOrcamento),
-          offsetDiasInicio: Number(e.offsetDiasInicio) || 0,
-          duracaoDias: e.duracaoDias ? Number(e.duracaoDias) : null,
-        })),
+        etapas: etapasParaEnviar,
       }),
     });
     const corpo = await resposta.json();
@@ -117,7 +238,7 @@ export default function PainelEstrategias() {
   return (
     <div className="flex flex-col gap-5">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        {ATALHOS.map(({ href, nome, descricao, Icone }) => (
+        {ATALHOS.map(({ href, nome: nomeAtalho, descricao: descricaoAtalho, Icone }) => (
           <Link
             key={href}
             href={href}
@@ -127,8 +248,8 @@ export default function PainelEstrategias() {
               <Icone size={18} weight="regular" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-neutral-100">{nome}</p>
-              <p className="mt-0.5 text-xs leading-relaxed text-neutral-500">{descricao}</p>
+              <p className="text-sm font-semibold text-neutral-100">{nomeAtalho}</p>
+              <p className="mt-0.5 text-xs leading-relaxed text-neutral-500">{descricaoAtalho}</p>
             </div>
           </Link>
         ))}
@@ -161,10 +282,72 @@ export default function PainelEstrategias() {
               className="w-full resize-none rounded-lg border border-white/14 bg-ink-850 px-3.5 py-2.5 text-sm text-neutral-100"
             />
 
+            <div className="flex flex-col gap-2">
+              <p className="text-xs font-semibold text-neutral-400">Começar de um pronto (opcional)</p>
+              <div className="flex flex-wrap gap-2">
+                {PRESETS.map((preset) => (
+                  <button
+                    key={preset.nome}
+                    type="button"
+                    onClick={() => aplicarPreset(preset)}
+                    title={preset.descricao}
+                    className="rounded-lg border border-white/14 px-3 py-1.5 text-xs font-medium text-neutral-300 hover:bg-white/[0.04]"
+                  >
+                    {preset.nome}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setSugerindoComIa(!sugerindoComIa)}
+                  className="flex items-center gap-1.5 rounded-lg border border-indigo-400/30 bg-indigo-500/10 px-3 py-1.5 text-xs font-semibold text-indigo-200 hover:bg-indigo-500/15"
+                >
+                  <Sparkle size={13} weight="fill" />
+                  Sugerir com IA
+                </button>
+              </div>
+
+              {sugerindoComIa && (
+                <div className="cartao-vidro-interno flex flex-col gap-2.5 p-3.5">
+                  <textarea
+                    value={objetivoIa}
+                    onChange={(e) => setObjetivoIa(e.target.value)}
+                    placeholder="Objetivo geral (ex: lançar um produto novo e converter em vendas até o fim do mês)"
+                    rows={2}
+                    className="w-full resize-none rounded-lg border border-white/14 bg-ink-900 px-3 py-2 text-xs text-neutral-100"
+                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className="text-xs text-neutral-400">Duração total:</label>
+                    <input
+                      type="number"
+                      value={duracaoIa}
+                      onChange={(e) => setDuracaoIa(e.target.value)}
+                      min={1}
+                      className="h-8 w-20 rounded-lg border border-white/14 bg-ink-900 px-2 text-xs text-neutral-100"
+                    />
+                    <span className="text-xs text-neutral-500">dias</span>
+                    <button
+                      type="button"
+                      onClick={sugerirComIa}
+                      disabled={carregandoIa}
+                      className="ml-auto rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-accent-strong disabled:opacity-40"
+                    >
+                      {carregandoIa ? "Gerando…" : "Gerar sugestão"}
+                    </button>
+                  </div>
+                  {erroIa && <p className="text-xs text-red-400">{erroIa}</p>}
+                </div>
+              )}
+            </div>
+
             <div className="flex flex-col gap-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
                 Sequência de campanhas
               </p>
+
+              <BarraDeEtapas
+                etapas={etapas.map((e) => ({ nomeEtapa: e.nomeEtapa, duracaoDias: Number(e.duracaoDias) || 0 }))}
+              />
+
               {etapas.map((etapa, indice) => (
                 <div key={indice} className="cartao-vidro-interno flex flex-col gap-2.5 p-3.5">
                   <div className="flex items-center justify-between">
@@ -185,7 +368,7 @@ export default function PainelEstrategias() {
                     placeholder="Nome da etapa (ex: Aquecimento)"
                     className="h-9 w-full rounded-lg border border-white/14 bg-ink-900 px-3 text-sm text-neutral-100"
                   />
-                  <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+                  <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-[1fr_auto]">
                     <select
                       value={etapa.tipoModelo}
                       onChange={(e) => atualizarEtapa(indice, "tipoModelo", e.target.value)}
@@ -197,31 +380,16 @@ export default function PainelEstrategias() {
                         </option>
                       ))}
                     </select>
-                    <input
-                      type="number"
-                      value={etapa.percentualOrcamento}
-                      onChange={(e) => atualizarEtapa(indice, "percentualOrcamento", e.target.value)}
-                      placeholder="% verba"
-                      min={1}
-                      max={100}
-                      className="h-9 rounded-lg border border-white/14 bg-ink-900 px-2 text-xs text-neutral-100"
-                    />
-                    <input
-                      type="number"
-                      value={etapa.offsetDiasInicio}
-                      onChange={(e) => atualizarEtapa(indice, "offsetDiasInicio", e.target.value)}
-                      placeholder="Começa no dia"
-                      min={0}
-                      className="h-9 rounded-lg border border-white/14 bg-ink-900 px-2 text-xs text-neutral-100"
-                    />
-                    <input
-                      type="number"
-                      value={etapa.duracaoDias}
-                      onChange={(e) => atualizarEtapa(indice, "duracaoDias", e.target.value)}
-                      placeholder="Dura (dias) — vazio = contínua"
-                      min={1}
-                      className="h-9 rounded-lg border border-white/14 bg-ink-900 px-2 text-xs text-neutral-100"
-                    />
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="number"
+                        value={etapa.duracaoDias}
+                        onChange={(e) => atualizarEtapa(indice, "duracaoDias", e.target.value)}
+                        min={1}
+                        className="h-9 w-20 rounded-lg border border-white/14 bg-ink-900 px-2 text-xs text-neutral-100"
+                      />
+                      <span className="text-xs text-neutral-500">dias</span>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -232,9 +400,6 @@ export default function PainelEstrategias() {
               >
                 + Adicionar etapa
               </button>
-              <p className={`text-xs font-medium ${Math.round(somaPercentual) === 100 ? "text-emerald-400" : "text-neutral-500"}`}>
-                Soma do orçamento das etapas: {somaPercentual}% (precisa fechar 100%)
-              </p>
             </div>
 
             {erro && <p className="text-xs text-red-400">{erro}</p>}
@@ -256,7 +421,7 @@ export default function PainelEstrategias() {
         ) : (
           <ul className="flex flex-col gap-2 p-3">
             {estrategias.map((estrategia) => (
-              <li key={estrategia.id} className="cartao-vidro-interno flex flex-col gap-2.5 px-4 py-3.5">
+              <li key={estrategia.id} className="cartao-vidro-interno flex flex-col gap-3 px-4 py-3.5">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <p className="text-sm font-semibold text-neutral-100">{estrategia.nome}</p>
@@ -279,6 +444,14 @@ export default function PainelEstrategias() {
                     </button>
                   </div>
                 </div>
+
+                <BarraDeEtapas
+                  etapas={estrategia.etapas.map((e: EtapaEstrategia) => ({
+                    nomeEtapa: e.nomeEtapa,
+                    duracaoDias: e.duracaoDias ?? 0,
+                  }))}
+                />
+
                 <ol className="flex flex-col gap-1 border-t border-white/10 pt-2.5">
                   {estrategia.etapas.map((etapa) => (
                     <li key={etapa.id} className="text-xs text-neutral-400">
@@ -286,9 +459,9 @@ export default function PainelEstrategias() {
                       {" — "}
                       {MODELOS_CAMPANHA[etapa.tipoModelo]?.nomeExibicao ?? etapa.tipoModelo}
                       {" · "}
+                      {etapa.duracaoDias ? `${etapa.duracaoDias} dias` : "contínua"}
+                      {" · "}
                       {etapa.percentualOrcamento}% da verba
-                      {etapa.offsetDiasInicio > 0 ? ` · começa no dia ${etapa.offsetDiasInicio}` : ""}
-                      {etapa.duracaoDias ? ` · dura ${etapa.duracaoDias} dias` : " · contínua"}
                     </li>
                   ))}
                 </ol>

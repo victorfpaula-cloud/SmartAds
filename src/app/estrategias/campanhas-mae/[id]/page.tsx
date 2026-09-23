@@ -2,6 +2,8 @@ import Cabecalho from "@/components/Cabecalho";
 import Link from "next/link";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { notFound } from "next/navigation";
+import { WarningCircle } from "@phosphor-icons/react/dist/ssr";
+import CriativosDaCampanha, { type EtapaCriativoLinha } from "./CriativosDaCampanha";
 
 export const dynamic = "force-dynamic";
 
@@ -26,13 +28,35 @@ export default async function DetalheCampanhaMaePage({ params }: { params: Promi
 
   if (!campanha) notFound();
 
-  const { data: planos } = await supabase
-    .from("smartads_planos_execucao")
-    .select(
-      "id, nome, investimento_total_centavos, status, smartads_clientes(nome), smartads_contas_meta(nome_exibicao, meta_ad_account_nome), smartads_plano_etapas(status)"
-    )
-    .eq("campanha_mae_id", id)
-    .order("created_at", { ascending: false });
+  const [{ data: planos }, { data: criativosRaw }] = await Promise.all([
+    supabase
+      .from("smartads_planos_execucao")
+      .select(
+        "id, nome, investimento_total_centavos, status, smartads_clientes(nome), smartads_contas_meta(nome_exibicao, meta_ad_account_nome), smartads_plano_etapas(status)"
+      )
+      .eq("campanha_mae_id", id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("smartads_campanha_mae_criativos")
+      .select("*, smartads_estrategia_etapas(ordem, nome_etapa, tipo_modelo)")
+      .eq("campanha_mae_id", id),
+  ]);
+
+  const etapasCriativo: EtapaCriativoLinha[] = (criativosRaw ?? [])
+    .map((c: any) => ({
+      estrategiaEtapaId: c.estrategia_etapa_id,
+      ordem: c.smartads_estrategia_etapas?.ordem ?? 0,
+      nomeEtapa: c.smartads_estrategia_etapas?.nome_etapa ?? "—",
+      tipoModelo: c.smartads_estrategia_etapas?.tipo_modelo ?? null,
+      modo: c.modo,
+      criativoTitulo: c.criativo_titulo,
+      criativoMensagem: c.criativo_mensagem,
+      criativoImagemBase64: c.criativo_imagem_base64,
+      criativoCta: c.criativo_cta,
+    }))
+    .sort((a, b) => a.ordem - b.ordem);
+
+  const criativosPendentes = etapasCriativo.filter((e) => e.modo === "oficial_upload" && !e.criativoImagemBase64);
 
   const unidades = (planos ?? []).map((plano: any) => {
     const etapas = plano.smartads_plano_etapas as { status: string }[];
@@ -74,23 +98,16 @@ export default async function DetalheCampanhaMaePage({ params }: { params: Promi
           </Link>
         </div>
 
-        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-[160px_1fr]">
-          <div className="aspect-square overflow-hidden rounded-xl border border-white/10">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={`data:image/jpeg;base64,${campanha.criativo_imagem_base64}`}
-              alt="Criativo oficial"
-              className="h-full w-full object-cover"
-            />
+        {criativosPendentes.length > 0 && (
+          <div className="mt-6 flex items-start gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+            <WarningCircle size={18} weight="fill" className="mt-0.5 shrink-0" />
+            <p>
+              {criativosPendentes.length} etapa{criativosPendentes.length !== 1 ? "s" : ""} com criativo
+              oficial ainda pendente: {criativosPendentes.map((e) => e.nomeEtapa).join(", ")}. Defina
+              antes da etapa começar, ou o relatório semanal vai continuar avisando.
+            </p>
           </div>
-          <div className="cartao-vidro-interno p-4 text-sm">
-            <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Criativo oficial</p>
-            {campanha.criativo_titulo && (
-              <p className="mt-1.5 font-semibold text-neutral-100">{campanha.criativo_titulo}</p>
-            )}
-            <p className="mt-1 text-neutral-300">{campanha.criativo_mensagem}</p>
-          </div>
-        </div>
+        )}
 
         <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
           <div className="cartao-vidro px-4 py-3">
@@ -101,6 +118,15 @@ export default async function DetalheCampanhaMaePage({ params }: { params: Promi
             <p className="text-[11px] font-medium uppercase tracking-wide text-neutral-500">Investimento total</p>
             <p className="mt-1 text-lg font-bold text-neutral-100">{formatoReal.format(investimentoTotal / 100)}</p>
           </div>
+        </div>
+
+        <h2 className="mt-8 text-sm font-semibold text-neutral-200">Criativo por etapa</h2>
+        <p className="mt-1 text-xs text-neutral-500">
+          "Oficial" trava o mesmo criativo pra toda unidade nessa etapa; "livre por unidade" deixa
+          cada uma escolher o próprio na hora de publicar.
+        </p>
+        <div className="mt-3">
+          <CriativosDaCampanha campanhaId={id} etapasIniciais={etapasCriativo} />
         </div>
 
         <h2 className="mt-8 text-sm font-semibold text-neutral-200">Unidades</h2>
