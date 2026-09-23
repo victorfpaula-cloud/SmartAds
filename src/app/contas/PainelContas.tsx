@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Sparkle } from "@phosphor-icons/react";
+import { Sparkle, Buildings, Storefront } from "@phosphor-icons/react";
 
 interface ContaMeta {
   id: string;
@@ -172,6 +172,23 @@ export default function PainelContas({
     setClienteExpandidoId(null);
   }
 
+  // Agrupado por empresa em vez de lista solta — era o pedido direto: "Dona Baunilha - Expansão"
+  // e "Dona Baunilha - Principal" são unidades da MESMA franquia, deveriam ficar visualmente juntas
+  // num container só (com o nome da marca), não espalhadas como se não tivessem relação nenhuma.
+  // Empresa individual (Único Sushi) naturalmente vira um container com uma unidade só dentro.
+  const gruposEmpresa = useMemo(() => {
+    const porEmpresa = new Map<string, { empresa: Empresa; clientes: Cliente[] }>();
+    for (const cliente of clientes) {
+      const empresa = cliente.smartads_empresas;
+      const chave = empresa?.id ?? "sem-empresa";
+      if (!porEmpresa.has(chave)) {
+        porEmpresa.set(chave, { empresa: empresa ?? { id: chave, nome: "Sem empresa", tipo: "individual" }, clientes: [] });
+      }
+      porEmpresa.get(chave)!.clientes.push(cliente);
+    }
+    return [...porEmpresa.values()].sort((a, b) => a.empresa.nome.localeCompare(b.empresa.nome));
+  }, [clientes]);
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -260,19 +277,29 @@ export default function PainelContas({
             Nenhum cliente cadastrado ainda. Adicione o primeiro acima.
           </p>
         ) : (
-          <ul className="flex flex-col gap-2 p-3">
-            {clientes.map((cliente) => (
+          <div className="flex flex-col">
+            {gruposEmpresa.map((grupo) => {
+              const IconeEmpresa = grupo.empresa.tipo === "franquia" ? Buildings : Storefront;
+              return (
+                <div key={grupo.empresa.id} className="border-b border-white/10 last:border-b-0">
+                  <div className="flex items-center gap-2.5 bg-white/[0.02] px-5 py-2.5">
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-neutral-300">
+                      <IconeEmpresa size={14} weight="fill" />
+                    </div>
+                    <span className="text-sm font-semibold text-neutral-100">{grupo.empresa.nome}</span>
+                    <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-medium text-neutral-400">
+                      {grupo.empresa.tipo === "franquia" ? "franquia" : "individual"}
+                    </span>
+                    <span className="ml-auto text-[11px] text-neutral-500">
+                      {grupo.clientes.length} unidade{grupo.clientes.length !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+
+                  <ul className="flex flex-col gap-2 p-3">
+                    {grupo.clientes.map((cliente) => (
               <li key={cliente.id} className="cartao-vidro-interno px-4 py-3.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="flex items-center gap-2 text-sm font-semibold text-neutral-100">
-                    {cliente.nome}
-                    {cliente.smartads_empresas && (
-                      <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-medium text-neutral-400">
-                        {cliente.smartads_empresas.nome}
-                        {cliente.smartads_empresas.tipo === "franquia" ? " · franquia" : " · individual"}
-                      </span>
-                    )}
-                  </span>
+                  <span className="text-sm font-semibold text-neutral-100">{cliente.nome}</span>
                   <button
                     onClick={() =>
                       setClienteExpandidoId(clienteExpandidoId === cliente.id ? null : cliente.id)
@@ -345,8 +372,12 @@ export default function PainelContas({
                   <AdicionarConta clienteId={cliente.id} onAssociada={(conta) => adicionarContaAoCliente(cliente.id, conta)} />
                 )}
               </li>
-            ))}
-          </ul>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+          </div>
         )}
       </section>
     </div>
