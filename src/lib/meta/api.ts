@@ -66,26 +66,20 @@ export async function listarContasDeAnuncio(): Promise<ContaDeAnuncioMeta[]> {
   return dados.data;
 }
 
-// A Meta não deixa o campo `spend_cap` em branco quando ninguém configurou um limite — devolve um
-// número-sentinela enorme (próximo do máximo de um int64) em vez de omitir o campo. Qualquer valor
-// acima disso é "sem limite definido", nunca um limite real (nenhuma conta de agência gasta bilhões
-// de reais) — usado pra distinguir "conta com fundo pré-pago" (spend_cap = total carregado, um
-// número plausível) de "conta pós-paga sem limite" (spend_cap = o sentinela).
-const SPEND_CAP_SENTINELA_MINIMO = 1_000_000_000_00; // R$ 1 bilhão em centavos
-
 export interface SaldoContaMeta {
-  /** Quanto a conta ainda pode gastar antes de precisar de mais fundo/crédito — só existe quando a
-   * conta tem um `spend_cap` configurado (caso das contas com fundo pré-pago via Pix/boleto, onde a
-   * Meta ajusta o limite pra refletir o total carregado): `spend_cap - amount_spent`. Formato usado
-   * por ferramentas de terceiros pra calcular exatamente esse número (ex: Stract, agência de
-   * relatórios pra Facebook Ads no Brasil) — é o equivalente real ao "Fundos disponíveis" que
-   * aparece no Gerenciador de Anúncios, algo que a Meta não expõe direto em nenhum campo. */
+  /** TENTATIVA ANTERIOR (revertida): calcular isso como `spend_cap - amount_spent` — formato que
+   * ferramentas de terceiros documentam pra outro tipo de conta pré-paga. Testado contra as contas
+   * reais da Dona Baunilha e deu número NEGATIVO e sem sentido (ex: -R$16.000): `amount_spent` é o
+   * gasto acumulado da conta DESDE SEMPRE (nunca zera) e o `spend_cap` dessas contas é um limite
+   * antigo que não sobe a cada recarga de Fundos via Pix — então a subtração não representa fundo
+   * disponível nenhum. Voltou a ser sempre `null`: a Meta genuinely não expõe "Fundos disponíveis"
+   * por nenhum campo da API pública (confirmado por buscas extensivas na documentação e no catálogo
+   * de campos do Windsor.ai) — esse número só existe hoje dentro do Gerenciador de Anúncios. */
   saldoDisponivelCentavos: number | null;
   /** O campo `balance` da Meta NÃO é "quanto você tem disponível pra gastar" — é o valor JÁ
    * ACUMULADO desde a última cobrança, que vai virar a PRÓXIMA fatura (confirmado direto na
-   * documentação de campo da Meta: "Bill amount due for this Ad Account"). Pra conta pós-paga (sem
-   * spend_cap configurado, cobrada por fatura/limite de crédito), é o único número relevante que dá
-   * pra buscar — não existe conceito de "saldo disponível" nesse tipo de conta. */
+   * documentação de campo da Meta: "Bill amount due for this Ad Account"). Não é o fundo pré-pago
+   * (Pix/boleto) disponível — só dá pra ver esse número direto no Gerenciador de Anúncios. */
   faturaEmAbertoCentavos: number | null;
   /** Gasto acumulado da conta desde sempre (lifetime), em centavos — a Meta devolve isso em
    * centavos, diferente do campo `spend` dos insights (que já vem em reais). */
@@ -94,10 +88,9 @@ export interface SaldoContaMeta {
   moeda: string;
 }
 
-/** Saldo/fatura da conta de anúncio na Meta. Duas contas, dois números diferentes: com fundo
- * pré-pago (spend_cap configurado de verdade) devolve `saldoDisponivelCentavos`; sem isso (conta
- * pós-paga, cobrada por fatura) devolve só `faturaEmAbertoCentavos`. Ver os comentários de
- * SaldoContaMeta pra por que não dá pra misturar os dois num "saldo" só. */
+/** Fatura em aberto (o que já acumulou desde a última cobrança e vai ser cobrado a seguir) da
+ * própria conta de anúncio na Meta — NÃO é o fundo disponível pra gastar (ver comentário de
+ * SaldoContaMeta.saldoDisponivelCentavos: já tentamos calcular isso e deu errado). */
 export async function obterSaldoConta(adAccountId: string): Promise<SaldoContaMeta> {
   const dados = await chamar<{
     balance?: string;
@@ -106,16 +99,11 @@ export async function obterSaldoConta(adAccountId: string): Promise<SaldoContaMe
     currency?: string;
   }>(adAccountId, { query: { fields: "balance,amount_spent,spend_cap,currency" } });
 
-  const spendCapBruto = dados.spend_cap != null ? Number(dados.spend_cap) : null;
-  const spendCapCentavos =
-    spendCapBruto != null && spendCapBruto < SPEND_CAP_SENTINELA_MINIMO ? spendCapBruto : null;
-  const gastoAcumuladoCentavos = Number(dados.amount_spent ?? 0);
-
   return {
-    saldoDisponivelCentavos: spendCapCentavos != null ? spendCapCentavos - gastoAcumuladoCentavos : null,
-    faturaEmAbertoCentavos: spendCapCentavos == null && dados.balance != null ? Number(dados.balance) : null,
-    gastoAcumuladoCentavos,
-    spendCapCentavos,
+    saldoDisponivelCentavos: null,
+    faturaEmAbertoCentavos: dados.balance != null ? Number(dados.balance) : null,
+    gastoAcumuladoCentavos: Number(dados.amount_spent ?? 0),
+    spendCapCentavos: dados.spend_cap != null ? Number(dados.spend_cap) : null,
     moeda: dados.currency ?? "BRL",
   };
 }
