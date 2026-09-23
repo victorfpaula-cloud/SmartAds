@@ -2,14 +2,28 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Buildings, Storefront, Sparkle, Lightning, Crown } from "@phosphor-icons/react";
+import {
+  Buildings,
+  Storefront,
+  Sparkle,
+  Lightning,
+  Crown,
+  PlusCircle,
+  ListBullets,
+  Stethoscope,
+} from "@phosphor-icons/react";
+import ModalBoostAutomatico, { type AlteracoesBoost } from "@/components/ModalBoostAutomatico";
 
 interface ContaResumo {
   id: string;
   nome_exibicao: string | null;
   meta_ad_account_nome: string | null;
   meta_ad_account_id: string;
+  instagram_business_id: string | null;
   boost_automatico_ativo: boolean;
+  boost_automatico_publico_id: string | null;
+  boost_automatico_orcamento_centavos: number | null;
+  boost_automatico_duracao_dias: number;
 }
 
 interface ClienteResumo {
@@ -64,6 +78,9 @@ const formatoReal = new Intl.NumberFormat("pt-BR", { style: "currency", currency
  * de uma vez. */
 export default function PainelInicio({ empresas }: { empresas: EmpresaResumo[] }) {
   const [saude, setSaude] = useState<Record<string, SaudeConta>>({});
+  // Alterações de boost feitas direto pelo card (toggle rápido ou modal) — sobrepõem o valor vindo
+  // do servidor sem precisar re-buscar a árvore inteira de empresas/clientes/contas.
+  const [boostOverrides, setBoostOverrides] = useState<Record<string, AlteracoesBoost>>({});
 
   useEffect(() => {
     fetch("/api/saude")
@@ -71,6 +88,11 @@ export default function PainelInicio({ empresas }: { empresas: EmpresaResumo[] }
       .then((corpo) => setSaude(corpo.saude ?? {}))
       .catch(() => {});
   }, []);
+
+  function contaComOverride(conta: ContaResumo): ContaResumo {
+    const alteracoes = boostOverrides[conta.id];
+    return alteracoes ? { ...conta, ...alteracoes } : conta;
+  }
 
   return (
     <div className="mt-6 flex flex-col gap-4">
@@ -119,7 +141,15 @@ export default function PainelInicio({ empresas }: { empresas: EmpresaResumo[] }
               <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 lg:grid-cols-3">
                 {clientesAtivos.flatMap((cliente) =>
                   cliente.smartads_contas_meta.map((conta) => (
-                    <CardConta key={conta.id} cliente={cliente} conta={conta} saude={saude[conta.id]} />
+                    <CardConta
+                      key={conta.id}
+                      cliente={cliente}
+                      conta={contaComOverride(conta)}
+                      saude={saude[conta.id]}
+                      onBoostAtualizado={(alteracoes) =>
+                        setBoostOverrides((atual) => ({ ...atual, [conta.id]: alteracoes }))
+                      }
+                    />
                   ))
                 )}
               </div>
@@ -135,11 +165,48 @@ function CardConta({
   cliente,
   conta,
   saude,
+  onBoostAtualizado,
 }: {
   cliente: ClienteResumo;
   conta: ContaResumo;
   saude?: SaudeConta;
+  onBoostAtualizado: (alteracoes: AlteracoesBoost) => void;
 }) {
+  const [modalBoostAberto, setModalBoostAberto] = useState(false);
+  const [alternandoBoost, setAlternandoBoost] = useState(false);
+
+  // Liga/desliga direto do card quando já tem público e orçamento salvos (não precisa abrir o
+  // modal de novo só pra isso); sem essa config ainda, abre o modal — a API exige os dois pra
+  // ligar (ver /api/contas-meta/[id]/boost-automatico).
+  async function alternarBoost() {
+    const configCompleta = Boolean(conta.boost_automatico_publico_id && conta.boost_automatico_orcamento_centavos);
+    if (!conta.boost_automatico_ativo && !configCompleta) {
+      setModalBoostAberto(true);
+      return;
+    }
+    const novoAtivo = !conta.boost_automatico_ativo;
+    setAlternandoBoost(true);
+    const resposta = await fetch(`/api/contas-meta/${conta.id}/boost-automatico`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ativo: novoAtivo,
+        publicoId: conta.boost_automatico_publico_id,
+        orcamentoCentavos: conta.boost_automatico_orcamento_centavos,
+        duracaoDias: conta.boost_automatico_duracao_dias,
+      }),
+    });
+    setAlternandoBoost(false);
+    if (resposta.ok) {
+      onBoostAtualizado({
+        boost_automatico_ativo: novoAtivo,
+        boost_automatico_publico_id: conta.boost_automatico_publico_id,
+        boost_automatico_orcamento_centavos: conta.boost_automatico_orcamento_centavos,
+        boost_automatico_duracao_dias: conta.boost_automatico_duracao_dias,
+      });
+    }
+  }
+
   return (
     <div className="cartao-vidro-interno flex flex-col gap-3 p-4">
       <div>
@@ -189,43 +256,96 @@ function CardConta({
         </div>
       )}
 
-      {conta.boost_automatico_ativo && (
+      {conta.instagram_business_id && (
         <div className="rounded-lg border border-white/10 bg-white/[0.02] px-2.5 py-2">
-          <div className="flex items-center gap-1.5 text-[11px] text-neutral-300">
-            <Lightning size={12} weight="fill" className="shrink-0 text-ok" />
-            <span className="font-semibold">Boost automático ligado</span>
+          <div className="flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={() => setModalBoostAberto(true)}
+              className="flex items-center gap-1.5 text-[11px] font-semibold text-neutral-300 hover:text-neutral-100"
+            >
+              <Lightning
+                size={12}
+                weight={conta.boost_automatico_ativo ? "fill" : "regular"}
+                className={`shrink-0 ${conta.boost_automatico_ativo ? "text-ok" : "text-neutral-500"}`}
+              />
+              Boost automático
+            </button>
+            <button
+              type="button"
+              onClick={alternarBoost}
+              disabled={alternandoBoost}
+              aria-label={conta.boost_automatico_ativo ? "Desligar boost automático" : "Ligar boost automático"}
+              className={`relative h-5 w-9 shrink-0 rounded-full transition disabled:opacity-50 ${
+                conta.boost_automatico_ativo ? "bg-ok/70" : "bg-white/10"
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${
+                  conta.boost_automatico_ativo ? "translate-x-[18px]" : "translate-x-0.5"
+                }`}
+              />
+            </button>
           </div>
-          {!saude ? (
-            <p className="mt-1 text-[11px] text-neutral-600">…</p>
-          ) : saude.boostCampanhasAtivas === 0 ? (
-            <p className="mt-1 text-[11px] text-neutral-500">Nenhuma campanha do boost ativa agora.</p>
-          ) : (
-            <div className="mt-1 flex flex-col gap-0.5 text-[11px] leading-relaxed text-neutral-400">
-              <span>
-                {saude.boostCampanhasAtivas} campanha{saude.boostCampanhasAtivas !== 1 ? "s" : ""} do boost no
-                ar · previsão até encerrar: {formatoReal.format(saude.boostPrevisaoGastoCentavos / 100)}
-              </span>
-              {saude.orcamentoDiarioAtivoCentavos != null && saude.orcamentoDiarioAtivoCentavos > 0 && (
+          {conta.boost_automatico_ativo &&
+            (!saude ? (
+              <p className="mt-1 text-[11px] text-neutral-600">…</p>
+            ) : saude.boostCampanhasAtivas === 0 ? (
+              <p className="mt-1 text-[11px] text-neutral-500">Nenhuma campanha do boost ativa agora.</p>
+            ) : (
+              <div className="mt-1 flex flex-col gap-0.5 text-[11px] leading-relaxed text-neutral-400">
                 <span>
-                  É{" "}
-                  {Math.round((saude.boostOrcamentoDiarioCentavos / saude.orcamentoDiarioAtivoCentavos) * 100)}%
-                  do orçamento diário ativo da conta ({formatoReal.format(saude.orcamentoDiarioAtivoCentavos / 100)}
-                  /dia)
+                  {saude.boostCampanhasAtivas} campanha{saude.boostCampanhasAtivas !== 1 ? "s" : ""} do boost no
+                  ar · previsão até encerrar: {formatoReal.format(saude.boostPrevisaoGastoCentavos / 100)}
                 </span>
-              )}
-            </div>
-          )}
+                {saude.orcamentoDiarioAtivoCentavos != null && saude.orcamentoDiarioAtivoCentavos > 0 && (
+                  <span>
+                    É{" "}
+                    {Math.round((saude.boostOrcamentoDiarioCentavos / saude.orcamentoDiarioAtivoCentavos) * 100)}%
+                    do orçamento diário ativo da conta ({formatoReal.format(saude.orcamentoDiarioAtivoCentavos / 100)}
+                    /dia)
+                  </span>
+                )}
+              </div>
+            ))}
         </div>
       )}
 
-      <div className="mt-auto flex items-center gap-3 border-t border-white/10 pt-2.5 text-xs">
-        <Link href={`/campanhas/nova/${conta.id}`} className="font-semibold text-accent-strong hover:underline">
-          Nova campanha
+      <div className="mt-auto grid grid-cols-3 gap-1 border-t border-white/10 pt-2.5 text-[11px] font-medium">
+        <Link
+          href={`/campanhas/nova/${conta.id}`}
+          className="flex flex-col items-center gap-1 rounded-lg py-1.5 text-accent-strong hover:bg-white/[0.04]"
+        >
+          <PlusCircle size={16} weight="bold" />
+          Nova
         </Link>
-        <Link href={`/estrategias/diagnostico/${conta.id}`} className="font-semibold text-accent-strong hover:underline">
+        <Link
+          href={`/campanhas/conta/${conta.id}`}
+          className="flex flex-col items-center gap-1 rounded-lg py-1.5 text-accent-strong hover:bg-white/[0.04]"
+        >
+          <ListBullets size={16} weight="bold" />
+          Campanhas
+        </Link>
+        <Link
+          href={`/estrategias/diagnostico/${conta.id}`}
+          className="flex flex-col items-center gap-1 rounded-lg py-1.5 text-accent-strong hover:bg-white/[0.04]"
+        >
+          <Stethoscope size={16} weight="bold" />
           Diagnóstico
         </Link>
       </div>
+
+      {modalBoostAberto && (
+        <ModalBoostAutomatico
+          clienteId={cliente.id}
+          conta={conta}
+          onFechar={() => setModalBoostAberto(false)}
+          onSalvo={(alteracoes) => {
+            onBoostAtualizado(alteracoes);
+            setModalBoostAberto(false);
+          }}
+        />
+      )}
     </div>
   );
 }

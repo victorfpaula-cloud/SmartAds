@@ -11,7 +11,11 @@ interface ContaResumo {
   nome_exibicao: string | null;
   meta_ad_account_nome: string | null;
   meta_ad_account_id: string;
+  instagram_business_id: string | null;
   boost_automatico_ativo: boolean;
+  boost_automatico_publico_id: string | null;
+  boost_automatico_orcamento_centavos: number | null;
+  boost_automatico_duracao_dias: number;
 }
 
 interface ClienteResumo {
@@ -37,7 +41,7 @@ export default async function Home() {
   const { data: empresas } = await supabase
     .from("smartads_empresas")
     .select(
-      "id, nome, tipo, smartads_clientes(id, nome, ativo, smartads_contas_meta(id, nome_exibicao, meta_ad_account_nome, meta_ad_account_id, boost_automatico_ativo))"
+      "id, nome, tipo, smartads_clientes(id, nome, ativo, smartads_contas_meta(id, nome_exibicao, meta_ad_account_nome, meta_ad_account_id, instagram_business_id, boost_automatico_ativo, boost_automatico_publico_id, boost_automatico_orcamento_centavos, boost_automatico_duracao_dias))"
     )
     .order("nome");
 
