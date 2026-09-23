@@ -496,3 +496,25 @@ alter table smartads_sugestoes enable row level security;
 -- estratégia aplicada.
 -- ============================================================================
 alter table smartads_contas_meta add column if not exists meta_negocio text;
+
+-- ============================================================================
+-- Empresa — o agrupador acima de "cliente" que faltava: uma REDE franqueada (várias unidades, o
+-- mesmo molde de Estratégia aplicado em cada uma, faz sentido comparar desempenho entre elas) ou
+-- um negócio INDIVIDUAL (uma unidade só, sem rede pra comparar — Estratégias/Semáforo/comparação
+-- de mediana no Diagnóstico não fazem sentido, só campanha, insights e piloto automático).
+-- `tipo` decide isso em cima de toda a UI que compara unidades entre si. Cada smartads_clientes
+-- pertence a UMA empresa (empresa_id not null, on delete restrict — apagar a empresa por engano
+-- não pode levar junto os clientes/campanhas que dependem dela).
+-- ============================================================================
+create table if not exists smartads_empresas (
+  id uuid primary key default gen_random_uuid(),
+  nome text not null,
+  tipo text not null check (tipo in ('individual', 'franquia')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table smartads_empresas enable row level security;
+
+alter table smartads_clientes add column if not exists empresa_id uuid references smartads_empresas(id) on delete restrict;
+create index if not exists smartads_clientes_empresa_idx on smartads_clientes(empresa_id);

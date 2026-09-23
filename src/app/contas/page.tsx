@@ -11,10 +11,10 @@ export default async function ContasPage({
 }) {
   const supabase = criarClienteAdmin();
 
-  const [{ data: clientes }, { data: statusMeta }, { data: campanhas }] = await Promise.all([
+  const [{ data: clientes }, { data: statusMeta }, { data: campanhas }, { data: empresas }] = await Promise.all([
     supabase
       .from("smartads_clientes")
-      .select("*, smartads_contas_meta(*)")
+      .select("*, smartads_empresas(id, nome, tipo), smartads_contas_meta(*)")
       .order("nome"),
     supabase
       .from("smartads_meta_status")
@@ -22,6 +22,7 @@ export default async function ContasPage({
       .eq("id", "default")
       .single(),
     supabase.from("smartads_campanhas_criadas").select("conta_id, meta_ad_ids"),
+    supabase.from("smartads_empresas").select("id, nome, tipo").order("nome"),
   ]);
 
   // Quantos anúncios o SmartAds já criou por conta — proxy honesto de diversidade de criativo
@@ -40,6 +41,7 @@ export default async function ContasPage({
       <main className="mx-auto max-w-6xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
         <PainelContas
           clientesIniciais={clientes ?? []}
+          empresasIniciais={empresas ?? []}
           statusMetaInicial={statusMeta ?? { conectado: false }}
           anunciosPorConta={anunciosPorConta}
           avisoConexao={

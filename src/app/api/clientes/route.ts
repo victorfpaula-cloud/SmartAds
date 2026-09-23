@@ -21,15 +21,16 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const corpo = await request.json().catch(() => null);
   const nome = corpo?.nome?.trim();
+  const empresaId = corpo?.empresaId;
 
-  if (!nome) {
-    return NextResponse.json({ erro: "Informe o nome do cliente." }, { status: 400 });
+  if (!nome || !empresaId) {
+    return NextResponse.json({ erro: "Informe o nome do cliente e a empresa." }, { status: 400 });
   }
 
   const supabase = criarClienteAdmin();
   const { data, error } = await supabase
     .from("smartads_clientes")
-    .insert({ nome })
+    .insert({ nome, empresa_id: empresaId })
     .select()
     .single();
 

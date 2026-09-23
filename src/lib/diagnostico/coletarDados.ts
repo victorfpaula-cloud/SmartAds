@@ -88,17 +88,34 @@ export async function coletarDadosDiagnostico(clienteId: string, contaId: string
     ),
   ];
 
-  // Mediana da rede: mesmas métricas de TODAS as outras unidades ativas, pra saber se essa unidade
-  // está acima/abaixo do padrão da rede — só existe insight aqui porque várias unidades usam o
-  // MESMO molde de estratégia.
-  const { data: outrasContas } = await supabase
-    .from("smartads_contas_meta")
-    .select("meta_ad_account_id")
-    .eq("ativo", true)
-    .neq("id", contaId);
+  // Mediana da rede: só faz sentido para empresas do tipo "franquia" — comparar a unidade de uma
+  // empresa individual contra contas de outros clientes/negócios (setor, público, verba diferentes)
+  // seria enganoso. Pra franquia, compara só contra as outras unidades DA MESMA empresa.
+  const { data: empresa } = cliente.empresa_id
+    ? await supabase.from("smartads_empresas").select("id, tipo").eq("id", cliente.empresa_id).single()
+    : { data: null };
+
+  let outrasContas: { meta_ad_account_id: string }[] = [];
+  if (empresa?.tipo === "franquia") {
+    const { data: clientesDaEmpresa } = await supabase
+      .from("smartads_clientes")
+      .select("id")
+      .eq("empresa_id", empresa.id)
+      .neq("id", clienteId);
+
+    const idsClientes = (clientesDaEmpresa ?? []).map((c) => c.id);
+    if (idsClientes.length > 0) {
+      const { data } = await supabase
+        .from("smartads_contas_meta")
+        .select("meta_ad_account_id")
+        .eq("ativo", true)
+        .in("cliente_id", idsClientes);
+      outrasContas = data ?? [];
+    }
+  }
 
   const metricasOutras = await Promise.all(
-    (outrasContas ?? []).slice(0, 20).map((c) =>
+    outrasContas.slice(0, 20).map((c) =>
       obterInsightsConta(c.meta_ad_account_id, { nivel: "account", datePreset: "last_30d", porDia: false })
         .then((r) => r[0])
         .catch(() => null)
