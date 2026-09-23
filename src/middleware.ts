@@ -62,7 +62,11 @@ export const config = {
   // o logo aparecia quebrado (visto em produção, print de 12/09/2026).
   // api/cron também fica de fora: quem chama é o cron da Vercel, sem sessão de usuário nenhuma —
   // a própria rota confere o CRON_SECRET, não depende desse middleware pra estar protegida.
+  // api/sugestoes/aprovar fica de fora pelo mesmo motivo: é o link clicável do relatório semanal
+  // por e-mail (ver src/lib/email/relatorioSemanal.ts), quem autentica é o token único da
+  // sugestão, não uma sessão logada — a própria rota confere o token antes de aplicar qualquer
+  // coisa.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|icon.png|apple-icon.png|manifest.webmanifest|logo.png|api/cron).*)",
+    "/((?!_next/static|_next/image|favicon.ico|icon.png|apple-icon.png|manifest.webmanifest|logo.png|api/cron|api/sugestoes/aprovar).*)",
   ],
 };

@@ -3,6 +3,14 @@ import { pausarCampanha, definirOrcamentoConjunto } from "@/lib/meta/api";
 
 export type DecisaoSugestao = "aprovar" | "rejeitar";
 
+/** Acha uma sugestão pelo token único (ver smartads_sugestoes.token_aprovacao) — usado pelo link
+ * de aprovação do e-mail semanal, que não tem sessão logada. */
+export async function buscarSugestaoPorToken(token: string) {
+  const supabase = criarClienteAdmin();
+  const { data } = await supabase.from("smartads_sugestoes").select("id, titulo, tipo, status").eq("token_aprovacao", token).single();
+  return data;
+}
+
 /** Aprova ou rejeita uma sugestão do Diagnóstico. Rejeitar só muda o status. Aprovar aplica a
  * ação de verdade quando o tipo é mecanicamente seguro (ajustar_orcamento, pausar_campanha —
  * mesmas funções que a automação por regra já usa, formato de `dados` validado antes de chamar a
