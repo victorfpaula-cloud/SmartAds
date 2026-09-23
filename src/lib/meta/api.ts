@@ -89,14 +89,19 @@ export interface PostInstagram {
   thumbnail_url?: string;
   permalink: string;
   timestamp: string;
+  // Engajamento orgânico — vem direto no objeto da mídia, sem precisar do edge /insights. Usado
+  // pelo Diagnóstico como SINAL de qual criativo/formato priorizar em anúncio pago, nunca como
+  // recomendação de conteúdo orgânico isolada (ver src/lib/diagnostico).
+  like_count?: number;
+  comments_count?: number;
 }
 
 /** Posts recentes de uma conta do Instagram — alimenta o seletor "usar publicação existente" nos
- * modelos Engajamento e Alcance. */
+ * modelos Engajamento e Alcance, e o Diagnóstico (engajamento orgânico por post). */
 export async function listarPostsInstagram(instagramBusinessId: string): Promise<PostInstagram[]> {
   const dados = await chamar<{ data: PostInstagram[] }>(`${instagramBusinessId}/media`, {
     query: {
-      fields: "id,caption,media_type,media_url,thumbnail_url,permalink,timestamp",
+      fields: "id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count",
       limit: 30,
     },
   });
@@ -109,6 +114,54 @@ export async function obterPostInstagram(mediaId: string): Promise<PostInstagram
   return chamar<PostInstagram>(mediaId, {
     query: { fields: "id,caption,media_type,media_url,thumbnail_url,permalink,timestamp" },
   });
+}
+
+export interface ContaInstagramResumo {
+  followers_count?: number;
+  media_count?: number;
+}
+
+/** Seguidores e total de publicações da conta — usado pelo Diagnóstico como ponto de partida do
+ * lado orgânico (crescimento de seguidor entra comparando essa leitura ao longo do tempo, já que
+ * a Meta não devolve histórico de seguidores num único campo). */
+export async function obterResumoContaInstagram(instagramBusinessId: string): Promise<ContaInstagramResumo> {
+  return chamar<ContaInstagramResumo>(instagramBusinessId, {
+    query: { fields: "followers_count,media_count" },
+  });
+}
+
+export interface LinhaInsightInstagram {
+  name: string;
+  period: string;
+  values: Array<{ value: number; end_time?: string }>;
+}
+
+/** Alcance orgânico e visitas ao perfil no período — sinal de quão bem a conta anda performando
+ * sem mídia paga nenhuma envolvida, pro Diagnóstico cruzar com o desempenho pago. `reach` é a
+ * métrica mais estável entre versões da API; `profile_views` pode não estar disponível em toda
+ * conta (a chamada segue mesmo se uma métrica falhar — trata como ausente, não quebra o
+ * diagnóstico inteiro por causa de uma métrica só). */
+export async function obterInsightsContaInstagram(
+  instagramBusinessId: string,
+  diasAtras = 30
+): Promise<{ reach: number; profileViews: number | null }> {
+  try {
+    const dados = await chamar<{ data: LinhaInsightInstagram[] }>(`${instagramBusinessId}/insights`, {
+      query: {
+        metric: "reach,profile_views",
+        period: "day",
+        metric_type: "total_value",
+        since: Math.floor((Date.now() - diasAtras * 86_400_000) / 1000),
+        until: Math.floor(Date.now() / 1000),
+      },
+    });
+    const reach = dados.data.find((linha) => linha.name === "reach")?.values?.[0]?.value ?? 0;
+    const profileViewsLinha = dados.data.find((linha) => linha.name === "profile_views");
+    return { reach, profileViews: profileViewsLinha?.values?.[0]?.value ?? null };
+  } catch {
+    // Conta sem permissão/histórico suficiente pra insights — Diagnóstico segue só com o que tem.
+    return { reach: 0, profileViews: null };
+  }
 }
 
 /** Token de acesso da própria Página — contas que migraram pra "nova experiência de Páginas" da

@@ -5,6 +5,7 @@ import {
   Target,
   ChartLineUp,
   Robot,
+  Compass,
   SignOut,
 } from "@phosphor-icons/react/dist/ssr";
 
@@ -12,6 +13,7 @@ const LINKS = [
   { href: "/contas", label: "Contas", Icone: Buildings },
   { href: "/campanhas", label: "Campanhas", Icone: Megaphone },
   { href: "/publicos", label: "Públicos", Icone: Target },
+  { href: "/estrategias", label: "Estratégias", Icone: Compass },
   { href: "/automacao", label: "Automação", Icone: Robot },
   { href: "/relatorios", label: "Relatórios", Icone: ChartLineUp },
 ];
@@ -70,7 +72,7 @@ export default function Cabecalho({ ativo }: { ativo: string }) {
         className="barra-vidro fixed inset-x-0 bottom-0 z-20 border-t sm:hidden"
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 6px)" }}
       >
-        <div className="grid grid-cols-5">
+        <div className="grid grid-cols-6">
           {LINKS.map(({ href, label, Icone }) => (
             <Link
               key={href}

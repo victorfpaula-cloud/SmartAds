@@ -28,6 +28,10 @@ interface CorpoRequisicao {
   publico: Publico;
   publicoId?: string;
   incluirFacebook: boolean;
+  /** Preenchido quando essa campanha nasce de uma etapa de um Plano de Execução — ao concluir com
+   * sucesso, marca a etapa como 'concluida' no checklist e guarda o id da campanha criada, sem
+   * precisar de um passo manual extra pra "vincular" depois. */
+  planoEtapaId?: string;
   orcamento: {
     tipo: "diario" | "vitalicio";
     valorCentavos: number;
@@ -243,6 +247,13 @@ export async function POST(request: NextRequest) {
       })
       .select()
       .single();
+
+    if (corpo.planoEtapaId && campanhaSalva) {
+      await supabase
+        .from("smartads_plano_etapas")
+        .update({ status: "concluida", campanha_id: campanhaSalva.id, observacao: null })
+        .eq("id", corpo.planoEtapaId);
+    }
 
     await registrarAcao({
       contaId: corpo.contaId,

@@ -44,6 +44,7 @@ export default function FormularioCampanha({
   modelo,
   valoresIniciais,
   etapaInicial = 1,
+  planoEtapaId,
 }: {
   contaId: string;
   clienteId?: string;
@@ -52,6 +53,10 @@ export default function FormularioCampanha({
   modelo: ModeloCampanha;
   valoresIniciais?: ValoresIniciaisCampanha;
   etapaInicial?: number;
+  /** Preenchido quando essa campanha nasce de uma etapa de um Plano de Execução aplicado (ver
+   * /campanhas/nova-do-plano/[planoEtapaId]) — a rota /api/campanhas usa isso pra marcar a etapa
+   * como concluída no checklist automaticamente, sem passo manual extra. */
+  planoEtapaId?: string;
 }) {
   const router = useRouter();
   const [etapa, setEtapa] = useState(etapaInicial);
@@ -202,6 +207,7 @@ export default function FormularioCampanha({
         publico: publicoEfetivo,
         publicoId: modoPublico === "salvo" ? publicoSalvoId : undefined,
         incluirFacebook,
+        planoEtapaId,
         orcamento: {
           tipo: tipoOrcamento,
           valorCentavos,
