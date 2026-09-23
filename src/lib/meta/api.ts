@@ -715,3 +715,50 @@ export async function listarCampanhas(
     proximoCursor: dados.paging?.next ? dados.paging.cursors?.after ?? null : null,
   };
 }
+
+// ============================================================================
+// Diagnóstico temporário — investigando se dá pra buscar o "Fundos disponíveis" real de alguma
+// forma (ver conversa: cálculo por spend_cap deu errado pra contas com Pix). Cada probe é isolado
+// num try/catch próprio, porque um nome de campo inválido derruba a chamada INTEIRA da Meta (ela
+// não ignora campo desconhecido, recusa o request todo) — assim um probe que falha não impede ver
+// o resultado dos outros. Remover depois de decidir o caminho certo.
+// ============================================================================
+
+interface ProbeResultado {
+  ok: boolean;
+  dados?: unknown;
+  erro?: string;
+}
+
+async function probe(fn: () => Promise<unknown>): Promise<ProbeResultado> {
+  try {
+    return { ok: true, dados: await fn() };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export async function obterDiagnosticoSaldoConta(adAccountId: string) {
+  const [camposConhecidos, fundingSourceDetails, spendCapDetalhado, atividades, atividadesBilling] =
+    await Promise.all([
+      probe(() =>
+        chamar(adAccountId, {
+          query: { fields: "balance,amount_spent,spend_cap,currency,account_status,disable_reason" },
+        })
+      ),
+      probe(() => chamar(adAccountId, { query: { fields: "funding_source_details" } })),
+      probe(() => chamar(adAccountId, { query: { fields: "min_campaign_group_spend_cap,min_daily_budget" } })),
+      probe(() =>
+        chamar(`${adAccountId}/activities`, {
+          query: { limit: 40 },
+        })
+      ),
+      probe(() =>
+        chamar(`${adAccountId}/activities`, {
+          query: { limit: 40, event_type: JSON.stringify(["ad_account_billing_charge"]) },
+        })
+      ),
+    ]);
+
+  return { camposConhecidos, fundingSourceDetails, spendCapDetalhado, atividades, atividadesBilling };
+}
