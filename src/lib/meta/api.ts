@@ -739,26 +739,30 @@ async function probe(fn: () => Promise<unknown>): Promise<ProbeResultado> {
 }
 
 export async function obterDiagnosticoSaldoConta(adAccountId: string) {
-  const [camposConhecidos, fundingSourceDetails, spendCapDetalhado, atividades, atividadesBilling] =
-    await Promise.all([
-      probe(() =>
-        chamar(adAccountId, {
-          query: { fields: "balance,amount_spent,spend_cap,currency,account_status,disable_reason" },
-        })
-      ),
-      probe(() => chamar(adAccountId, { query: { fields: "funding_source_details" } })),
-      probe(() => chamar(adAccountId, { query: { fields: "min_campaign_group_spend_cap,min_daily_budget" } })),
-      probe(() =>
-        chamar(`${adAccountId}/activities`, {
-          query: { limit: 40 },
-        })
-      ),
-      probe(() =>
-        chamar(`${adAccountId}/activities`, {
-          query: { limit: 40, event_type: JSON.stringify(["ad_account_billing_charge"]) },
-        })
-      ),
-    ]);
+  const [atividadesComValor, atividadesComFiltro] = await Promise.all([
+    // A rodada anterior achou dois event_type promissores: funding_event_successful (dinheiro
+    // ENTRANDO na conta) e ad_account_billing_charge (dinheiro SAINDO, cobrança quase diária) — mas
+    // sem o valor de cada evento. extra_data/translated_event_type devem carregar isso.
+    probe(() =>
+      chamar(`${adAccountId}/activities`, {
+        query: { limit: 60, fields: "event_type,event_time,extra_data,translated_event_type" },
+      })
+    ),
+    // Teste separado: o `event_type` como query param solto (tentativa anterior) não filtrou nada —
+    // testando a sintaxe de `filters` (igual à usada em outros edges da Marketing API) pra ver se
+    // filtra de verdade, o que ajudaria a paginar só os eventos de dinheiro em vez de tudo.
+    probe(() =>
+      chamar(`${adAccountId}/activities`, {
+        query: {
+          limit: 60,
+          fields: "event_type,event_time,extra_data",
+          filters: JSON.stringify([
+            { field: "event_type", operator: "IN", value: ["ad_account_billing_charge", "funding_event_successful"] },
+          ]),
+        },
+      })
+    ),
+  ]);
 
-  return { camposConhecidos, fundingSourceDetails, spendCapDetalhado, atividades, atividadesBilling };
+  return { atividadesComValor, atividadesComFiltro };
 }
