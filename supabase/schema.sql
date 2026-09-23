@@ -205,6 +205,11 @@ alter table smartads_saude_contas enable row level security;
 alter table smartads_saude_contas add column if not exists campanhas_ativas integer;
 alter table smartads_saude_contas add column if not exists gasto_30d_centavos integer;
 
+-- Soma do orçamento diário de todas as campanhas ativas da conta na Meta — só calculado (e
+-- cacheado, mesmo cache de 1h do selo de saúde) pra contas com boost automático ligado, onde serve
+-- de comparação: quanto do orçamento diário total ativo da conta é o boost automático.
+alter table smartads_saude_contas add column if not exists orcamento_diario_ativo_centavos integer;
+
 -- ============================================================================
 -- Resumo em texto (Gemini) do painel de Relatórios — linha única, reescrita a cada geração (não
 -- guarda histórico de resumos antigos, só o mais recente). Gerado sob demanda (botão na tela),

@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Buildings, Storefront, Sparkle } from "@phosphor-icons/react";
+import { Buildings, Storefront, Sparkle, Lightning, Crown } from "@phosphor-icons/react";
 
 interface ContaResumo {
   id: string;
   nome_exibicao: string | null;
   meta_ad_account_nome: string | null;
   meta_ad_account_id: string;
+  boost_automatico_ativo: boolean;
 }
 
 interface ClienteResumo {
@@ -40,6 +41,11 @@ interface SaudeConta {
   anomalia: Anomalia | null;
   campanhasAtivas: number | null;
   gasto30dCentavos: number | null;
+  orcamentoDiarioAtivoCentavos: number | null;
+  boostCampanhasAtivas: number;
+  boostPrevisaoGastoCentavos: number;
+  boostOrcamentoDiarioCentavos: number;
+  campanhaMaeAtivaNome: string | null;
 }
 
 const COR_SAUDE: Record<SaudeConta["status"], string> = {
@@ -171,6 +177,44 @@ function CardConta({
         <div className="rounded-lg border border-warn/20 bg-warn/5 px-2.5 py-2">
           <p className="text-[11px] leading-relaxed text-warn">{saude.motivo}</p>
           {saude.anomalia && <BotaoExplicarAnomalia contaId={conta.id} />}
+        </div>
+      )}
+
+      {saude?.campanhaMaeAtivaNome && (
+        <div className="flex items-center gap-1.5 rounded-lg border border-indigo-400/20 bg-indigo-400/5 px-2.5 py-1.5 text-[11px] text-indigo-200">
+          <Crown size={12} weight="fill" className="shrink-0" />
+          <span className="truncate">
+            Campanha-Mãe ativa: <span className="font-semibold">{saude.campanhaMaeAtivaNome}</span>
+          </span>
+        </div>
+      )}
+
+      {conta.boost_automatico_ativo && (
+        <div className="rounded-lg border border-white/10 bg-white/[0.02] px-2.5 py-2">
+          <div className="flex items-center gap-1.5 text-[11px] text-neutral-300">
+            <Lightning size={12} weight="fill" className="shrink-0 text-ok" />
+            <span className="font-semibold">Boost automático ligado</span>
+          </div>
+          {!saude ? (
+            <p className="mt-1 text-[11px] text-neutral-600">…</p>
+          ) : saude.boostCampanhasAtivas === 0 ? (
+            <p className="mt-1 text-[11px] text-neutral-500">Nenhuma campanha do boost ativa agora.</p>
+          ) : (
+            <div className="mt-1 flex flex-col gap-0.5 text-[11px] leading-relaxed text-neutral-400">
+              <span>
+                {saude.boostCampanhasAtivas} campanha{saude.boostCampanhasAtivas !== 1 ? "s" : ""} do boost no
+                ar · previsão até encerrar: {formatoReal.format(saude.boostPrevisaoGastoCentavos / 100)}
+              </span>
+              {saude.orcamentoDiarioAtivoCentavos != null && saude.orcamentoDiarioAtivoCentavos > 0 && (
+                <span>
+                  É{" "}
+                  {Math.round((saude.boostOrcamentoDiarioCentavos / saude.orcamentoDiarioAtivoCentavos) * 100)}%
+                  do orçamento diário ativo da conta ({formatoReal.format(saude.orcamentoDiarioAtivoCentavos / 100)}
+                  /dia)
+                </span>
+              )}
+            </div>
+          )}
         </div>
       )}
 
