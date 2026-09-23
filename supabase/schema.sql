@@ -590,3 +590,26 @@ create table if not exists smartads_campanha_mae_criativos (
 
 alter table smartads_campanha_mae_criativos enable row level security;
 create index if not exists smartads_campanha_mae_criativos_campanha_idx on smartads_campanha_mae_criativos(campanha_mae_id);
+
+-- ============================================================================
+-- Cache do Financeiro — calculado 1x/dia pelo cron (ver /api/cron/financeiro), nunca ao vivo numa
+-- visita à tela: evita bater na Meta (e no Supabase) toda vez que alguém abre /financeiro.
+-- ============================================================================
+create table if not exists smartads_financeiro_cache (
+  conta_id uuid primary key references smartads_contas_meta(id) on delete cascade,
+
+  -- Só uma das duas vem preenchida por conta, nunca as duas (ver comentário de SaldoContaMeta em
+  -- src/lib/meta/api.ts): saldo_disponivel pra conta com fundo pré-pago (spend_cap configurado de
+  -- verdade), fatura_em_aberto pra conta pós-paga (cobrada por fatura, sem spend_cap).
+  saldo_disponivel_centavos integer,
+  fatura_em_aberto_centavos integer,
+
+  gasto_7d_centavos integer not null default 0,
+  media_diaria_centavos integer not null default 0,
+  projecao_mensal_centavos integer not null default 0,
+
+  erro text,
+  calculado_em timestamptz not null default now()
+);
+
+alter table smartads_financeiro_cache enable row level security;

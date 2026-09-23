@@ -1,5 +1,5 @@
 import { criarClienteAdmin } from "@/lib/supabase/admin";
-import { obterSaldoConta, obterInsightsConta } from "@/lib/meta/api";
+import { atualizarCacheFinanceiroDaConta } from "@/lib/financeiro/atualizarCacheFinanceiro";
 
 export interface ContaFinanceiro {
   contaId: string;
@@ -8,6 +8,7 @@ export interface ContaFinanceiro {
   clienteNome: string;
   empresaNome: string;
   metaAdAccountId: string;
+  saldoDisponivelCentavos: number | null;
   faturaEmAbertoCentavos: number | null;
   gasto7diasCentavos: number;
   mediaDiariaCentavos: number;
@@ -15,35 +16,36 @@ export interface ContaFinanceiro {
   investimentoPlanejadoCentavos: number;
   ajusteOrcamentoSugeridoCentavos: number;
   linkAdicionarCredito: string;
+  atualizadoEm: string | null;
   erro: string | null;
 }
 
-/** Junta o financeiro de cada conta ativa: fatura em aberto na Meta, ritmo de gasto real dos
- * últimos 7 dias, e quanto já está planejado pra sair mas ainda não começou a gastar (etapas de
- * Plano de Execução aguardando + ajustes de orçamento sugeridos pelo Diagnóstico ainda não
- * decididos).
- *
- * IMPORTANTE — o que `faturaEmAbertoCentavos` NÃO é: não é "quanto de crédito ainda resta pra
- * gastar". É o valor já acumulado desde a última cobrança, que vai virar a PRÓXIMA fatura (é
- * literalmente assim que a Meta descreve o campo `balance` da API). Quem usa fundo pré-pago via
- * Pix na conta (comum no Brasil) tem um saldo de "Fundos" separado dentro do Gerenciador de
- * Anúncios — a Meta não expõe esse número pela API pública, então o SmartAds não tem como buscar
- * sozinho quanto realmente resta disponível. Pra ver isso de verdade, é só abrir o link
- * `linkAdicionarCredito` (já leva direto pra tela de Faturamento, onde "Fundos" aparece). */
+/** Junta o financeiro de cada conta ativa: saldo (disponível ou fatura em aberto, ver
+ * SaldoContaMeta em src/lib/meta/api.ts) e ritmo de gasto dos últimos 7 dias, direto do cache
+ * calculado 1x/dia (smartads_financeiro_cache) — NUNCA bate na Meta ao vivo numa visita normal à
+ * tela, só quando a conta nunca foi cacheada nem uma vez (conta recém-cadastrada, antes do cron
+ * rodar pela primeira vez). Também soma quanto já está planejado mas ainda não começou a gastar
+ * (etapas de Plano de Execução aguardando + ajustes de orçamento sugeridos pelo Diagnóstico ainda
+ * não decididos) — isso sim é sempre ao vivo, é consulta só no Supabase, não na Meta. */
 export async function coletarFinanceiro(): Promise<ContaFinanceiro[]> {
   const supabase = criarClienteAdmin();
 
-  const { data: clientes } = await supabase
-    .from("smartads_clientes")
-    .select("id, nome, ativo, smartads_empresas(nome), smartads_contas_meta(*)")
-    .eq("ativo", true)
-    .order("nome");
+  const [{ data: clientes }, { data: cache }] = await Promise.all([
+    supabase
+      .from("smartads_clientes")
+      .select("id, nome, ativo, smartads_empresas(nome), smartads_contas_meta(*)")
+      .eq("ativo", true)
+      .order("nome"),
+    supabase.from("smartads_financeiro_cache").select("*"),
+  ]);
 
   const contas = (clientes ?? []).flatMap((cliente: any) =>
     ((cliente.smartads_contas_meta ?? []) as any[])
       .filter((c) => c.ativo)
       .map((conta) => ({ cliente, conta }))
   );
+
+  const cachePorConta = new Map((cache ?? []).map((linha) => [linha.conta_id, linha]));
 
   // Investimento planejado ainda não iniciado: soma, por conta, de investimento_total_centavos *
   // percentual_orcamento/100 de cada etapa de Plano de Execução que ainda não terminou.
@@ -82,24 +84,23 @@ export async function coletarFinanceiro(): Promise<ContaFinanceiro[]> {
   return Promise.all(
     contas.map(async ({ cliente, conta }): Promise<ContaFinanceiro> => {
       const idNumerico = conta.meta_ad_account_id.replace(/^act_/, "");
-      let faturaEmAbertoCentavos: number | null = null;
-      let spend7dReais = 0;
-      let erro: string | null = null;
+      let linhaCache = cachePorConta.get(conta.id);
 
-      try {
-        const [saldo, insights] = await Promise.all([
-          obterSaldoConta(conta.meta_ad_account_id),
-          obterInsightsConta(conta.meta_ad_account_id, { nivel: "account", datePreset: "last_7d", porDia: false }),
-        ]);
-        faturaEmAbertoCentavos = saldo.faturaEmAbertoCentavos;
-        spend7dReais = Number(insights[0]?.spend ?? 0);
-      } catch (e) {
-        erro = e instanceof Error ? e.message : "Falha ao buscar dados financeiros na Meta.";
+      // Só bate na Meta aqui se essa conta NUNCA foi cacheada — depois disso é sempre o cron que
+      // atualiza (ver atualizarCacheFinanceiro.ts), mesmo que o cache esteja com um dia de idade.
+      if (!linhaCache) {
+        const resultado = await atualizarCacheFinanceiroDaConta(conta.id, conta.meta_ad_account_id);
+        linhaCache = {
+          conta_id: conta.id,
+          saldo_disponivel_centavos: resultado.saldoDisponivelCentavos,
+          fatura_em_aberto_centavos: resultado.faturaEmAbertoCentavos,
+          gasto_7d_centavos: resultado.gasto7diasCentavos,
+          media_diaria_centavos: resultado.mediaDiariaCentavos,
+          projecao_mensal_centavos: resultado.projecaoMensalCentavos,
+          erro: resultado.erro,
+          calculado_em: resultado.calculadoEm,
+        };
       }
-
-      const gasto7diasCentavos = Math.round(spend7dReais * 100);
-      const mediaDiariaCentavos = Math.round(gasto7diasCentavos / 7);
-      const projecaoMensalCentavos = mediaDiariaCentavos * 30;
 
       return {
         contaId: conta.id,
@@ -108,10 +109,11 @@ export async function coletarFinanceiro(): Promise<ContaFinanceiro[]> {
         clienteNome: cliente.nome,
         empresaNome: cliente.smartads_empresas?.nome ?? "—",
         metaAdAccountId: conta.meta_ad_account_id,
-        faturaEmAbertoCentavos,
-        gasto7diasCentavos,
-        mediaDiariaCentavos,
-        projecaoMensalCentavos,
+        saldoDisponivelCentavos: linhaCache.saldo_disponivel_centavos ?? null,
+        faturaEmAbertoCentavos: linhaCache.fatura_em_aberto_centavos ?? null,
+        gasto7diasCentavos: linhaCache.gasto_7d_centavos ?? 0,
+        mediaDiariaCentavos: linhaCache.media_diaria_centavos ?? 0,
+        projecaoMensalCentavos: linhaCache.projecao_mensal_centavos ?? 0,
         investimentoPlanejadoCentavos: planejadoPorConta.get(conta.id) ?? 0,
         ajusteOrcamentoSugeridoCentavos: ajustePorConta.get(conta.id) ?? 0,
         // Não existe API pública da Meta pra criar a cobrança Pix por fora — quem gera o QR code é
@@ -119,7 +121,8 @@ export async function coletarFinanceiro(): Promise<ContaFinanceiro[]> {
         // conta certa (onde "Fundos" também aparece), poupando o trabalho de achar a conta certa
         // entre várias.
         linkAdicionarCredito: `https://www.facebook.com/ads/manager/account_settings/account_billing/?act=${idNumerico}`,
-        erro,
+        atualizadoEm: linhaCache.calculado_em ?? null,
+        erro: linhaCache.erro ?? null,
       };
     })
   );
