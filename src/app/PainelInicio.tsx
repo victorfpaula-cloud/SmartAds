@@ -1,0 +1,236 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { Buildings, Storefront, Sparkle } from "@phosphor-icons/react";
+
+interface ContaResumo {
+  id: string;
+  nome_exibicao: string | null;
+  meta_ad_account_nome: string | null;
+  meta_ad_account_id: string;
+}
+
+interface ClienteResumo {
+  id: string;
+  nome: string;
+  ativo: boolean;
+  smartads_contas_meta: ContaResumo[];
+}
+
+interface EmpresaResumo {
+  id: string;
+  nome: string;
+  tipo: "individual" | "franquia";
+  smartads_clientes: ClienteResumo[];
+}
+
+interface Anomalia {
+  metrica: "frequencia" | "ctr" | "cpm" | "cpc" | "spend";
+  rotulo: string;
+  valorAtual: number;
+  valorAnterior: number;
+  deltaPercentual: number;
+  mensagem: string;
+}
+
+interface SaudeConta {
+  status: "boa" | "atencao" | "sem_dados";
+  motivo: string;
+  anomalia: Anomalia | null;
+  campanhasAtivas: number | null;
+  gasto30dCentavos: number | null;
+}
+
+const COR_SAUDE: Record<SaudeConta["status"], string> = {
+  boa: "bg-ok",
+  atencao: "bg-warn",
+  sem_dados: "bg-neutral-600",
+};
+
+const formatoReal = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+
+/** A dashboard de verdade do app — cards compactos em grade (não uma lista vertical que engole a
+ * tela toda) mostrando, por conta: saúde, campanhas ativas e gasto dos últimos 30 dias — dados
+ * que antes só apareciam em Contas, mas que fazem mais sentido aqui, na tela de "o que fazer
+ * agora" (Contas virou só cadastro/conexão). Os números chegam depois do primeiro paint (mesma
+ * lógica que já existia em Contas) pra não travar a tela esperando a Meta responder pra 8+ contas
+ * de uma vez. */
+export default function PainelInicio({ empresas }: { empresas: EmpresaResumo[] }) {
+  const [saude, setSaude] = useState<Record<string, SaudeConta>>({});
+
+  useEffect(() => {
+    fetch("/api/saude")
+      .then((r) => r.json())
+      .then((corpo) => setSaude(corpo.saude ?? {}))
+      .catch(() => {});
+  }, []);
+
+  return (
+    <div className="mt-6 flex flex-col gap-4">
+      {empresas.map((empresa) => {
+        const clientesAtivos = empresa.smartads_clientes.filter((c) => c.ativo);
+        const totalContas = clientesAtivos.reduce((soma, c) => soma + c.smartads_contas_meta.length, 0);
+        const Icone = empresa.tipo === "franquia" ? Buildings : Storefront;
+
+        return (
+          <section key={empresa.id} className="cartao-vidro overflow-hidden">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 px-5 py-3.5">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-neutral-300">
+                  <Icone size={16} weight="fill" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-semibold text-neutral-100">{empresa.nome}</h2>
+                  <p className="text-[11px] text-neutral-500">
+                    {empresa.tipo === "franquia"
+                      ? `Franquia · ${clientesAtivos.length} unidade${clientesAtivos.length !== 1 ? "s" : ""}`
+                      : "Empresa individual"}
+                    {" · "}
+                    {totalContas} conta{totalContas !== 1 ? "s" : ""} de anúncio
+                  </p>
+                </div>
+              </div>
+              {empresa.tipo === "franquia" && (
+                <Link
+                  href="/estrategias"
+                  className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-accent-strong"
+                >
+                  Central da rede
+                </Link>
+              )}
+            </div>
+
+            {totalContas === 0 ? (
+              <p className="px-5 py-5 text-sm text-neutral-500">
+                Nenhuma conta de anúncio associada ainda —{" "}
+                <Link href="/contas" className="text-accent-strong hover:underline">
+                  associar agora
+                </Link>
+                .
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 lg:grid-cols-3">
+                {clientesAtivos.flatMap((cliente) =>
+                  cliente.smartads_contas_meta.map((conta) => (
+                    <CardConta key={conta.id} cliente={cliente} conta={conta} saude={saude[conta.id]} />
+                  ))
+                )}
+              </div>
+            )}
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+function CardConta({
+  cliente,
+  conta,
+  saude,
+}: {
+  cliente: ClienteResumo;
+  conta: ContaResumo;
+  saude?: SaudeConta;
+}) {
+  return (
+    <div className="cartao-vidro-interno flex flex-col gap-3 p-4">
+      <div>
+        <div className="flex items-center gap-2">
+          <span
+            className={`h-2 w-2 shrink-0 rounded-full ${saude ? COR_SAUDE[saude.status] : "bg-neutral-700"}`}
+          />
+          <p className="truncate text-sm font-semibold text-neutral-100">{cliente.nome}</p>
+        </div>
+        <p className="mt-0.5 truncate pl-4 text-xs text-neutral-500">
+          {conta.nome_exibicao || conta.meta_ad_account_nome || conta.meta_ad_account_id}
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 border-t border-white/10 pt-2.5 text-xs">
+        <div>
+          <p className="text-neutral-500">Campanhas ativas</p>
+          <p className="mt-0.5 font-semibold text-neutral-200">
+            {saude?.campanhasAtivas ?? <span className="text-neutral-600">…</span>}
+          </p>
+        </div>
+        <div>
+          <p className="text-neutral-500">Gasto (30d)</p>
+          <p className="mt-0.5 font-semibold text-neutral-200">
+            {saude?.gasto30dCentavos != null ? (
+              formatoReal.format(saude.gasto30dCentavos / 100)
+            ) : (
+              <span className="text-neutral-600">…</span>
+            )}
+          </p>
+        </div>
+      </div>
+
+      {saude?.status === "atencao" && (
+        <div className="rounded-lg border border-warn/20 bg-warn/5 px-2.5 py-2">
+          <p className="text-[11px] leading-relaxed text-warn">{saude.motivo}</p>
+          {saude.anomalia && <BotaoExplicarAnomalia contaId={conta.id} />}
+        </div>
+      )}
+
+      <div className="mt-auto flex items-center gap-3 border-t border-white/10 pt-2.5 text-xs">
+        <Link href={`/campanhas/nova/${conta.id}`} className="font-semibold text-accent-strong hover:underline">
+          Nova campanha
+        </Link>
+        <Link href={`/estrategias/diagnostico/${conta.id}`} className="font-semibold text-accent-strong hover:underline">
+          Diagnóstico
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+/** Explicação em texto (Gemini) pra uma anomalia já detectada — some por trás de um clique porque
+ * é a única chamada de IA que rodaria sem o dono pedir (as outras têm botão "gerar" bem visível);
+ * aqui o gasto de token só acontece se alguém realmente quiser entender o "porquê". */
+function BotaoExplicarAnomalia({ contaId }: { contaId: string }) {
+  const [texto, setTexto] = useState<string | null>(null);
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  async function explicar() {
+    setCarregando(true);
+    setErro(null);
+    const resposta = await fetch("/api/ia/explicar-anomalia", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contaId }),
+    });
+    const corpo = await resposta.json();
+    setCarregando(false);
+
+    if (resposta.ok) {
+      setTexto(corpo.texto);
+    } else {
+      setErro(corpo.erro || "Falha ao gerar a explicação.");
+    }
+  }
+
+  if (texto) {
+    return (
+      <p className="mt-1.5 flex items-start gap-1.5 text-[11px] leading-relaxed text-neutral-300">
+        <Sparkle size={12} weight="fill" className="mt-0.5 shrink-0 text-indigo-300" />
+        {texto}
+      </p>
+    );
+  }
+
+  return (
+    <>
+      <button
+        onClick={explicar}
+        disabled={carregando}
+        className="mt-1 text-[11px] font-medium text-accent-strong hover:underline disabled:opacity-50"
+      >
+        {carregando ? "Explicando…" : "Por quê? (IA)"}
+      </button>
+      {erro && <p className="mt-1 text-[11px] text-danger">{erro}</p>}
+    </>
+  );
+}
