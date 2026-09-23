@@ -2,9 +2,31 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { Crown, Gauge, ListChecks, type Icon } from "@phosphor-icons/react";
 import { MODELOS_CAMPANHA } from "@/lib/meta/modelos";
 import type { TipoModeloCampanha } from "@/lib/meta/tipos";
 import type { Estrategia } from "@/lib/estrategias/tipos";
+
+const ATALHOS: { href: string; nome: string; descricao: string; Icone: Icon }[] = [
+  {
+    href: "/estrategias/campanhas-mae",
+    nome: "Campanhas-Mãe",
+    descricao: "O padrão oficial de campanha da rede, aplicado em quantas unidades você quiser.",
+    Icone: Crown,
+  },
+  {
+    href: "/estrategias/semaforo",
+    nome: "Semáforo das unidades",
+    descricao: "Quais unidades estão indo bem e quais precisam de atenção agora.",
+    Icone: Gauge,
+  },
+  {
+    href: "/estrategias/planos",
+    nome: "Planos já aplicados",
+    descricao: "Toda aplicação de Estratégia em andamento, unidade por unidade.",
+    Icone: ListChecks,
+  },
+];
 
 interface EtapaForm {
   nomeEtapa: string;
@@ -94,28 +116,22 @@ export default function PainelEstrategias() {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-        <Link
-          href="/estrategias/campanhas-mae"
-          className="cartao-vidro-interno flex items-center justify-between px-4 py-3 text-sm font-medium text-neutral-200 hover:border-accent/40"
-        >
-          Campanhas-Mãe
-          <span className="text-neutral-500">→</span>
-        </Link>
-        <Link
-          href="/estrategias/semaforo"
-          className="cartao-vidro-interno flex items-center justify-between px-4 py-3 text-sm font-medium text-neutral-200 hover:border-accent/40"
-        >
-          Semáforo das unidades
-          <span className="text-neutral-500">→</span>
-        </Link>
-        <Link
-          href="/estrategias/planos"
-          className="cartao-vidro-interno flex items-center justify-between px-4 py-3 text-sm font-medium text-neutral-200 hover:border-accent/40"
-        >
-          Planos já aplicados
-          <span className="text-neutral-500">→</span>
-        </Link>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {ATALHOS.map(({ href, nome, descricao, Icone }) => (
+          <Link
+            key={href}
+            href={href}
+            className="cartao-vidro flex flex-col gap-2.5 p-4 transition hover:border-accent/40"
+          >
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/[0.06] text-neutral-300">
+              <Icone size={18} weight="regular" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-neutral-100">{nome}</p>
+              <p className="mt-0.5 text-xs leading-relaxed text-neutral-500">{descricao}</p>
+            </div>
+          </Link>
+        ))}
       </div>
 
       <section className="cartao-vidro overflow-hidden">
