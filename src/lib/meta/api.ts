@@ -66,6 +66,37 @@ export async function listarContasDeAnuncio(): Promise<ContaDeAnuncioMeta[]> {
   return dados.data;
 }
 
+export interface SaldoContaMeta {
+  /** Saldo pré-pago atual em centavos — só existe pra conta configurada com Pix/cartão pré-pago
+   * na própria Meta; conta pós-paga (fatura) não tem esse conceito, então vem `null`. */
+  saldoCentavos: number | null;
+  /** Gasto acumulado da conta desde sempre (lifetime), em centavos — a Meta devolve isso em
+   * centavos, diferente do campo `spend` dos insights (que já vem em reais). */
+  gastoAcumuladoCentavos: number;
+  spendCapCentavos: number | null;
+  moeda: string;
+}
+
+/** Saldo/teto de gasto da própria conta de anúncio na Meta — pra saber quanto de crédito
+ * pré-pago ainda resta sem precisar manter um "caixa" próprio: o crédito de cada unidade já cai
+ * direto na conta dela na Meta (via Pix, feito pelo próprio Gerenciador de Anúncios), então a
+ * Meta é a fonte da verdade do saldo, não o SmartAds. */
+export async function obterSaldoConta(adAccountId: string): Promise<SaldoContaMeta> {
+  const dados = await chamar<{
+    balance?: string;
+    amount_spent?: string;
+    spend_cap?: string;
+    currency?: string;
+  }>(adAccountId, { query: { fields: "balance,amount_spent,spend_cap,currency" } });
+
+  return {
+    saldoCentavos: dados.balance != null ? Number(dados.balance) : null,
+    gastoAcumuladoCentavos: Number(dados.amount_spent ?? 0),
+    spendCapCentavos: dados.spend_cap != null ? Number(dados.spend_cap) : null,
+    moeda: dados.currency ?? "BRL",
+  };
+}
+
 export interface PaginaMeta {
   id: string;
   name: string;
