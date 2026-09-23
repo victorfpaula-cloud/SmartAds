@@ -1,19 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { NotePencil, TestTube, X } from "@phosphor-icons/react";
 
-interface ContaMeta {
-  id: string;
-  meta_ad_account_nome: string | null;
-  nome_exibicao: string | null;
-}
-interface Cliente {
-  id: string;
-  nome: string;
-  smartads_contas_meta: ContaMeta[];
-}
 interface Campanha {
   id: string;
   name: string;
@@ -44,33 +34,22 @@ function formatarReais(centavosTexto?: string): string {
   return `R$ ${(Number(centavosTexto) / 100).toFixed(2).replace(".", ",")}`;
 }
 
-export default function PainelCampanhas({ clientes }: { clientes: Cliente[] }) {
-  const clientesComConta = clientes.filter((c) => c.smartads_contas_meta.length > 0);
-  const [clienteId, setClienteId] = useState(clientesComConta[0]?.id ?? "");
-  const [contaId, setContaId] = useState(clientesComConta[0]?.smartads_contas_meta[0]?.id ?? "");
+/** Campanhas de UMA conta só (a escolha de qual conta acontece antes, em /campanhas) — gasto
+ * mostrado é dos últimos 30 dias, e por padrão só aparece o que está ativo ou teve gasto nesse
+ * período. O resto (campanhas antigas, zeradas há meses) fica escondido atrás de "Ver todas", pra
+ * não competir por atenção com o que importa agora — antes a lista misturava tudo junto, direto. */
+export default function PainelCampanhasDaConta({ contaId }: { contaId: string }) {
   const [campanhas, setCampanhas] = useState<Campanha[]>([]);
   const [proximoCursor, setProximoCursor] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [carregandoMais, setCarregandoMais] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [executando, setExecutando] = useState<string | null>(null);
+  const [verTodas, setVerTodas] = useState(false);
   const [campanhaComNotas, setCampanhaComNotas] = useState<Campanha | null>(null);
   const [campanhaParaTeste, setCampanhaParaTeste] = useState<Campanha | null>(null);
 
-  const contasDoCliente = clientesComConta.find((c) => c.id === clienteId)?.smartads_contas_meta ?? [];
-
-  useEffect(() => {
-    if (!contasDoCliente.some((c) => c.id === contaId)) {
-      setContaId(contasDoCliente[0]?.id ?? "");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clienteId]);
-
-  // Paginado (10 por vez) — contas com muitas campanhas travavam a tela carregando tudo de uma
-  // vez só. `carregar()` recarrega a primeira página do zero; `carregarMais()` busca a próxima
-  // leva e acrescenta na lista.
   function carregar() {
-    if (!contaId) return;
     setCarregando(true);
     setErro(null);
     fetch(`/api/campanhas/status?contaId=${contaId}`)
@@ -85,7 +64,7 @@ export default function PainelCampanhas({ clientes }: { clientes: Cliente[] }) {
   }
 
   function carregarMais() {
-    if (!contaId || !proximoCursor) return;
+    if (!proximoCursor) return;
     setCarregandoMais(true);
     fetch(`/api/campanhas/status?contaId=${contaId}&after=${proximoCursor}`)
       .then(async (r) => {
@@ -102,6 +81,13 @@ export default function PainelCampanhas({ clientes }: { clientes: Cliente[] }) {
     carregar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contaId]);
+
+  const campanhasRelevantes = useMemo(
+    () => campanhas.filter((c) => c.effective_status === "ACTIVE" || Number(c.spend) > 0),
+    [campanhas]
+  );
+  const campanhasExibidas = verTodas ? campanhas : campanhasRelevantes;
+  const escondidas = campanhas.length - campanhasRelevantes.length;
 
   async function alternarStatus(campanha: Campanha) {
     const pausada = campanha.effective_status !== "ACTIVE";
@@ -150,50 +136,31 @@ export default function PainelCampanhas({ clientes }: { clientes: Cliente[] }) {
     }
   }
 
-  if (clientesComConta.length === 0) {
-    return (
-      <p className="cartao-vidro px-5 py-6 text-sm text-neutral-400">
-        Associe uma conta de anúncio em Contas primeiro.
-      </p>
-    );
-  }
-
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap gap-3">
-        <select
-          value={clienteId}
-          onChange={(e) => setClienteId(e.target.value)}
-          className="h-10 rounded-lg border border-white/14 bg-ink-850 px-3 text-sm text-neutral-100"
-        >
-          {clientesComConta.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.nome}
-            </option>
-          ))}
-        </select>
-        <select
-          value={contaId}
-          onChange={(e) => setContaId(e.target.value)}
-          className="h-10 rounded-lg border border-white/14 bg-ink-850 px-3 text-sm text-neutral-100"
-        >
-          {contasDoCliente.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.nome_exibicao || c.meta_ad_account_nome}
-            </option>
-          ))}
-        </select>
-      </div>
-
       {erro && (
         <div className="rounded-lg border border-danger/30 bg-danger/10 px-4 py-2.5 text-sm text-danger">{erro}</div>
       )}
 
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-neutral-500">Gasto dos últimos 30 dias.</p>
+        {escondidas > 0 && (
+          <button
+            onClick={() => setVerTodas(!verTodas)}
+            className="text-xs font-medium text-accent-strong hover:underline"
+          >
+            {verTodas ? "Ver só ativas/recentes" : `Ver todas (+${escondidas} antiga${escondidas !== 1 ? "s" : ""})`}
+          </button>
+        )}
+      </div>
+
       <div className="cartao-vidro overflow-hidden">
         {carregando ? (
           <p className="px-5 py-8 text-center text-sm text-neutral-500">Carregando campanhas…</p>
-        ) : campanhas.length === 0 ? (
-          <p className="px-5 py-8 text-center text-sm text-neutral-500">Nenhuma campanha nessa conta ainda.</p>
+        ) : campanhasExibidas.length === 0 ? (
+          <p className="px-5 py-8 text-center text-sm text-neutral-500">
+            {campanhas.length === 0 ? "Nenhuma campanha nessa conta ainda." : "Nenhuma campanha ativa ou recente."}
+          </p>
         ) : (
           <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] text-left text-sm">
@@ -203,12 +170,12 @@ export default function PainelCampanhas({ clientes }: { clientes: Cliente[] }) {
                 <th className="px-4 py-3 font-medium">Tipo</th>
                 <th className="px-4 py-3 font-medium">Status</th>
                 <th className="px-4 py-3 font-medium">Orçamento</th>
-                <th className="px-4 py-3 font-medium">Gasto</th>
+                <th className="px-4 py-3 font-medium">Gasto (30d)</th>
                 <th className="px-4 py-3 font-medium"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
-              {campanhas.map((campanha) => (
+              {campanhasExibidas.map((campanha) => (
                 <tr key={campanha.id}>
                   <td className="px-4 py-3 font-medium text-neutral-100">{campanha.name}</td>
                   <td className="px-4 py-3 text-neutral-400">
@@ -283,7 +250,10 @@ export default function PainelCampanhas({ clientes }: { clientes: Cliente[] }) {
         </button>
       )}
 
-      <Link href="/campanhas/nova" className="w-fit rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-strong">
+      <Link
+        href={`/campanhas/nova/${contaId}`}
+        className="w-fit rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-strong"
+      >
         + Nova campanha
       </Link>
 

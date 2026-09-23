@@ -29,10 +29,11 @@ export async function GET(request: NextRequest) {
   try {
     const [{ campanhas, proximoCursor }, insights, { data: cache }] = await Promise.all([
       listarCampanhas(conta.meta_ad_account_id, { after }),
-      // `porDia: false` agrega tudo num total só por campanha — sem isso, "maximum" (todo o
-      // histórico) devolvia uma linha POR DIA de cada campanha, o que travava a tela em contas
-      // com muitas campanhas rodando há meses (achado em 12/09/2026 testando com conta real).
-      obterInsightsConta(conta.meta_ad_account_id, { nivel: "campaign", datePreset: "maximum", porDia: false }),
+      // Últimos 30 dias, não a vida inteira da campanha — é o que a tela usa tanto pra mostrar
+      // "Gasto (30d)" quanto pra decidir o que é "relevante agora" (ver PainelCampanhasDaConta,
+      // filtro padrão ativa-ou-com-gasto-recente). `porDia: false` agrega num total só por
+      // campanha — sem isso vinha uma linha POR DIA, travando a tela em contas com muita campanha.
+      obterInsightsConta(conta.meta_ad_account_id, { nivel: "campaign", datePreset: "last_30d", porDia: false }),
       supabase
         .from("smartads_campanhas_criadas")
         .select("id, meta_campaign_id, meta_adset_id, tipo_modelo, meta_ad_ids")

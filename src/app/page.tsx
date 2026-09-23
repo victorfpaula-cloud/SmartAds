@@ -49,9 +49,10 @@ export default async function Home() {
       <main className="mx-auto max-w-6xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="font-display text-2xl font-bold">Suas empresas</h1>
+            <h1 className="font-display text-2xl font-bold">Início</h1>
             <p className="mt-1 text-sm text-neutral-400">
-              Selecione uma unidade pra criar campanhas, ver diagnóstico ou dados.
+              O que fazer agora, por unidade — criar campanha, ver diagnóstico. Pra cadastrar
+              cliente novo ou conectar a Meta, isso é em Contas.
             </p>
           </div>
           <Link
