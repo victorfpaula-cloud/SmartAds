@@ -35,27 +35,6 @@ interface StatusMeta {
   ultimo_erro?: string | null;
 }
 
-interface Anomalia {
-  metrica: "frequencia" | "ctr" | "cpm" | "cpc" | "spend";
-  rotulo: string;
-  valorAtual: number;
-  valorAnterior: number;
-  deltaPercentual: number;
-  mensagem: string;
-}
-
-interface SaudeConta {
-  status: "boa" | "atencao" | "sem_dados";
-  motivo: string;
-  anomalia: Anomalia | null;
-}
-
-const COR_SAUDE: Record<SaudeConta["status"], string> = {
-  boa: "bg-ok",
-  atencao: "bg-warn",
-  sem_dados: "bg-neutral-600",
-};
-
 interface ContaDisponivel {
   id: string;
   name: string;
@@ -73,14 +52,12 @@ export default function PainelContas({
   clientesIniciais,
   empresasIniciais,
   statusMetaInicial,
-  anunciosPorConta,
   avisoConexao,
   mensagemErro,
 }: {
   clientesIniciais: Cliente[];
   empresasIniciais: Empresa[];
   statusMetaInicial: StatusMeta;
-  anunciosPorConta: Record<string, number>;
   avisoConexao: "conectado" | "erro" | null;
   mensagemErro?: string;
 }) {
@@ -93,17 +70,6 @@ export default function PainelContas({
   const [tipoNovaEmpresa, setTipoNovaEmpresa] = useState<"individual" | "franquia">("individual");
   const [criandoCliente, setCriandoCliente] = useState(false);
   const [clienteExpandidoId, setClienteExpandidoId] = useState<string | null>(null);
-  const [saude, setSaude] = useState<Record<string, SaudeConta>>({});
-
-  // Selo de saúde por conta — busca depois da tela já ter mostrado alguma coisa (não trava o
-  // carregamento inicial) e só se a Meta estiver conectada, senão a rota nem tem o que calcular.
-  useEffect(() => {
-    if (!statusMeta.conectado) return;
-    fetch("/api/saude")
-      .then((r) => r.json())
-      .then((corpo) => setSaude(corpo.saude ?? {}))
-      .catch(() => {});
-  }, [statusMeta.conectado]);
 
   async function criarCliente(evento: React.FormEvent) {
     evento.preventDefault();
@@ -317,11 +283,6 @@ export default function PainelContas({
                     {cliente.smartads_contas_meta.map((conta) => (
                       <div key={conta.id} className="selo-vidro px-3 py-2 text-xs text-neutral-400">
                         <div className="flex items-center gap-2">
-                          {saude[conta.id] && (
-                            <span
-                              className={`h-2 w-2 shrink-0 rounded-full ${COR_SAUDE[saude[conta.id].status]}`}
-                            />
-                          )}
                           <span className="font-medium text-neutral-200">
                             {conta.nome_exibicao || conta.meta_ad_account_nome || conta.meta_ad_account_id}
                           </span>
@@ -333,30 +294,6 @@ export default function PainelContas({
                             </span>
                           )}
                         </div>
-
-                        {saude[conta.id]?.status === "atencao" && (
-                          <div className="mt-1.5 pl-4">
-                            <p className="text-[11px] leading-relaxed text-warn">{saude[conta.id].motivo}</p>
-                            {saude[conta.id].anomalia && (
-                              <BotaoExplicarAnomalia contaId={conta.id} />
-                            )}
-                          </div>
-                        )}
-
-                        {(() => {
-                          const total = anunciosPorConta[conta.id] ?? 0;
-                          // Só o suficiente pra avisar, não pra alarmar — o piso de 15 é o que a
-                          // pesquisa de mercado apontou como faixa saudável de diversidade de
-                          // criativo pro algoritmo de entrega de 2026 (ver conversa de definição).
-                          if (total === 0 || total >= 15) return null;
-                          return (
-                            <p className="mt-1.5 pl-4 text-[11px] text-neutral-500">
-                              {total} anúncio{total > 1 ? "s" : ""} criado{total > 1 ? "s" : ""} aqui pelo
-                              SmartAds — o algoritmo de 2026 testa melhor com 15+ variações de criativo
-                              ativas por conta.
-                            </p>
-                          );
-                        })()}
                       </div>
                     ))}
                   </div>
@@ -469,55 +406,6 @@ function AvisoCAPI() {
         ×
       </button>
     </div>
-  );
-}
-
-/** Explicação em texto (Gemini) pra uma anomalia já detectada — some por trás de um clique
- * porque é a única chamada de IA que rodaria sem o dono pedir (as outras têm botão "gerar" bem
- * visível); aqui o gasto de token só acontece se alguém realmente quiser entender o "porquê". */
-function BotaoExplicarAnomalia({ contaId }: { contaId: string }) {
-  const [texto, setTexto] = useState<string | null>(null);
-  const [carregando, setCarregando] = useState(false);
-  const [erro, setErro] = useState<string | null>(null);
-
-  async function explicar() {
-    setCarregando(true);
-    setErro(null);
-    const resposta = await fetch("/api/ia/explicar-anomalia", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contaId }),
-    });
-    const corpo = await resposta.json();
-    setCarregando(false);
-
-    if (resposta.ok) {
-      setTexto(corpo.texto);
-    } else {
-      setErro(corpo.erro || "Falha ao gerar a explicação.");
-    }
-  }
-
-  if (texto) {
-    return (
-      <p className="mt-1.5 flex items-start gap-1.5 text-[11px] leading-relaxed text-neutral-300">
-        <Sparkle size={12} weight="fill" className="mt-0.5 shrink-0 text-indigo-300" />
-        {texto}
-      </p>
-    );
-  }
-
-  return (
-    <>
-      <button
-        onClick={explicar}
-        disabled={carregando}
-        className="mt-1 text-[11px] font-medium text-accent-strong hover:underline disabled:opacity-50"
-      >
-        {carregando ? "Explicando…" : "Por quê? (IA)"}
-      </button>
-      {erro && <p className="mt-1 text-[11px] text-danger">{erro}</p>}
-    </>
   );
 }
 

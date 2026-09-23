@@ -11,7 +11,7 @@ export default async function ContasPage({
 }) {
   const supabase = criarClienteAdmin();
 
-  const [{ data: clientes }, { data: statusMeta }, { data: campanhas }, { data: empresas }] = await Promise.all([
+  const [{ data: clientes }, { data: statusMeta }, { data: empresas }] = await Promise.all([
     supabase
       .from("smartads_clientes")
       .select("*, smartads_empresas(id, nome, tipo), smartads_contas_meta(*)")
@@ -21,19 +21,8 @@ export default async function ContasPage({
       .select("conectado, meta_user_nome, token_expira_em, ultimo_erro")
       .eq("id", "default")
       .single(),
-    supabase.from("smartads_campanhas_criadas").select("conta_id, meta_ad_ids"),
     supabase.from("smartads_empresas").select("id, nome, tipo").order("nome"),
   ]);
-
-  // Quantos anúncios o SmartAds já criou por conta — proxy honesto de diversidade de criativo
-  // (não é a contagem real da Meta, que incluiria anúncios feitos fora do app; é só o que a gente
-  // sabe). Soma o tamanho de cada array meta_ad_ids (1 por variação de imagem, ver PR de
-  // múltiplas imagens) agrupado por conta.
-  const anunciosPorConta: Record<string, number> = {};
-  for (const linha of campanhas ?? []) {
-    const quantidade = Array.isArray(linha.meta_ad_ids) ? linha.meta_ad_ids.length : 0;
-    anunciosPorConta[linha.conta_id] = (anunciosPorConta[linha.conta_id] ?? 0) + quantidade;
-  }
 
   return (
     <>
@@ -43,7 +32,6 @@ export default async function ContasPage({
           clientesIniciais={clientes ?? []}
           empresasIniciais={empresas ?? []}
           statusMetaInicial={statusMeta ?? { conectado: false }}
-          anunciosPorConta={anunciosPorConta}
           avisoConexao={
             searchParams.meta_conectado ? "conectado" : searchParams.meta_erro ? "erro" : null
           }

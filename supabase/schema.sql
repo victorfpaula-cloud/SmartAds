@@ -198,6 +198,13 @@ create table if not exists smartads_saude_contas (
 
 alter table smartads_saude_contas enable row level security;
 
+-- Reaproveita o MESMO cache de 1h do selo de saúde pra também guardar os números que viraram a
+-- dashboard inicial (quantas campanhas tiveram atividade nos últimos 30 dias, quanto foi gasto) —
+-- sem isso teria que bater na Meta de novo só pra esses dois números, com uma janela de cache
+-- diferente da do selo, dessincronizando os dois à toa.
+alter table smartads_saude_contas add column if not exists campanhas_ativas integer;
+alter table smartads_saude_contas add column if not exists gasto_30d_centavos integer;
+
 -- ============================================================================
 -- Resumo em texto (Gemini) do painel de Relatórios — linha única, reescrita a cada geração (não
 -- guarda histórico de resumos antigos, só o mais recente). Gerado sob demanda (botão na tela),

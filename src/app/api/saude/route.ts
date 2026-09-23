@@ -7,8 +7,8 @@ import { detectarAnomalia, janelasDeComparacao, type Anomalia } from "@/lib/anom
 export const dynamic = "force-dynamic";
 
 // Cache do selo por 1h — não precisa ser em tempo real (é só um sinal de "olha aqui", não um
-// número que alguém vai conferir centavo a centavo), e evita bater na Meta toda vez que a tela de
-// Contas é aberta.
+// número que alguém vai conferir centavo a centavo), e evita bater na Meta toda vez que a tela
+// inicial é aberta.
 const VALIDADE_MS = 60 * 60 * 1000;
 
 interface SaudeContaResultado {
@@ -16,16 +16,22 @@ interface SaudeContaResultado {
   status: string;
   motivo: string;
   anomalia: Anomalia | null;
+  campanhasAtivas: number | null;
+  gasto30dCentavos: number | null;
 }
 
-/** Selo de saúde por conta (Contas) — devolve o cache pra cada conta, recalculando primeiro as
- * que estão velhas ou nunca foram calculadas. Uma conta com erro individual (token revogado,
- * conta pausada etc.) não derruba as outras — some da resposta, o front mantém o selo anterior ou
- * mostra "sem dados".
+/** Selo de saúde + números da dashboard inicial (campanhas com atividade nos últimos 30 dias,
+ * quanto foi gasto nesse período) — MESMO cache de 1h pros dois, calculados juntos porque as
+ * chamadas à Meta que um precisa são baratas de somar à do outro. Recalcula primeiro as contas
+ * que estão com cache velho ou nunca calculadas. Uma conta com erro individual (token revogado,
+ * conta pausada etc.) não derruba as outras — some da resposta, o front mantém o valor anterior
+ * ou mostra "sem dados".
  *
- * Compara o período atual com o anterior (ver src/lib/anomalia.ts) — quando algo foge do normal,
- * essa comparação vence o limiar simples (src/lib/saude.ts) porque é mais específica e acionável
- * ("CTR caiu 45%" diz mais que "CTR baixo"). */
+ * O selo de saúde compara o período atual com o anterior (ver src/lib/anomalia.ts) — quando algo
+ * foge do normal, essa comparação vence o limiar simples (src/lib/saude.ts) porque é mais
+ * específica e acionável ("CTR caiu 45%" diz mais que "CTR baixo"). Já "campanhasAtivas" é a
+ * contagem de campanhas com QUALQUER atividade nos últimos 30 dias (mesma definição usada pra
+ * filtrar a lista em /campanhas/conta/[contaId] — uma campanha pausada há 6 meses não conta). */
 export async function GET() {
   const supabase = criarClienteAdmin();
 
@@ -54,11 +60,13 @@ export async function GET() {
           status: cacheDaConta.status,
           motivo: cacheDaConta.motivo,
           anomalia: cacheDaConta.anomalia ?? null,
+          campanhasAtivas: cacheDaConta.campanhas_ativas ?? null,
+          gasto30dCentavos: cacheDaConta.gasto_30d_centavos ?? null,
         };
       }
 
       try {
-        const [atual, anterior] = await Promise.all([
+        const [atual, anterior, campanhas30d] = await Promise.all([
           obterInsightsConta(conta.meta_ad_account_id, {
             nivel: "account",
             intervalo: janelas.atual,
@@ -69,6 +77,11 @@ export async function GET() {
             intervalo: janelas.anterior,
             porDia: false,
           }),
+          obterInsightsConta(conta.meta_ad_account_id, {
+            nivel: "campaign",
+            datePreset: "last_30d",
+            porDia: false,
+          }),
         ]);
 
         const anomalia = detectarAnomalia(atual, anterior);
@@ -76,15 +89,22 @@ export async function GET() {
           ? { status: "atencao" as const, motivo: anomalia.mensagem }
           : calcularSaudeConta(atual);
 
+        const campanhasAtivas = campanhas30d.length;
+        const gasto30dCentavos = Math.round(
+          campanhas30d.reduce((soma, c) => soma + Number(c.spend ?? 0), 0) * 100
+        );
+
         await supabase.from("smartads_saude_contas").upsert({
           conta_id: conta.id,
           status: saude.status,
           motivo: saude.motivo,
           anomalia,
+          campanhas_ativas: campanhasAtivas,
+          gasto_30d_centavos: gasto30dCentavos,
           calculado_em: new Date().toISOString(),
         });
 
-        return { contaId: conta.id, ...saude, anomalia };
+        return { contaId: conta.id, ...saude, anomalia, campanhasAtivas, gasto30dCentavos };
       } catch {
         // Meta desconectada, conta com erro, etc. — mantém o cache antigo se tiver, senão some da
         // resposta (o front trata "sem entrada" como "sem dados ainda").
@@ -94,19 +114,26 @@ export async function GET() {
               status: cacheDaConta.status,
               motivo: cacheDaConta.motivo,
               anomalia: cacheDaConta.anomalia ?? null,
+              campanhasAtivas: cacheDaConta.campanhas_ativas ?? null,
+              gasto30dCentavos: cacheDaConta.gasto_30d_centavos ?? null,
             }
           : null;
       }
     })
   );
 
-  const saude: Record<string, { status: string; motivo: string; anomalia: Anomalia | null }> = {};
+  const saude: Record<
+    string,
+    { status: string; motivo: string; anomalia: Anomalia | null; campanhasAtivas: number | null; gasto30dCentavos: number | null }
+  > = {};
   for (const resultado of resultados) {
     if (resultado) {
       saude[resultado.contaId] = {
         status: resultado.status,
         motivo: resultado.motivo,
         anomalia: resultado.anomalia,
+        campanhasAtivas: resultado.campanhasAtivas,
+        gasto30dCentavos: resultado.gasto30dCentavos,
       };
     }
   }
