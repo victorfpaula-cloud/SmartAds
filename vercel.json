@@ -4,6 +4,10 @@
     {
       "path": "/api/cron/automacao",
       "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/cron/relatorio-semanal",
+      "schedule": "0 12 * * 1"
     }
   ]
 }
