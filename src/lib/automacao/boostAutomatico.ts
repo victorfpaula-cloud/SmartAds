@@ -4,7 +4,6 @@ import { criarCampanhaCompleta } from "@/lib/meta/criarCampanhaCompleta";
 import type { Publico } from "@/lib/meta/tipos";
 
 const FUSO_HORARIO = "America/Sao_Paulo";
-const DIAS_DE_DURACAO = 3;
 
 function dataEmSaoPaulo(iso: string): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: FUSO_HORARIO }).format(new Date(iso));
@@ -29,7 +28,7 @@ export async function avaliarBoostAutomatico(): Promise<{
   const { data: contas } = await supabase
     .from("smartads_contas_meta")
     .select(
-      "id, instagram_business_id, boost_automatico_publico_id, boost_automatico_orcamento_centavos"
+      "id, instagram_business_id, boost_automatico_publico_id, boost_automatico_orcamento_centavos, boost_automatico_duracao_dias"
     )
     .eq("ativo", true)
     .eq("boost_automatico_ativo", true);
@@ -71,7 +70,7 @@ export async function avaliarBoostAutomatico(): Promise<{
       }
 
       const dataFim = new Date();
-      dataFim.setDate(dataFim.getDate() + DIAS_DE_DURACAO);
+      dataFim.setDate(dataFim.getDate() + (conta.boost_automatico_duracao_dias ?? 3));
 
       const resultado = await criarCampanhaCompleta({
         contaId: conta.id,

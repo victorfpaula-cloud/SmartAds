@@ -622,6 +622,9 @@ alter table smartads_financeiro_cache enable row level security;
 alter table smartads_contas_meta add column if not exists boost_automatico_ativo boolean not null default false;
 alter table smartads_contas_meta add column if not exists boost_automatico_publico_id uuid references smartads_publicos_salvos(id) on delete set null;
 alter table smartads_contas_meta add column if not exists boost_automatico_orcamento_centavos integer;
+-- Quantos dias a campanha roda antes de encerrar sozinha — escolhido por conta na hora de ligar
+-- (vale igual pra franquia e pra empresa individual, não é uma feature exclusiva de rede).
+alter table smartads_contas_meta add column if not exists boost_automatico_duracao_dias integer not null default 3 check (boost_automatico_duracao_dias in (3, 7));
 
 -- Um post só é turbinado automaticamente UMA vez — unique(conta_id, instagram_media_id) trava isso
 -- mesmo que o cron rode mais de uma vez ou o post continue sendo "o mais recente" em dias seguintes
