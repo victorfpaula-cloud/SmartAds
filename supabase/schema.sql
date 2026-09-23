@@ -314,3 +314,185 @@ create table if not exists smartads_piloto_automatico (
 );
 
 alter table smartads_piloto_automatico enable row level security;
+-- ============================================================================
+-- Estratégia — o MOLDE reutilizável entre clientes/unidades (não pertence a um cliente específico
+-- de propósito: o valor de padronizar uma rede franqueada é justamente aplicar o MESMO molde em
+-- várias unidades). Define a sequência de campanhas-modelo que compõem a estratégia; o que varia
+-- por unidade (público, investimento, localização, data de início) fica em smartads_planos_execucao,
+-- nunca aqui.
+-- ============================================================================
+create table if not exists smartads_estrategias (
+  id uuid primary key default gen_random_uuid(),
+  nome text not null,
+  descricao text,
+  ativa boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table smartads_estrategias enable row level security;
+
+-- ============================================================================
+-- Etapas de uma estratégia — cada uma é uma campanha-modelo (mesmo enum de smartads_campanhas_
+-- criadas.tipo_modelo) dentro da sequência. `percentual_orcamento` decide como o investimento
+-- total informado na hora de aplicar a estratégia (smartads_planos_execucao.investimento_total_
+-- centavos) se divide entre as etapas — a soma de todas as etapas de uma estratégia deveria fechar
+-- 100, mas isso é validado na aplicação (rota), não aqui no banco. `offset_dias_inicio` permite
+-- sequenciar (etapa 2 só começa X dias depois do início do plano) ou rodar em paralelo (offset
+-- igual pra duas etapas). `duracao_dias` null = roda contínua até alguém pausar manualmente.
+-- ============================================================================
+create table if not exists smartads_estrategia_etapas (
+  id uuid primary key default gen_random_uuid(),
+  estrategia_id uuid not null references smartads_estrategias(id) on delete cascade,
+  ordem integer not null,
+  nome_etapa text not null,
+  tipo_modelo text not null check (
+    tipo_modelo in ('engajamento', 'alcance', 'formulario', 'visita_perfil', 'cliques_link')
+  ),
+  percentual_orcamento numeric not null check (percentual_orcamento > 0 and percentual_orcamento <= 100),
+  offset_dias_inicio integer not null default 0,
+  duracao_dias integer,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists smartads_estrategia_etapas_estrategia_idx on smartads_estrategia_etapas(estrategia_id);
+
+alter table smartads_estrategia_etapas enable row level security;
+
+-- ============================================================================
+-- Plano de execução — a APLICAÇÃO de uma estratégia numa unidade/conta específica. É aqui que
+-- entram os dados que variam por unidade: público (mesmo formato nativo de smartads_publicos_
+-- salvos.targeting, editável na hora ou reaproveitado de um salvo), investimento total (dividido
+-- entre as etapas pelo percentual_orcamento de cada uma) e data de início (permite escalonar o
+-- lançamento entre unidades em vez de disparar tudo no mesmo dia).
+-- ============================================================================
+create table if not exists smartads_planos_execucao (
+  id uuid primary key default gen_random_uuid(),
+  estrategia_id uuid not null references smartads_estrategias(id) on delete restrict,
+  cliente_id uuid not null references smartads_clientes(id) on delete cascade,
+  conta_id uuid not null references smartads_contas_meta(id) on delete cascade,
+
+  nome text not null,
+  publico_id uuid references smartads_publicos_salvos(id) on delete set null,
+  publico jsonb, -- preenchido quando o público foi montado na hora em vez de reaproveitar um salvo
+  incluir_facebook boolean not null default false,
+  investimento_total_centavos integer not null,
+  data_inicio date not null,
+  meta_negocio text, -- ex: "40 pedidos/semana" — linguagem de negócio, não métrica de mídia
+
+  status text not null default 'planejado' check (
+    status in ('planejado', 'em_andamento', 'concluido', 'pausado')
+  ),
+
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists smartads_planos_execucao_conta_idx on smartads_planos_execucao(conta_id);
+create index if not exists smartads_planos_execucao_cliente_idx on smartads_planos_execucao(cliente_id);
+
+alter table smartads_planos_execucao enable row level security;
+
+-- ============================================================================
+-- Status de cada etapa dentro de um plano aplicado — o "checklist" da tela de Adm. `aguardando_
+-- admin` é o estado usado quando a etapa precisa de uma ação humana antes de seguir (ex: aprovar
+-- orçamento, franquia mandar criativo) — a `observacao` explica o quê especificamente.
+-- ============================================================================
+create table if not exists smartads_plano_etapas (
+  id uuid primary key default gen_random_uuid(),
+  plano_id uuid not null references smartads_planos_execucao(id) on delete cascade,
+  estrategia_etapa_id uuid not null references smartads_estrategia_etapas(id) on delete restrict,
+  campanha_id uuid references smartads_campanhas_criadas(id) on delete set null,
+
+  status text not null default 'aguardando' check (
+    status in ('aguardando', 'pronta_para_disparar', 'aguardando_admin', 'em_andamento', 'concluida', 'erro')
+  ),
+  data_prevista_inicio date not null,
+  observacao text,
+
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists smartads_plano_etapas_plano_idx on smartads_plano_etapas(plano_id);
+
+alter table smartads_plano_etapas enable row level security;
+
+-- ============================================================================
+-- Base de conhecimento — contexto que entra no prompt do Gemini na hora de gerar diagnóstico/
+-- sugestões (boas práticas de tráfego pro setor, observações sobre concorrência, aprendizados do
+-- que já funcionou). `cliente_id` null = conhecimento geral da rede (vale pra todas as unidades);
+-- preenchido = específico de uma unidade.
+-- ============================================================================
+create table if not exists smartads_base_conhecimento (
+  id uuid primary key default gen_random_uuid(),
+  cliente_id uuid references smartads_clientes(id) on delete cascade,
+  titulo text not null,
+  conteudo text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists smartads_base_conhecimento_cliente_idx on smartads_base_conhecimento(cliente_id);
+
+alter table smartads_base_conhecimento enable row level security;
+
+-- ============================================================================
+-- Diagnóstico — resultado gerado pelo Gemini cruzando mídia paga + orgânico do Instagram +
+-- comparação entre unidades + base de conhecimento. `dados_usados` guarda um snapshot do pacote
+-- que foi mandado pro Gemini (auditoria: dá pra conferir depois em cima de que números ele decidiu).
+-- ============================================================================
+create table if not exists smartads_diagnosticos (
+  id uuid primary key default gen_random_uuid(),
+  cliente_id uuid not null references smartads_clientes(id) on delete cascade,
+  conta_id uuid references smartads_contas_meta(id) on delete cascade,
+  texto text not null,
+  dados_usados jsonb not null,
+  gerado_em timestamptz not null default now()
+);
+
+create index if not exists smartads_diagnosticos_cliente_idx on smartads_diagnosticos(cliente_id);
+create index if not exists smartads_diagnosticos_gerado_idx on smartads_diagnosticos(gerado_em desc);
+
+alter table smartads_diagnosticos enable row level security;
+
+-- ============================================================================
+-- Sugestões — ações concretas propostas pelo Gemini a partir de um diagnóstico, SEMPRE ligadas a
+-- mídia paga (nova campanha, ajuste de orçamento, pausar, turbinar um post que performou bem
+-- organicamente) — nunca conselho de conteúdo orgânico isolado. `token_aprovacao` permite aprovar
+-- direto pelo link do e-mail semanal sem precisar logar no app (ver Fase 6).
+-- ============================================================================
+create table if not exists smartads_sugestoes (
+  id uuid primary key default gen_random_uuid(),
+  diagnostico_id uuid references smartads_diagnosticos(id) on delete set null,
+  cliente_id uuid not null references smartads_clientes(id) on delete cascade,
+  conta_id uuid references smartads_contas_meta(id) on delete cascade,
+
+  tipo text not null check (
+    tipo in ('nova_campanha', 'ajustar_orcamento', 'pausar_campanha', 'turbinar_post', 'outro')
+  ),
+  titulo text not null,
+  descricao text not null,
+  dados jsonb not null default '{}', -- parâmetros da ação, formato depende do `tipo`
+
+  status text not null default 'pendente' check (
+    status in ('pendente', 'aprovada', 'rejeitada', 'aplicada', 'erro')
+  ),
+  token_aprovacao text unique,
+
+  created_at timestamptz not null default now(),
+  decidido_em timestamptz
+);
+
+create index if not exists smartads_sugestoes_cliente_idx on smartads_sugestoes(cliente_id);
+create index if not exists smartads_sugestoes_status_idx on smartads_sugestoes(status);
+
+alter table smartads_sugestoes enable row level security;
+
+-- ============================================================================
+-- Meta de negócio por unidade (linguagem de negócio, não métrica de mídia — ex: "40 pedidos/
+-- semana") — usada no relatório semanal e no diagnóstico pra falar a língua do dono da franquia.
+-- Fica na conta (não no plano de execução) porque é relativamente estável, não muda a cada
+-- estratégia aplicada.
+-- ============================================================================
+alter table smartads_contas_meta add column if not exists meta_negocio text;
