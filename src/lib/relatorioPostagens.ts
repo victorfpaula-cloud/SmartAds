@@ -29,8 +29,7 @@ function adicionarDias(diaISO: string, quantidade: number): string {
 
 export interface DiaRelatorioPostagem {
   diaExibicao: string;
-  postou: boolean;
-  horaPost: string | null;
+  horasPost: string[];
   destaqueAtraso: boolean;
 }
 
@@ -85,17 +84,20 @@ export async function obterRelatorioPostagens(): Promise<UnidadeRelatorioPostage
         return { ...base, instagramVinculado: false, totalPostagens: 0, dias: [] };
       }
 
-      const posts = await listarPostsInstagram(conta.instagram_business_id).catch(() => [] as PostInstagram[]);
-      const totalPostagens = posts.filter((p) => diasJanelaSet.has(diaEmSaoPaulo(p.timestamp))).length;
-      const primeiraHoraPorDia = new Map<string, string>();
+      const postsBrutos = await listarPostsInstagram(conta.instagram_business_id).catch(() => [] as PostInstagram[]);
+      // Deduplica por id — proteção contra a Meta devolver o mesmo post mais de uma vez (não deveria
+      // acontecer numa chamada só sem paginação, mas é barato garantir e evita contagem inflada).
+      const posts = [...new Map(postsBrutos.map((p) => [p.id, p])).values()];
+
+      const horasPorDia = new Map<string, string[]>();
       for (const post of posts) {
         const dia = diaEmSaoPaulo(post.timestamp);
         const hora = horaEmSaoPaulo(post.timestamp);
-        // Mantém a mais cedo quando tem mais de um post no mesmo dia.
-        if (!primeiraHoraPorDia.has(dia) || hora < primeiraHoraPorDia.get(dia)!) {
-          primeiraHoraPorDia.set(dia, hora);
-        }
+        const lista = horasPorDia.get(dia) ?? [];
+        lista.push(hora);
+        horasPorDia.set(dia, lista);
       }
+      for (const lista of horasPorDia.values()) lista.sort();
 
       const diaMaisAntigoComPost =
         posts.length > 0
@@ -106,7 +108,7 @@ export async function obterRelatorioPostagens(): Promise<UnidadeRelatorioPostage
       let streak = 0;
       const destaquePorDia = new Set<string>();
       for (let cursor = diaInicioCalculo; cursor <= hojeSP; cursor = adicionarDias(cursor, 1)) {
-        if (primeiraHoraPorDia.has(cursor)) {
+        if (horasPorDia.has(cursor)) {
           streak = 0;
         } else {
           streak += 1;
@@ -116,10 +118,14 @@ export async function obterRelatorioPostagens(): Promise<UnidadeRelatorioPostage
 
       const dias: DiaRelatorioPostagem[] = diasJanela.map((dia) => ({
         diaExibicao: formatarDiaExibicao(dia),
-        postou: primeiraHoraPorDia.has(dia),
-        horaPost: primeiraHoraPorDia.get(dia) ?? null,
+        horasPost: horasPorDia.get(dia) ?? [],
         destaqueAtraso: destaquePorDia.has(dia),
       }));
+
+      // Vem da MESMA estrutura (horasPorDia, já restrita à janela de 30 dias pelos `dia` gerados
+      // acima) que alimenta a tabela — garante que o número do cabeçalho nunca destoe do que a
+      // pessoa vê célula por célula.
+      const totalPostagens = dias.reduce((soma, d) => soma + d.horasPost.length, 0);
 
       return { ...base, instagramVinculado: true, totalPostagens, dias };
     })
@@ -130,8 +136,15 @@ function celulaDia(dia: DiaRelatorioPostagem): string {
   if (dia.destaqueAtraso) {
     return `<tr style="background:#fef2f2"><td colspan="2" style="padding:4px 8px;font-size:11px;color:#7f1d1d;font-weight:600">${dia.diaExibicao} — mais de 5 dias sem postar nada</td></tr>`;
   }
-  if (dia.postou) {
-    return `<tr><td style="padding:3px 8px;font-size:11px;color:#666">${dia.diaExibicao}</td><td style="padding:3px 8px;font-size:11px;font-weight:600;color:#15803d">OK${dia.horaPost ? ` · ${dia.horaPost}` : ""}</td></tr>`;
+  if (dia.horasPost.length > 0) {
+    // Um post só: "OK · 08:20", sem numerar — não precisa. Mais de um: numera cada um (Post 1,
+    // Post 2...) empilhado na mesma célula, pra dar pra conferir olhando o relatório mesmo, sem
+    // ter que ir contar no Instagram.
+    const status =
+      dia.horasPost.length === 1
+        ? `OK · ${dia.horasPost[0]}`
+        : dia.horasPost.map((hora, i) => `Post ${i + 1} · ${hora}`).join("<br>");
+    return `<tr><td style="padding:3px 8px;font-size:11px;color:#666;vertical-align:top">${dia.diaExibicao}</td><td style="padding:3px 8px;font-size:11px;font-weight:600;color:#15803d;line-height:1.6">${status}</td></tr>`;
   }
   return `<tr><td style="padding:3px 8px;font-size:11px;color:#999">${dia.diaExibicao}</td><td style="padding:3px 8px;font-size:11px;color:#ccc">—</td></tr>`;
 }
