@@ -2,12 +2,24 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Crown, Gauge, ListChecks, Sparkle, CalendarBlank, type Icon } from "@phosphor-icons/react";
+import { Crown, Gauge, ListChecks, Sparkle, CalendarBlank, Megaphone, Wallet, type Icon } from "@phosphor-icons/react";
 import { MODELOS_CAMPANHA } from "@/lib/meta/modelos";
 import type { TipoModeloCampanha } from "@/lib/meta/tipos";
 import type { Estrategia, EtapaEstrategia } from "@/lib/estrategias/tipos";
 
 const ATALHOS: { href: string; nome: string; descricao: string; Icone: Icon }[] = [
+  {
+    href: "/campanhas?rede=franquia",
+    nome: "Campanhas da rede",
+    descricao: "Só as unidades de franquia — escolha uma pra ver e mexer nas campanhas dela.",
+    Icone: Megaphone,
+  },
+  {
+    href: "/financeiro?rede=franquia",
+    nome: "Financeiro da rede",
+    descricao: "Saldo e ritmo de gasto só das unidades de franquia.",
+    Icone: Wallet,
+  },
   {
     href: "/estrategias/campanhas-mae",
     nome: "Campanhas-Mãe",

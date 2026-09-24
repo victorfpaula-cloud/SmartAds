@@ -1,9 +1,12 @@
 import Cabecalho from "@/components/Cabecalho";
+import Link from "next/link";
 import { coletarFinanceiro } from "@/lib/financeiro/coletarFinanceiro";
 import { Wallet, Info } from "@phosphor-icons/react/dist/ssr";
 import EditarSaldo from "./EditarSaldo";
 
 export const dynamic = "force-dynamic";
+
+const FILTRO_REDE = "franquia";
 
 const formatoReal = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 function reais(centavos: number) {
@@ -19,8 +22,14 @@ function formatarAtualizacao(iso: string | null): string {
   return `Atualizado há ${dias} dia${dias !== 1 ? "s" : ""}`;
 }
 
-export default async function FinanceiroPage() {
-  const contas = await coletarFinanceiro();
+export default async function FinanceiroPage({
+  searchParams,
+}: {
+  searchParams: { rede?: string };
+}) {
+  const apenasRede = searchParams.rede === FILTRO_REDE;
+  const todasContas = await coletarFinanceiro();
+  const contas = apenasRede ? todasContas.filter((c) => c.empresaTipo === "franquia") : todasContas;
 
   const totalSaldoDisponivel = contas.reduce((s, c) => s + (c.saldoDisponivelCentavos ?? 0), 0);
   const totalGasto7d = contas.reduce((s, c) => s + c.gasto7diasCentavos, 0);
@@ -31,14 +40,21 @@ export default async function FinanceiroPage() {
     <>
       <Cabecalho ativo="/financeiro" />
       <main className="mx-auto max-w-6xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
-        <div className="flex items-center gap-2.5">
+        {apenasRede && (
+          <Link href="/estrategias" className="text-xs text-neutral-500 hover:text-neutral-300">
+            ← Central da rede
+          </Link>
+        )}
+        <div className="mt-1 flex items-center gap-2.5">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-neutral-300">
             <Wallet size={16} weight="fill" />
           </div>
           <div>
-            <h1 className="font-display text-2xl font-bold">Financeiro</h1>
+            <h1 className="font-display text-2xl font-bold">{apenasRede ? "Financeiro da rede" : "Financeiro"}</h1>
             <p className="mt-0.5 text-sm text-neutral-400">
-              Saldo disponível de cada conta e ritmo de gasto. Atualiza sozinho 1x por dia.
+              {apenasRede
+                ? "Só as unidades de franquia — pra ver tudo, inclusive empresas individuais, use Financeiro no menu."
+                : "Saldo disponível de cada conta e ritmo de gasto. Atualiza sozinho 1x por dia."}
             </p>
           </div>
         </div>

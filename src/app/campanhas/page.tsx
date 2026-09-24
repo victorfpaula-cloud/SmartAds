@@ -3,6 +3,8 @@ import Link from "next/link";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { Buildings, Storefront } from "@phosphor-icons/react/dist/ssr";
 
+const FILTRO_REDE = "franquia";
+
 export const dynamic = "force-dynamic";
 
 interface ContaResumo {
@@ -30,7 +32,13 @@ interface EmpresaResumo {
  * tudo junto com dois seletores (cliente + conta) por cima da tabela, e ficava "muita coisa pra
  * clicar pra conseguir ver" (relatado ao vivo). Mesmo padrão de card agrupado por empresa que o
  * resto do app já usa, então aprende uma vez, reconhece em todo lugar. */
-export default async function CampanhasPage() {
+export default async function CampanhasPage({
+  searchParams,
+}: {
+  searchParams: { rede?: string };
+}) {
+  const apenasRede = searchParams.rede === FILTRO_REDE;
+
   const supabase = criarClienteAdmin();
   const { data: empresas } = await supabase
     .from("smartads_empresas")
@@ -39,7 +47,7 @@ export default async function CampanhasPage() {
     )
     .order("nome");
 
-  const lista = (empresas ?? []) as EmpresaResumo[];
+  const lista = ((empresas ?? []) as EmpresaResumo[]).filter((e) => !apenasRede || e.tipo === "franquia");
   const totalContas = lista.reduce(
     (soma, e) => soma + e.smartads_clientes.filter((c) => c.ativo).reduce((s, c) => s + c.smartads_contas_meta.length, 0),
     0
@@ -49,10 +57,19 @@ export default async function CampanhasPage() {
     <>
       <Cabecalho ativo="/campanhas" />
       <main className="mx-auto max-w-6xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
-        <div className="flex flex-wrap items-end justify-between gap-3">
+        {apenasRede && (
+          <Link href="/estrategias" className="text-xs text-neutral-500 hover:text-neutral-300">
+            ← Central da rede
+          </Link>
+        )}
+        <div className="mt-1 flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="font-display text-2xl font-bold">Campanhas</h1>
-            <p className="mt-1 text-sm text-neutral-400">Escolha a unidade pra ver e mexer nas campanhas dela.</p>
+            <h1 className="font-display text-2xl font-bold">{apenasRede ? "Campanhas da rede" : "Campanhas"}</h1>
+            <p className="mt-1 text-sm text-neutral-400">
+              {apenasRede
+                ? "Só as unidades de franquia — pra ver tudo, inclusive empresas individuais, use Campanhas no menu."
+                : "Escolha a unidade pra ver e mexer nas campanhas dela."}
+            </p>
           </div>
           <Link
             href="/campanhas/nova"
