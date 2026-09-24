@@ -136,7 +136,7 @@ function celulaDia(dia: DiaRelatorioPostagem): string {
 function montarSecaoUnidade(unidade: UnidadeRelatorioPostagens): string {
   if (!unidade.instagramVinculado) {
     return `<div style="margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid #eee">
-      <h2 style="font-size:15px;margin:0 0 4px">${unidade.clienteNome}</h2>
+      <h2 style="font-size:15px;margin:0 0 4px;font-weight:600">${unidade.clienteNome}</h2>
       <p style="font-size:12px;color:#999;margin:0">Instagram não vinculado.</p>
     </div>`;
   }
@@ -147,17 +147,20 @@ function montarSecaoUnidade(unidade: UnidadeRelatorioPostagens): string {
     `<table style="width:100%;border-collapse:collapse">${dias.map(celulaDia).join("")}</table>`;
 
   return `<div style="margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid #eee">
-    <h2 style="font-size:15px;margin:0 0 2px">${unidade.clienteNome}</h2>
-    ${unidade.instagramUsername ? `<p style="font-size:11px;color:#999;margin:0 0 8px">@${unidade.instagramUsername}</p>` : ""}
-    <table style="width:100%"><tr>
-      <td style="width:50%;vertical-align:top;padding-right:8px">${tabela(colunas[0])}</td>
-      <td style="width:50%;vertical-align:top;padding-left:8px">${tabela(colunas[1])}</td>
+    <h2 style="font-size:15px;margin:0 0 2px;font-weight:600">${unidade.clienteNome}</h2>
+    ${unidade.instagramUsername ? `<p style="font-size:11px;color:#999;margin:0 0 10px">@${unidade.instagramUsername}</p>` : ""}
+    <table style="width:100%;border-collapse:collapse"><tr>
+      <td style="width:50%;vertical-align:top;padding-right:12px">${tabela(colunas[0])}</td>
+      <td style="width:50%;vertical-align:top;padding-left:12px;border-left:1px solid #e5e5e5">${tabela(colunas[1])}</td>
     </tr></table>
   </div>`;
 }
 
 /** HTML pronto pra e-mail (estilo inline, largura fixa) e também usado como o próprio arquivo do
- * download — o relatório visto num não é diferente do outro. */
+ * download — o relatório visto num não é diferente do outro. `<meta charset="utf-8">` é
+ * obrigatório aqui: sem ele, o Content-Type da resposta HTTP diz UTF-8 mas some assim que o
+ * arquivo é salvo e reaberto fora do navegador (ex: app Arquivos do iPad), e sem a tag o leitor
+ * assume Latin-1/Windows-1252 e todo acento vira "Ã³", "â€”" etc. */
 export function montarHtmlRelatorioPostagens(unidades: UnidadeRelatorioPostagens[]): string {
   const corpo =
     unidades.length > 0
@@ -165,9 +168,16 @@ export function montarHtmlRelatorioPostagens(unidades: UnidadeRelatorioPostagens
       : `<p style="font-size:13px;color:#999">Nenhuma unidade de franquia ativa ainda.</p>`;
 
   return `<!DOCTYPE html>
-<html><body style="font-family:-apple-system,sans-serif;color:#111;max-width:640px;margin:0 auto;padding:24px">
-  <h1 style="font-size:20px;margin:0 0 4px">Relatório de postagens — últimos 30 dias</h1>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Relatório de postagens — últimos 30 dias</title>
+</head>
+<body style="font-family:-apple-system,Helvetica,Arial,sans-serif;color:#111;max-width:640px;margin:0 auto;padding:24px">
+  <h1 style="font-size:20px;margin:0 0 4px;font-weight:700">Relatório de postagens — últimos 30 dias</h1>
   <p style="font-size:12px;color:#888;margin:0 0 24px">Gerado em ${new Date().toLocaleDateString("pt-BR", { timeZone: FUSO_HORARIO })}</p>
   ${corpo}
-</body></html>`;
+</body>
+</html>`;
 }
