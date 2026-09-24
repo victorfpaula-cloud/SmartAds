@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Crown, Gauge, ListChecks, Sparkle, type Icon } from "@phosphor-icons/react";
+import { Crown, Gauge, ListChecks, Sparkle, CalendarBlank, type Icon } from "@phosphor-icons/react";
 import { MODELOS_CAMPANHA } from "@/lib/meta/modelos";
 import type { TipoModeloCampanha } from "@/lib/meta/tipos";
 import type { Estrategia, EtapaEstrategia } from "@/lib/estrategias/tipos";
@@ -25,6 +25,12 @@ const ATALHOS: { href: string; nome: string; descricao: string; Icone: Icon }[] 
     nome: "Planos já aplicados",
     descricao: "Toda aplicação de Estratégia em andamento, unidade por unidade.",
     Icone: ListChecks,
+  },
+  {
+    href: "/estrategias/postagens",
+    nome: "Última postagem",
+    descricao: "Data do post mais recente de cada unidade no Instagram — alerta quem tá sumida.",
+    Icone: CalendarBlank,
   },
 ];
 
