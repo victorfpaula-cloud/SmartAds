@@ -40,6 +40,7 @@ export interface UnidadeRelatorioPostagens {
   contaId: string;
   instagramUsername: string | null;
   instagramVinculado: boolean;
+  totalPostagens: number;
   dias: DiaRelatorioPostagem[];
 }
 
@@ -69,6 +70,7 @@ export async function obterRelatorioPostagens(): Promise<UnidadeRelatorioPostage
   const hojeSP = diaEmSaoPaulo(new Date().toISOString());
   const diasJanela: string[] = [];
   for (let i = DIAS_JANELA - 1; i >= 0; i--) diasJanela.push(adicionarDias(hojeSP, -i));
+  const diasJanelaSet = new Set(diasJanela);
 
   return Promise.all(
     unidades.map(async ({ cliente, conta }): Promise<UnidadeRelatorioPostagens> => {
@@ -80,10 +82,11 @@ export async function obterRelatorioPostagens(): Promise<UnidadeRelatorioPostage
       };
 
       if (!conta.instagram_business_id) {
-        return { ...base, instagramVinculado: false, dias: [] };
+        return { ...base, instagramVinculado: false, totalPostagens: 0, dias: [] };
       }
 
       const posts = await listarPostsInstagram(conta.instagram_business_id).catch(() => [] as PostInstagram[]);
+      const totalPostagens = posts.filter((p) => diasJanelaSet.has(diaEmSaoPaulo(p.timestamp))).length;
       const primeiraHoraPorDia = new Map<string, string>();
       for (const post of posts) {
         const dia = diaEmSaoPaulo(post.timestamp);
@@ -118,7 +121,7 @@ export async function obterRelatorioPostagens(): Promise<UnidadeRelatorioPostage
         destaqueAtraso: destaquePorDia.has(dia),
       }));
 
-      return { ...base, instagramVinculado: true, dias };
+      return { ...base, instagramVinculado: true, totalPostagens, dias };
     })
   );
 }
@@ -133,7 +136,18 @@ function celulaDia(dia: DiaRelatorioPostagem): string {
   return `<tr><td style="padding:3px 8px;font-size:11px;color:#999">${dia.diaExibicao}</td><td style="padding:3px 8px;font-size:11px;color:#ccc">—</td></tr>`;
 }
 
-function montarSecaoUnidade(unidade: UnidadeRelatorioPostagens): string {
+// Banda de tolerância em torno da média pra "na média" não ficar oscilando com diferença de 1
+// post — mesma ideia da faixa usada no Semáforo (ver src/lib/semaforo.ts), só que mais folgada
+// porque aqui é contagem inteira de posts, não uma taxa como CTR.
+function compararComMedia(totalPostagens: number, media: number): { rotulo: string; cor: string } {
+  if (media <= 0) return { rotulo: "Sem base de comparação ainda", cor: "#999" };
+  const razao = totalPostagens / media;
+  if (razao >= 1.15) return { rotulo: "Acima da média da rede", cor: "#15803d" };
+  if (razao <= 0.85) return { rotulo: "Abaixo da média da rede", cor: "#b45309" };
+  return { rotulo: "Na média da rede", cor: "#666" };
+}
+
+function montarSecaoUnidade(unidade: UnidadeRelatorioPostagens, mediaRede: number): string {
   if (!unidade.instagramVinculado) {
     return `<div style="margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid #eee">
       <h2 style="font-size:15px;margin:0 0 4px;font-weight:600">${unidade.clienteNome}</h2>
@@ -146,9 +160,13 @@ function montarSecaoUnidade(unidade: UnidadeRelatorioPostagens): string {
   const tabela = (dias: DiaRelatorioPostagem[]) =>
     `<table style="width:100%;border-collapse:collapse">${dias.map(celulaDia).join("")}</table>`;
 
+  const comparativo = compararComMedia(unidade.totalPostagens, mediaRede);
+
   return `<div style="margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid #eee">
     <h2 style="font-size:15px;margin:0 0 2px;font-weight:600">${unidade.clienteNome}</h2>
-    ${unidade.instagramUsername ? `<p style="font-size:11px;color:#999;margin:0 0 10px">@${unidade.instagramUsername}</p>` : ""}
+    <p style="font-size:11px;color:#999;margin:0 0 10px">
+      ${unidade.instagramUsername ? `@${unidade.instagramUsername}<span style="margin:0 6px;color:#ddd">·</span>` : ""}${unidade.totalPostagens} postagem${unidade.totalPostagens !== 1 ? "s" : ""} em 30 dias<span style="margin:0 6px;color:#ddd">·</span><span style="font-weight:600;color:${comparativo.cor}">${comparativo.rotulo}</span>
+    </p>
     <table style="width:100%;border-collapse:collapse"><tr>
       <td style="width:50%;vertical-align:top;padding-right:12px">${tabela(colunas[0])}</td>
       <td style="width:50%;vertical-align:top;padding-left:12px;border-left:1px solid #e5e5e5">${tabela(colunas[1])}</td>
@@ -162,9 +180,15 @@ function montarSecaoUnidade(unidade: UnidadeRelatorioPostagens): string {
  * arquivo é salvo e reaberto fora do navegador (ex: app Arquivos do iPad), e sem a tag o leitor
  * assume Latin-1/Windows-1252 e todo acento vira "Ã³", "â€”" etc. */
 export function montarHtmlRelatorioPostagens(unidades: UnidadeRelatorioPostagens[]): string {
+  // Média só entre unidades com Instagram vinculado — sem isso, uma unidade sem conexão nenhuma
+  // (sempre 0 postagens) puxaria a média pra baixo e distorceria o comparativo das outras.
+  const vinculadas = unidades.filter((u) => u.instagramVinculado);
+  const mediaRede =
+    vinculadas.length > 0 ? vinculadas.reduce((soma, u) => soma + u.totalPostagens, 0) / vinculadas.length : 0;
+
   const corpo =
     unidades.length > 0
-      ? unidades.map(montarSecaoUnidade).join("")
+      ? unidades.map((u) => montarSecaoUnidade(u, mediaRede)).join("")
       : `<p style="font-size:13px;color:#999">Nenhuma unidade de franquia ativa ainda.</p>`;
 
   return `<!DOCTYPE html>
