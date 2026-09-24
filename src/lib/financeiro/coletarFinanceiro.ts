@@ -7,6 +7,7 @@ export interface ContaFinanceiro {
   clienteId: string;
   clienteNome: string;
   empresaNome: string;
+  empresaTipo: "individual" | "franquia" | null;
   metaAdAccountId: string;
   saldoDisponivelCentavos: number | null;
   faturaEmAbertoCentavos: number | null;
@@ -33,7 +34,7 @@ export async function coletarFinanceiro(): Promise<ContaFinanceiro[]> {
   const [{ data: clientes }, { data: cache }] = await Promise.all([
     supabase
       .from("smartads_clientes")
-      .select("id, nome, ativo, smartads_empresas(nome), smartads_contas_meta(*)")
+      .select("id, nome, ativo, smartads_empresas(nome, tipo), smartads_contas_meta(*)")
       .eq("ativo", true)
       .order("nome"),
     supabase.from("smartads_financeiro_cache").select("*"),
@@ -108,6 +109,7 @@ export async function coletarFinanceiro(): Promise<ContaFinanceiro[]> {
         clienteId: cliente.id,
         clienteNome: cliente.nome,
         empresaNome: cliente.smartads_empresas?.nome ?? "—",
+        empresaTipo: cliente.smartads_empresas?.tipo ?? null,
         metaAdAccountId: conta.meta_ad_account_id,
         saldoDisponivelCentavos: linhaCache.saldo_disponivel_centavos ?? null,
         faturaEmAbertoCentavos: linhaCache.fatura_em_aberto_centavos ?? null,

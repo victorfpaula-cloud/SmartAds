@@ -11,6 +11,7 @@ import {
   PlusCircle,
   ListBullets,
   Stethoscope,
+  ArrowRight,
 } from "@phosphor-icons/react";
 import ModalBoostAutomatico, { type AlteracoesBoost } from "@/components/ModalBoostAutomatico";
 
@@ -122,9 +123,10 @@ export default function PainelInicio({ empresas }: { empresas: EmpresaResumo[] }
               {empresa.tipo === "franquia" && (
                 <Link
                   href="/estrategias"
-                  className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-accent-strong"
+                  className="flex items-center gap-1.5 rounded-lg bg-accent px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-accent/20 transition hover:scale-[1.02] hover:bg-accent-strong"
                 >
                   Central da rede
+                  <ArrowRight size={16} weight="bold" />
                 </Link>
               )}
             </div>
