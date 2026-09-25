@@ -132,9 +132,13 @@ export async function obterRelatorioPostagens(): Promise<UnidadeRelatorioPostage
   );
 }
 
+// Risquinho claro entre um dia e outro — só pra separar visualmente as linhas da tabela (antes
+// grudadas, sem nenhuma marcação entre elas), sem virar grade pesada.
+const BORDA_LINHA = "border-bottom:1px solid #f0f0f0";
+
 function celulaDia(dia: DiaRelatorioPostagem): string {
   if (dia.destaqueAtraso) {
-    return `<tr style="background:#fef2f2"><td colspan="2" style="padding:4px 8px;font-size:11px;color:#7f1d1d;font-weight:600">${dia.diaExibicao} — mais de 5 dias sem postar nada</td></tr>`;
+    return `<tr style="background:#fef2f2"><td colspan="2" style="padding:5px 8px;font-size:11px;color:#7f1d1d;font-weight:600;${BORDA_LINHA}">${dia.diaExibicao} — mais de 5 dias sem postar nada</td></tr>`;
   }
   if (dia.horasPost.length > 0) {
     // Um post só: "OK · 08:20", sem numerar — não precisa. Mais de um: numera cada um (Post 1,
@@ -144,9 +148,9 @@ function celulaDia(dia: DiaRelatorioPostagem): string {
       dia.horasPost.length === 1
         ? `OK · ${dia.horasPost[0]}`
         : dia.horasPost.map((hora, i) => `Post ${i + 1} · ${hora}`).join("<br>");
-    return `<tr><td style="padding:3px 8px;font-size:11px;color:#666;vertical-align:top">${dia.diaExibicao}</td><td style="padding:3px 8px;font-size:11px;font-weight:600;color:#15803d;line-height:1.6">${status}</td></tr>`;
+    return `<tr><td style="padding:5px 8px;font-size:11px;color:#666;vertical-align:top;${BORDA_LINHA}">${dia.diaExibicao}</td><td style="padding:5px 8px;font-size:11px;font-weight:600;color:#15803d;line-height:1.6;${BORDA_LINHA}">${status}</td></tr>`;
   }
-  return `<tr><td style="padding:3px 8px;font-size:11px;color:#999">${dia.diaExibicao}</td><td style="padding:3px 8px;font-size:11px;color:#ccc">—</td></tr>`;
+  return `<tr><td style="padding:5px 8px;font-size:11px;color:#999;${BORDA_LINHA}">${dia.diaExibicao}</td><td style="padding:5px 8px;font-size:11px;color:#ccc;${BORDA_LINHA}">—</td></tr>`;
 }
 
 // Banda de tolerância em torno da média pra "na média" não ficar oscilando com diferença de 1
