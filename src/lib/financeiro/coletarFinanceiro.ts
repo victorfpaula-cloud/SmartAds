@@ -37,7 +37,11 @@ export async function coletarFinanceiro(): Promise<ContaFinanceiro[]> {
       .select("id, nome, ativo, smartads_empresas(nome, tipo), smartads_contas_meta(*)")
       .eq("ativo", true)
       .order("nome"),
-    supabase.from("smartads_financeiro_cache").select("*"),
+    supabase
+      .from("smartads_financeiro_cache")
+      .select(
+        "conta_id, saldo_disponivel_centavos, fatura_em_aberto_centavos, gasto_7d_centavos, media_diaria_centavos, projecao_mensal_centavos, erro, calculado_em"
+      ),
   ]);
 
   const contas = (clientes ?? []).flatMap((cliente: any) =>

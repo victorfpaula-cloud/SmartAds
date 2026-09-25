@@ -646,6 +646,8 @@ create table if not exists smartads_boost_automatico_log (
 );
 
 create index if not exists smartads_boost_automatico_log_conta_idx on smartads_boost_automatico_log(conta_id);
+-- Pra limpeza semanal (ver src/lib/limpeza.ts), que filtra só por created_at.
+create index if not exists smartads_boost_automatico_log_created_at_idx on smartads_boost_automatico_log(created_at);
 
 alter table smartads_boost_automatico_log enable row level security;
 
@@ -665,6 +667,9 @@ create table if not exists smartads_stories_vistos (
 );
 
 create index if not exists smartads_stories_vistos_conta_dia_idx on smartads_stories_vistos(conta_id, dia);
+-- Índice extra só em "dia" — o composto acima não ajuda a limpeza semanal (ver src/lib/limpeza.ts),
+-- que filtra só por dia, sem conta_id.
+create index if not exists smartads_stories_vistos_dia_idx on smartads_stories_vistos(dia);
 
 alter table smartads_stories_vistos enable row level security;
 

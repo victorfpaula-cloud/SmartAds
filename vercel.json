@@ -28,6 +28,10 @@
     {
       "path": "/api/cron/stories",
       "schedule": "50 2 * * *"
+    },
+    {
+      "path": "/api/cron/limpeza",
+      "schedule": "0 5 * * 0"
     }
   ]
 }
