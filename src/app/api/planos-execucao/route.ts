@@ -32,7 +32,6 @@ interface CorpoAplicar {
   nome: string;
   publicoId?: string;
   publico?: Publico;
-  incluirFacebook: boolean;
   investimentoTotalCentavos: number;
   dataInicio: string; // ISO "YYYY-MM-DD"
   metaNegocio?: string;
@@ -65,7 +64,6 @@ export async function POST(request: NextRequest) {
       nome: corpo.nome,
       publicoId: corpo.publicoId,
       publico: corpo.publico,
-      incluirFacebook: corpo.incluirFacebook,
       investimentoTotalCentavos: corpo.investimentoTotalCentavos,
       dataInicio: corpo.dataInicio,
       metaNegocio: corpo.metaNegocio,

@@ -13,6 +13,7 @@ import {
   criarAnuncio,
   subirImagem,
   excluirObjeto,
+  type PostInstagram,
 } from "@/lib/meta/api";
 import { ErroGraphAPIException } from "@/lib/meta/erros";
 import { ErroMetaNaoConectado } from "@/lib/meta/token";
@@ -24,7 +25,6 @@ export interface ParametrosCriarCampanha {
   nomeCampanha: string;
   publico: Publico;
   publicoId?: string;
-  incluirFacebook: boolean;
   /** Preenchido quando essa campanha nasce de uma etapa de um Plano de Execução — ao concluir com
    * sucesso, marca a etapa como 'concluida' no checklist e guarda o id da campanha criada, sem
    * precisar de um passo manual extra pra "vincular" depois. */
@@ -113,7 +113,6 @@ export async function criarCampanhaCompleta(corpo: ParametrosCriarCampanha): Pro
   }
 
   const adAccountId = conta.meta_ad_account_id as string;
-  const targeting = montarTargeting(corpo.publico, corpo.incluirFacebook);
   // Regra máxima: TODA campanha criada pelo SmartAds nasce com 🤖 na frente de tudo, sempre — é o
   // jeito de bater o olho no Gerenciador de Anúncios e saber na hora que essa campanha veio do
   // app, mesmo antes da sigla (ver sigla_campanha em smartads_contas_meta, que identifica de qual
@@ -127,6 +126,15 @@ export async function criarCampanhaCompleta(corpo: ParametrosCriarCampanha): Pro
   const anuncioIds: string[] = [];
 
   try {
+    // Se for turbinar publicação existente, busca o post ANTES de montar o targeting — precisa
+    // saber se é vídeo (Reels) pra decidir o posicionamento: foto/carrossel ficam só no feed,
+    // vídeo entra em feed + Reels (pedido explícito em 25/09/2026).
+    let postExistente: PostInstagram | null = null;
+    if (corpo.criativo.usarPostExistente && corpo.criativo.postSelecionadoId) {
+      postExistente = await obterPostInstagram(corpo.criativo.postSelecionadoId);
+    }
+    const targeting = montarTargeting(corpo.publico, postExistente?.media_type === "VIDEO");
+
     const campanha = await criarCampanha(adAccountId, {
       name: nomeCampanhaFinal,
       objective: modelo.objective,
@@ -156,9 +164,7 @@ export async function criarCampanhaCompleta(corpo: ParametrosCriarCampanha): Pro
     });
     adsetId = adset.id;
 
-    if (corpo.criativo.usarPostExistente && corpo.criativo.postSelecionadoId) {
-      const post = await obterPostInstagram(corpo.criativo.postSelecionadoId);
-
+    if (postExistente) {
       // Tenta achar o mesmo post cross-postado na Página pra turbinar o post de verdade —
       // engajamento acumulando nele, sem duplicar conteúdo. A Meta nunca aceita o ID do Instagram
       // como referência de "post existente" (testado exaustivamente em 13/09/2026 e 23/09/2026), só
@@ -167,7 +173,7 @@ export async function criarCampanhaCompleta(corpo: ParametrosCriarCampanha): Pro
       try {
         const tokenPagina = await obterTokenDePagina(conta.page_id);
         if (tokenPagina) {
-          postDaPaginaId = await encontrarPostDaPaginaCorrespondente(conta.page_id, tokenPagina, post.timestamp);
+          postDaPaginaId = await encontrarPostDaPaginaCorrespondente(conta.page_id, tokenPagina, postExistente.timestamp);
         }
       } catch {
         // Segue sem cross-post encontrado — cai no erro abaixo, sem fallback.

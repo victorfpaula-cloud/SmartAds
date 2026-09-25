@@ -62,8 +62,3 @@ export interface Orcamento {
   dataInicio?: string; // ISO, obrigatório quando vitalicio
   dataFim?: string; // ISO, obrigatório quando vitalicio
 }
-
-/** Posicionamento é sempre fixo (Feed + Stories + Reels) — só a plataforma é escolha do usuário. */
-export interface Posicionamento {
-  incluirFacebook: boolean; // false = só Instagram (padrão)
-}

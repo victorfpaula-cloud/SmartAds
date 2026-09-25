@@ -91,7 +91,6 @@ export default async function NovaCampanhaDoPlanoPage({
   const valoresIniciais: ValoresIniciaisCampanha = {
     publico,
     publicoId: plano.publico_id ?? undefined,
-    incluirFacebook: plano.incluir_facebook,
     orcamento,
     nomeCampanha: `${plano.nome} - ${etapa.nome_etapa}`,
     criativoOficial,

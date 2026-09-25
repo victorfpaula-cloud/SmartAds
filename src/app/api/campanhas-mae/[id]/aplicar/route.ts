@@ -11,7 +11,6 @@ interface UnidadeParaAplicar {
   investimentoCentavos: number;
   publicoId?: string;
   publico?: Publico;
-  incluirFacebook: boolean;
   metaNegocio?: string;
 }
 
@@ -75,7 +74,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         nome: `${campanha.nome} — ${nomeContaPorId.get(unidade.contaId) ?? "Unidade"}`,
         publicoId: unidade.publicoId,
         publico: unidade.publico,
-        incluirFacebook: unidade.incluirFacebook,
         investimentoTotalCentavos: unidade.investimentoCentavos,
         dataInicio: campanha.data_inicio,
         metaNegocio: unidade.metaNegocio,

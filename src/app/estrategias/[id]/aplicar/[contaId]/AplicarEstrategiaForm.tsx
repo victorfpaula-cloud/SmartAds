@@ -46,7 +46,6 @@ export default function AplicarEstrategiaForm({
   const [modoPublico, setModoPublico] = useState<"salvo" | "novo">(publicosSalvos.length > 0 ? "salvo" : "novo");
   const [publicoSalvoId, setPublicoSalvoId] = useState(publicosSalvos[0]?.id ?? "");
   const [publicoNovo, setPublicoNovo] = useState<Publico>(PUBLICO_VAZIO);
-  const [incluirFacebook, setIncluirFacebook] = useState(false);
   const [valorReais, setValorReais] = useState("");
   const [dataInicio, setDataInicio] = useState(new Date().toISOString().slice(0, 10));
   const [metaNegocio, setMetaNegocio] = useState("");
@@ -82,7 +81,6 @@ export default function AplicarEstrategiaForm({
         nome: nomePlano.trim(),
         publicoId: modoPublico === "salvo" ? publicoSalvoId : undefined,
         publico: modoPublico === "novo" ? publicoNovo : undefined,
-        incluirFacebook,
         investimentoTotalCentavos: investimentoCentavos,
         dataInicio,
         metaNegocio: metaNegocio.trim() || undefined,
@@ -186,19 +184,6 @@ export default function AplicarEstrategiaForm({
         ) : (
           <ConstrutorDePublico valor={publicoNovo} onChange={setPublicoNovo} />
         )}
-
-        <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3">
-          <div>
-            <p className="text-sm font-medium text-neutral-200">Incluir Facebook além do Instagram</p>
-            <p className="text-xs text-neutral-500">Posicionamento fixo: Feed + Stories + Reels.</p>
-          </div>
-          <input
-            type="checkbox"
-            checked={incluirFacebook}
-            onChange={(e) => setIncluirFacebook(e.target.checked)}
-            className="h-5 w-5 accent-accent"
-          />
-        </div>
       </section>
 
       <section className="cartao-vidro p-5">

@@ -8,7 +8,6 @@ export interface ParametrosPlanoExecucao {
   nome: string;
   publicoId?: string;
   publico?: Publico;
-  incluirFacebook: boolean;
   investimentoTotalCentavos: number;
   dataInicio: string; // ISO "YYYY-MM-DD"
   metaNegocio?: string;
@@ -46,7 +45,6 @@ export async function criarPlanoExecucao(parametros: ParametrosPlanoExecucao) {
       nome: parametros.nome.trim(),
       publico_id: parametros.publicoId ?? null,
       publico: parametros.publico ?? null,
-      incluir_facebook: parametros.incluirFacebook,
       investimento_total_centavos: parametros.investimentoTotalCentavos,
       data_inicio: parametros.dataInicio,
       meta_negocio: parametros.metaNegocio ?? null,
