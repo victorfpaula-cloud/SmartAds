@@ -19,6 +19,40 @@ export interface ContaFinanceiro {
   linkAdicionarCredito: string;
   atualizadoEm: string | null;
   erro: string | null;
+  orcamentoMensalCentavos: number;
+  boostAutomaticoAtivo: boolean;
+  boostOrcamentoDiarioCentavos: number | null;
+}
+
+export interface PlanejamentoConta {
+  boostReservadoMensalCentavos: number;
+  boostGastoEstimadoCentavos: number;
+  sobraParaExtrasCentavos: number;
+  gastoExtraProjetadoCentavos: number;
+  estourou: boolean;
+}
+
+/** Estimativa de planejamento mensal por conta — puxa do que já existe (orçamento diário do boost
+ * já configurado, projeção mensal já cacheada pelo Financeiro), sem bater na Meta de novo nem
+ * precisar separar "gasto de boost" de "gasto extra" campanha por campanha. "Reservado pro boost"
+ * é o orçamento diário × dias do MÊS INTEIRO (teto, não o já gasto); "gasto estimado" usa só os
+ * dias já decorridos. Pura o bastante pra ser a mesma fonte tanto da linha por unidade quanto do
+ * resumo agregado da rede (ver /financeiro?rede=franquia). */
+export function calcularPlanejamento(conta: ContaFinanceiro, hoje: Date = new Date()): PlanejamentoConta {
+  const diasNoMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate();
+  const diaDoMes = hoje.getDate();
+
+  const orcamentoDiarioBoost = conta.boostAutomaticoAtivo ? conta.boostOrcamentoDiarioCentavos ?? 0 : 0;
+  const boostReservadoMensalCentavos = orcamentoDiarioBoost * diasNoMes;
+  const boostGastoEstimadoCentavos = orcamentoDiarioBoost * diaDoMes;
+
+  return {
+    boostReservadoMensalCentavos,
+    boostGastoEstimadoCentavos,
+    sobraParaExtrasCentavos: conta.orcamentoMensalCentavos - boostReservadoMensalCentavos,
+    gastoExtraProjetadoCentavos: Math.max(0, conta.projecaoMensalCentavos - boostReservadoMensalCentavos),
+    estourou: conta.projecaoMensalCentavos > conta.orcamentoMensalCentavos,
+  };
 }
 
 /** Junta o financeiro de cada conta ativa: saldo (disponível ou fatura em aberto, ver
@@ -129,6 +163,9 @@ export async function coletarFinanceiro(): Promise<ContaFinanceiro[]> {
         linkAdicionarCredito: `https://www.facebook.com/ads/manager/account_settings/account_billing/?act=${idNumerico}`,
         atualizadoEm: linhaCache.calculado_em ?? null,
         erro: linhaCache.erro ?? null,
+        orcamentoMensalCentavos: conta.orcamento_mensal_centavos ?? 50000,
+        boostAutomaticoAtivo: Boolean(conta.boost_automatico_ativo),
+        boostOrcamentoDiarioCentavos: conta.boost_automatico_orcamento_centavos ?? null,
       };
     })
   );
