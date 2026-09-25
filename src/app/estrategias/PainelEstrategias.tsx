@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { Crown, Gauge, Stack, CalendarBlank, Megaphone, Wallet } from "@phosphor-icons/react/dist/ssr";
+import { Crown, Gauge, Stack, CalendarBlank, Megaphone, Wallet, WarningCircle, TrendUp } from "@phosphor-icons/react/dist/ssr";
 import type { Icon } from "@phosphor-icons/react";
 import { obterCampanhasAtivasRede, ROTULO_OBJETIVO } from "@/lib/campanhasRede";
+import { obterInsightsRede, type NivelInsight } from "@/lib/insightsRede";
 
 const ATALHOS: { href: string; nome: string; descricao: string; Icone: Icon }[] = [
   {
@@ -59,8 +60,17 @@ function formatarAtualizacao(iso: string | null): string {
  * Moldes (Estratégias) direto aqui — virou um atalho como os outros (ver /estrategias/moldes),
  * porque criar molde é uma tarefa ocasional, e a lista de campanhas ativas é o que vale a pena
  * bater o olho toda vez que se abre essa tela. */
+const ESTILO_NIVEL: Record<NivelInsight, { cor: string; fundo: string; borda: string }> = {
+  critico: { cor: "text-danger", fundo: "bg-danger/10", borda: "border-danger/30" },
+  atencao: { cor: "text-amber-400", fundo: "bg-amber-500/10", borda: "border-amber-500/30" },
+  positivo: { cor: "text-ok", fundo: "bg-ok/10", borda: "border-ok/30" },
+};
+
 export default async function PainelEstrategias() {
-  const { campanhas: campanhasRede, atualizadoEm } = await obterCampanhasAtivasRede();
+  const [{ campanhas: campanhasRede, atualizadoEm }, insights] = await Promise.all([
+    obterCampanhasAtivasRede(),
+    obterInsightsRede(),
+  ]);
 
   return (
     <div className="flex flex-col gap-5">
@@ -81,6 +91,47 @@ export default async function PainelEstrategias() {
           </Link>
         ))}
       </div>
+
+      <section className="cartao-vidro overflow-hidden">
+        <div className="border-b border-white/10 px-5 py-3.5">
+          <h2 className="text-sm font-semibold text-neutral-200">Insights da rede</h2>
+          <p className="mt-0.5 text-[11px] text-neutral-500">
+            Calculado a partir do Semáforo e das campanhas ativas — sem IA, atualiza junto com o
+            resto da rede.
+          </p>
+        </div>
+
+        {insights.length === 0 ? (
+          <p className="px-5 py-8 text-center text-sm text-neutral-500">
+            Nada notável agora — nenhuma unidade em alerta ou destaque no momento.
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-2 p-3">
+            {insights.map((insight) => {
+              const estilo = ESTILO_NIVEL[insight.nivel];
+              const Icone = insight.nivel === "positivo" ? TrendUp : WarningCircle;
+              return (
+                <li
+                  key={insight.contaId}
+                  className={`flex items-start gap-2.5 rounded-lg border ${estilo.borda} ${estilo.fundo} px-4 py-3`}
+                >
+                  <Icone size={15} weight="fill" className={`mt-0.5 shrink-0 ${estilo.cor}`} />
+                  <div>
+                    <p className={`text-xs font-semibold ${estilo.cor}`}>{insight.clienteNome}</p>
+                    <ul className="mt-1 flex flex-col gap-0.5">
+                      {insight.motivos.map((motivo, i) => (
+                        <li key={i} className="text-xs leading-relaxed text-neutral-300">
+                          {motivo}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
 
       <section className="cartao-vidro overflow-hidden">
         <div className="border-b border-white/10 px-5 py-3.5">
