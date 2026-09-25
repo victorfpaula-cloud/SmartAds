@@ -159,11 +159,10 @@ export async function criarCampanhaCompleta(corpo: ParametrosCriarCampanha): Pro
     if (corpo.criativo.usarPostExistente && corpo.criativo.postSelecionadoId) {
       const post = await obterPostInstagram(corpo.criativo.postSelecionadoId);
 
-      // Tenta achar o mesmo post cross-postado na Página (comum em Reels) pra turbinar o post de
-      // verdade — engajamento acumulando nele, sem duplicar conteúdo. A Meta nunca aceita o ID do
-      // Instagram como referência de "post existente" (testado exaustivamente em 13/09/2026 e
-      // 23/09/2026), só o ID do post da própria Página. Qualquer falha nessa busca (token, post
-      // não encontrado) cai no caminho de baixo, sem quebrar a criação da campanha.
+      // Tenta achar o mesmo post cross-postado na Página pra turbinar o post de verdade —
+      // engajamento acumulando nele, sem duplicar conteúdo. A Meta nunca aceita o ID do Instagram
+      // como referência de "post existente" (testado exaustivamente em 13/09/2026 e 23/09/2026), só
+      // o ID do post da própria Página.
       let postDaPaginaId: string | null = null;
       try {
         const tokenPagina = await obterTokenDePagina(conta.page_id);
@@ -171,40 +170,25 @@ export async function criarCampanhaCompleta(corpo: ParametrosCriarCampanha): Pro
           postDaPaginaId = await encontrarPostDaPaginaCorrespondente(conta.page_id, tokenPagina, post.timestamp);
         }
       } catch {
-        // Segue sem cross-post encontrado — cai no fallback abaixo.
+        // Segue sem cross-post encontrado — cai no erro abaixo, sem fallback.
       }
 
-      let criativo: { id: string };
-      if (postDaPaginaId) {
-        criativo = await criarCriativoDoPostDaPagina(adAccountId, {
-          objectStoryId: postDaPaginaId,
-          name: `${corpo.nomeCampanha} - criativo`,
-        });
-      } else {
-        // Sem cross-post pra Página (comum em posts de imagem única, que não replicam sozinhos)
-        // — recria a imagem/legenda como anúncio novo (mesmo caminho de "Nova imagem").
-        // Visualmente idêntico pra quem vê, só que o engajamento acumula nesse anúncio, não no
-        // post original.
-        if (post.media_type !== "IMAGE" || !post.media_url) {
-          throw new Error(
-            'Essa publicação é vídeo ou carrossel sem cross-post pra Página — ainda não dá pra reaproveitar aqui. Escolha uma publicação de imagem única, ou use a opção "Nova imagem".'
-          );
-        }
-        const respostaImagem = await fetch(post.media_url);
-        if (!respostaImagem.ok) {
-          throw new Error("Não foi possível baixar a imagem da publicação selecionada.");
-        }
-        const imagemBase64 = Buffer.from(await respostaImagem.arrayBuffer()).toString("base64");
-        const imageHash = await subirImagem(adAccountId, imagemBase64);
-
-        criativo = await criarCriativoNovo(adAccountId, {
-          name: `${corpo.nomeCampanha} - criativo`,
-          pageId: conta.page_id,
-          instagramUserId: conta.instagram_business_id,
-          imageHash,
-          mensagem: post.caption ?? "",
-        });
+      // Proposital: SEM fallback pra "recriar como anúncio novo" quando não acha o cross-post. Um
+      // anúncio novo é visualmente idêntico pra quem vê, mas o engajamento (curtidas, comentários)
+      // acumula nele, não no post publicado de verdade — e é exatamente esse número que a unidade
+      // precisa ver aparecendo no post dela. Preferível falhar aqui (a pessoa vê o erro, ou o boost
+      // automático loga a falha e simplesmente não cria nada naquele dia) do que turbinar do jeito
+      // errado sem avisar.
+      if (!postDaPaginaId) {
+        throw new Error(
+          "Essa publicação ainda não tem o cross-post correspondente na Página do Facebook — sem ele não dá pra turbinar o post real. O SmartAds nunca recria como anúncio novo (o engajamento precisa acumular no post publicado, não numa cópia). Confirme se o cross-post automático Instagram→Facebook está ligado nessa conta, ou tente de novo em alguns minutos."
+        );
       }
+
+      const criativo = await criarCriativoDoPostDaPagina(adAccountId, {
+        objectStoryId: postDaPaginaId,
+        name: `${corpo.nomeCampanha} - criativo`,
+      });
 
       const anuncio = await criarAnuncio(adAccountId, {
         name: `${corpo.nomeCampanha} - anúncio`,
