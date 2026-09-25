@@ -165,17 +165,25 @@ const CABECALHO_COLUNA =
   `<tr><td style="padding:0 10px 6px;font-size:9.5px;font-weight:700;letter-spacing:.05em;color:#a1a1aa;text-transform:uppercase">Dia</td>` +
   `<td style="padding:0 10px 6px;font-size:9.5px;font-weight:700;letter-spacing:.05em;color:#a1a1aa;text-transform:uppercase">Postagem</td></tr>`;
 
-export type ComparativoRede = "acima" | "na_media" | "abaixo" | "sem_base";
+export type ComparativoRede = "acima" | "na_media" | "abaixo" | "critico" | "sem_base";
+
+// Limiar bem mais severo que "abaixo" (razão <= 0.85) — pra unidade que não está só um pouco
+// atrás da rede, está postando quase nada. Dispara por dois caminhos: proporção (menos de 40% da
+// média) OU número absoluto muito baixo (4 posts ou menos em 30 dias já é grave, mesmo se a rede
+// inteira estiver com a média baixa naquele momento e a proporção "disfarçar" o problema).
+const RAZAO_CRITICA = 0.4;
+const POSTAGENS_MINIMAS_CRITICO = 4;
 
 // Banda de tolerância em torno da média pra "na média" não ficar oscilando com diferença de 1
 // post — mesma ideia da faixa usada no Semáforo (ver src/lib/semaforo.ts), só que mais folgada
 // porque aqui é contagem inteira de posts, não uma taxa como CTR. Devolve só a classificação (sem
 // cor nem texto) — cada lugar que exibe isso (o HTML do relatório aqui embaixo, e a página de
 // detalhe no app, ver src/app/estrategias/postagens/[contaId]/page.tsx) decide sua própria cor,
-// mas o limiar (1.15/0.85) é um só, definido aqui.
+// mas o limiar é um só, definido aqui.
 export function classificarComparativoRede(totalPostagens: number, media: number): ComparativoRede {
   if (media <= 0) return "sem_base";
   const razao = totalPostagens / media;
+  if (totalPostagens <= POSTAGENS_MINIMAS_CRITICO || razao <= RAZAO_CRITICA) return "critico";
   if (razao >= 1.15) return "acima";
   if (razao <= 0.85) return "abaixo";
   return "na_media";
@@ -185,6 +193,7 @@ export const ROTULO_COMPARATIVO: Record<ComparativoRede, string> = {
   acima: "Acima da média da rede",
   na_media: "Na média da rede",
   abaixo: "Abaixo da média da rede",
+  critico: "Alerta crítico",
   sem_base: "Sem base de comparação ainda",
 };
 
@@ -194,6 +203,7 @@ function compararComMedia(totalPostagens: number, media: number): { rotulo: stri
     acima: { cor: "#15803d", fundo: "#dcfce7" },
     na_media: { cor: "#52525b", fundo: "#f4f4f5" },
     abaixo: { cor: "#b45309", fundo: "#fef3c7" },
+    critico: { cor: "#b91c1c", fundo: "#fee2e2" },
     sem_base: { cor: "#71717a", fundo: "#f4f4f5" },
   };
   return { rotulo: ROTULO_COMPARATIVO[classificacao], ...cores[classificacao] };
