@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { Crown, Gauge, Stack, CalendarBlank, Megaphone, Wallet, WarningCircle, TrendUp } from "@phosphor-icons/react/dist/ssr";
+import { Crown, Gauge, Stack, CalendarBlank, Megaphone, Wallet, Sparkle } from "@phosphor-icons/react/dist/ssr";
 import type { Icon } from "@phosphor-icons/react";
 import { obterCampanhasAtivasRede, ROTULO_OBJETIVO } from "@/lib/campanhasRede";
-import { obterInsightsRede, type NivelInsight } from "@/lib/insightsRede";
+import { obterInsightsRede, type InsightUnidade, type NivelInsight } from "@/lib/insightsRede";
 
 const ATALHOS: { href: string; nome: string; descricao: string; Icone: Icon }[] = [
   {
@@ -60,17 +60,40 @@ function formatarAtualizacao(iso: string | null): string {
  * Moldes (Estratégias) direto aqui — virou um atalho como os outros (ver /estrategias/moldes),
  * porque criar molde é uma tarefa ocasional, e a lista de campanhas ativas é o que vale a pena
  * bater o olho toda vez que se abre essa tela. */
-const ESTILO_NIVEL: Record<NivelInsight, { cor: string; fundo: string; borda: string }> = {
-  critico: { cor: "text-danger", fundo: "bg-danger/10", borda: "border-danger/30" },
-  atencao: { cor: "text-amber-400", fundo: "bg-amber-500/10", borda: "border-amber-500/30" },
-  positivo: { cor: "text-ok", fundo: "bg-ok/10", borda: "border-ok/30" },
+const COR_NIVEL: Record<NivelInsight, string> = {
+  critico: "text-danger",
+  atencao: "text-amber-400",
+  positivo: "text-ok",
 };
+
+const ABERTURA_NIVEL: Record<NivelInsight, string> = {
+  critico: "precisa de atenção",
+  atencao: "merece um olhar",
+  positivo: "está indo bem",
+};
+
+// Máximo de unidades citadas no texto — o resto fica resumido numa linha ("+N outras") em vez de
+// virar mais um parágrafo, pra manter o container curto (o pedido foi "no máximo uns 3
+// containers de espaço", texto corrido, sem quadradinho por unidade).
+const MAXIMO_CITADAS_ATENCAO = 3;
+const MAXIMO_CITADAS_POSITIVO = 2;
+
+function montarDestaques(insights: InsightUnidade[]) {
+  const atencao = insights.filter((i) => i.nivel !== "positivo");
+  const positivo = insights.filter((i) => i.nivel === "positivo");
+  return {
+    citadas: [...atencao.slice(0, MAXIMO_CITADAS_ATENCAO), ...positivo.slice(0, MAXIMO_CITADAS_POSITIVO)],
+    restantesAtencao: Math.max(0, atencao.length - MAXIMO_CITADAS_ATENCAO),
+    restantesPositivo: Math.max(0, positivo.length - MAXIMO_CITADAS_POSITIVO),
+  };
+}
 
 export default async function PainelEstrategias() {
   const [{ campanhas: campanhasRede, atualizadoEm }, insights] = await Promise.all([
     obterCampanhasAtivasRede(),
     obterInsightsRede(),
   ]);
+  const { citadas, restantesAtencao, restantesPositivo } = montarDestaques(insights);
 
   return (
     <div className="flex flex-col gap-5">
@@ -93,43 +116,45 @@ export default async function PainelEstrategias() {
       </div>
 
       <section className="cartao-vidro overflow-hidden">
-        <div className="border-b border-white/10 px-5 py-3.5">
-          <h2 className="text-sm font-semibold text-neutral-200">Insights da rede</h2>
-          <p className="mt-0.5 text-[11px] text-neutral-500">
-            Calculado a partir do Semáforo e das campanhas ativas — sem IA, atualiza junto com o
-            resto da rede.
-          </p>
+        <div className="flex items-center gap-2 border-b border-white/10 px-5 py-3.5">
+          <Sparkle size={15} weight="fill" className="shrink-0 text-accent-strong" />
+          <div>
+            <h2 className="text-sm font-semibold text-neutral-200">Insights da rede</h2>
+            <p className="mt-0.5 text-[11px] text-neutral-500">
+              Calculado a partir do Semáforo e das campanhas ativas — sem IA, atualiza junto com o
+              resto da rede.
+            </p>
+          </div>
         </div>
 
-        {insights.length === 0 ? (
+        {citadas.length === 0 ? (
           <p className="px-5 py-8 text-center text-sm text-neutral-500">
             Nada notável agora — nenhuma unidade em alerta ou destaque no momento.
           </p>
         ) : (
-          <ul className="flex flex-col gap-2 p-3">
-            {insights.map((insight) => {
-              const estilo = ESTILO_NIVEL[insight.nivel];
-              const Icone = insight.nivel === "positivo" ? TrendUp : WarningCircle;
-              return (
-                <li
-                  key={insight.contaId}
-                  className={`flex items-start gap-2.5 rounded-lg border ${estilo.borda} ${estilo.fundo} px-4 py-3`}
-                >
-                  <Icone size={15} weight="fill" className={`mt-0.5 shrink-0 ${estilo.cor}`} />
-                  <div>
-                    <p className={`text-xs font-semibold ${estilo.cor}`}>{insight.clienteNome}</p>
-                    <ul className="mt-1 flex flex-col gap-0.5">
-                      {insight.motivos.map((motivo, i) => (
-                        <li key={i} className="text-xs leading-relaxed text-neutral-300">
-                          {motivo}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+          <p className="px-5 py-4 text-sm leading-relaxed text-neutral-300">
+            {citadas.map((insight, i) => (
+              <span key={insight.contaId}>
+                <strong className={COR_NIVEL[insight.nivel]}>{insight.clienteNome}</strong>{" "}
+                {ABERTURA_NIVEL[insight.nivel]}: {insight.motivos.join(" ")}
+                {i < citadas.length - 1 ? " " : ""}
+              </span>
+            ))}
+            {(restantesAtencao > 0 || restantesPositivo > 0) && (
+              <>
+                {" "}
+                <Link href="/estrategias/semaforo" className="text-accent-strong hover:underline">
+                  {[
+                    restantesAtencao > 0 ? `+${restantesAtencao} unidade${restantesAtencao !== 1 ? "s" : ""} pedindo atenção` : null,
+                    restantesPositivo > 0 ? `+${restantesPositivo} indo bem` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" e ")}
+                  {" "}— ver Semáforo completo.
+                </Link>
+              </>
+            )}
+          </p>
         )}
       </section>
 
