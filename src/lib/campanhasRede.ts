@@ -22,7 +22,15 @@ interface LinhaCache {
 /** Recalcula o snapshot de TODAS as campanhas ativas das unidades de franquia — só é chamado pelo
  * cron (ver /api/cron/campanhas-rede e vercel.json), 2x/dia, nunca por uma visita à tela. Antes
  * disso não existia panorama nenhum entre unidades: só dava pra ver campanha por campanha dentro de
- * cada conta. Em lotes (mapearEmLotes) — corta o tempo total sem arriscar rate limit da Meta. */
+ * cada conta. Em lotes (mapearEmLotes) — corta o tempo total sem arriscar rate limit da Meta.
+ *
+ * Grava o snapshot de CADA conta assim que ela termina de ser processada, em vez de acumular tudo
+ * em memória e só gravar no final (era assim antes, e por isso essa tabela nunca tinha uma linha
+ * sequer em produção: com 18+ contas em lotes sequenciais de 5, cada uma com paginação de até 5
+ * páginas na Meta, a function do Vercel estourava o tempo antes de chegar no delete+insert final —
+ * nada era salvo, nem das contas que já tinham terminado. Mesmo raciocínio de robustez já usado no
+ * financeiro e no /api/saude (ver atualizarCacheFinanceiroDaConta e /api/saude/route.ts): se a
+ * function for interrompida no meio, o que já rodou continua salvo. */
 export async function recalcularCampanhasRede(): Promise<{ contasVerificadas: number; campanhasAtivas: number }> {
   const supabase = criarClienteAdmin();
   const { data: clientes } = await supabase
@@ -35,7 +43,9 @@ export async function recalcularCampanhasRede(): Promise<{ contasVerificadas: nu
     (cliente.smartads_contas_meta as any[]).filter((conta) => conta.ativo)
   );
 
-  const listas = await mapearEmLotes(contas, async (conta): Promise<LinhaCache[]> => {
+  const agora = new Date().toISOString();
+
+  const contagens = await mapearEmLotes(contas, async (conta): Promise<number> => {
     const ativas: LinhaCache[] = [];
     let after: string | undefined;
 
@@ -62,22 +72,19 @@ export async function recalcularCampanhasRede(): Promise<{ contasVerificadas: nu
       after = proximoCursor;
     }
 
-    return ativas;
+    // Troca o snapshot só DESSA conta (não a tabela inteira) — uma campanha pausada/encerrada some
+    // sozinha da lista dela nessa substituição, sem mexer no que já foi gravado pras outras contas.
+    await supabase.from("smartads_campanhas_rede_cache").delete().eq("conta_id", conta.id);
+    if (ativas.length > 0) {
+      await supabase
+        .from("smartads_campanhas_rede_cache")
+        .insert(ativas.map((c) => ({ ...c, atualizado_em: agora })));
+    }
+
+    return ativas.length;
   });
 
-  const todasAtivas = listas.flat();
-  const agora = new Date().toISOString();
-
-  // Troca o snapshot inteiro em vez de diffar quem deixou de estar ativa — mais simples, e uma
-  // campanha pausada/encerrada some sozinha da lista nessa substituição.
-  await supabase.from("smartads_campanhas_rede_cache").delete().not("id", "is", null);
-  if (todasAtivas.length > 0) {
-    await supabase
-      .from("smartads_campanhas_rede_cache")
-      .insert(todasAtivas.map((c) => ({ ...c, atualizado_em: agora })));
-  }
-
-  return { contasVerificadas: contas.length, campanhasAtivas: todasAtivas.length };
+  return { contasVerificadas: contas.length, campanhasAtivas: contagens.reduce((soma, n) => soma + n, 0) };
 }
 
 export interface CampanhaRedeResumo {
