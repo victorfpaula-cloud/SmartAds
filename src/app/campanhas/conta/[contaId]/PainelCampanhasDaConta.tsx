@@ -12,11 +12,8 @@ interface Campanha {
   objective: string;
   daily_budget?: string;
   lifetime_budget?: string;
-  /** Gasto dos últimos 30 dias — só usado pra decidir o que é "relevante" (ver campanhasRelevantes
-   * abaixo), não é mais exibido na tabela (ver spendTotal). */
-  spend: string;
   /** Gasto total acumulado da campanha (date_preset "maximum" na Meta) — o que a coluna "Gasto"
-   * mostra. */
+   * mostra, e também o que decide o que é "relevante" por padrão (ver campanhasRelevantes abaixo). */
   spendTotal: string;
   start_time?: string;
   stop_time?: string;
@@ -90,11 +87,12 @@ function formatarReais(centavosTexto?: string): string {
 }
 
 /** Campanhas de UMA conta só (a escolha de qual conta acontece antes, em /campanhas) — a coluna
- * "Gasto" mostra o total acumulado da campanha (vida inteira), não só os últimos 30 dias. Por
- * padrão só aparece o que está ativo ou teve gasto nos últimos 30 dias (esse critério de
- * relevância continua olhando só o período recente, ver campanhasRelevantes). O resto (campanhas
- * antigas, zeradas há meses) fica escondido atrás de "Ver todas", pra não competir por atenção com
- * o que importa agora — antes a lista misturava tudo junto, direto. */
+ * "Gasto" mostra o total acumulado da campanha (vida inteira). Por padrão só aparece o que está
+ * ativo, teve QUALQUER gasto (mesmo antigo) ou está num estado de problema/espera (ver
+ * campanhasRelevantes) — usa o mesmo gasto lifetime da coluna "Gasto" pra decidir isso, uma única
+ * chamada à Meta em vez de duas (uma só de 30 dias, outra de vida inteira). O resto (campanhas de
+ * verdade zeradas, nunca tiveram gasto nenhum) fica escondido atrás de "Ver todas", pra não
+ * competir por atenção com o que importa agora. */
 export default function PainelCampanhasDaConta({ contaId }: { contaId: string }) {
   const [campanhas, setCampanhas] = useState<Campanha[]>([]);
   const [proximoCursor, setProximoCursor] = useState<string | null>(null);
@@ -144,7 +142,7 @@ export default function PainelCampanhasDaConta({ contaId }: { contaId: string })
       campanhas.filter(
         (c) =>
           c.effective_status === "ACTIVE" ||
-          Number(c.spend) > 0 ||
+          Number(c.spendTotal) > 0 ||
           // Estados de problema/espera aparecem mesmo sem gasto — é justamente por causa deles que
           // não tem gasto, e são os que mais precisam de atenção (ex: sem saldo pra veicular).
           ["WITH_ISSUES", "PENDING_REVIEW", "PENDING_BILLING_INFO", "DISAPPROVED", "IN_PROCESS"].includes(
