@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Crown, Gauge, Stack, CalendarBlank, Megaphone, Wallet, Sparkle } from "@phosphor-icons/react/dist/ssr";
+import { Crown, Gauge, Stack, Broadcast, Megaphone, Wallet, Sparkle } from "@phosphor-icons/react/dist/ssr";
 import type { Icon } from "@phosphor-icons/react";
 import { obterCampanhasAtivasRede, ROTULO_OBJETIVO } from "@/lib/campanhasRede";
 import { obterInsightsRede, type InsightUnidade, type NivelInsight } from "@/lib/insightsRede";
@@ -37,9 +37,9 @@ const ATALHOS: { href: string; nome: string; descricao: string; Icone: Icon }[] 
   },
   {
     href: "/estrategias/postagens",
-    nome: "Última postagem",
-    descricao: "Data do post mais recente de cada unidade no Instagram — alerta quem tá sumida.",
-    Icone: CalendarBlank,
+    nome: "Radar de posts",
+    descricao: "Data do post mais recente de cada unidade no Instagram, mais stories do dia — alerta quem tá sumida.",
+    Icone: Broadcast,
   },
 ];
 

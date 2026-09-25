@@ -4,7 +4,7 @@ import { obterRelatorioPostagens, montarHtmlRelatorioPostagens } from "@/lib/rel
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-/** Botão "Baixar relatório" da aba Última postagem — mesmo HTML do e-mail, servido como arquivo
+/** Botão "Baixar relatório" da aba Radar de posts — mesmo HTML do e-mail, servido como arquivo
  * pra abrir no navegador ou compartilhar direto (não é um PDF de verdade: um .html já abre
  * formatado em qualquer navegador e imprime/salva como PDF se precisar, sem trazer mais uma
  * dependência pro projeto só por causa de um relatório simples). */
