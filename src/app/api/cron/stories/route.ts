@@ -4,9 +4,8 @@ import { coletarStoriesAtivos } from "@/lib/stories";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-/** Roda 1x/dia perto da meia-noite de SP (ver vercel.json e coletarStoriesAtivos pra entender por
- * que precisa ser perto do fim do dia) — mesma autenticação por CRON_SECRET do resto da
- * automação. */
+/** Roda 2x/dia, meio-dia e perto da meia-noite de SP (ver vercel.json e coletarStoriesAtivos pra
+ * entender por que duas rodadas) — mesma autenticação por CRON_SECRET do resto da automação. */
 export async function GET(request: NextRequest) {
   const segredoEsperado = process.env.CRON_SECRET;
   const autorizacao = request.headers.get("authorization");
