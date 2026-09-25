@@ -102,7 +102,11 @@ export default async function FinanceiroPage({
         ) : (
           <div className="mt-6 flex flex-col gap-3">
             {contas.map((conta) => (
-              <div key={conta.contaId} className="cartao-vidro overflow-hidden border border-white/10">
+              <div
+                key={conta.contaId}
+                id={`conta-${conta.contaId}`}
+                className="cartao-vidro overflow-hidden border border-white/10 scroll-mt-20"
+              >
                 <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/10 px-5 py-3.5">
                   <div>
                     <p className="text-sm font-semibold text-neutral-100">{conta.contaNome}</p>
