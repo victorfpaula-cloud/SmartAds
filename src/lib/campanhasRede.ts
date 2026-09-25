@@ -30,61 +30,112 @@ interface LinhaCache {
  * páginas na Meta, a function do Vercel estourava o tempo antes de chegar no delete+insert final —
  * nada era salvo, nem das contas que já tinham terminado. Mesmo raciocínio de robustez já usado no
  * financeiro e no /api/saude (ver atualizarCacheFinanceiroDaConta e /api/saude/route.ts): se a
- * function for interrompida no meio, o que já rodou continua salvo. */
+ * function for interrompida no meio, o que já rodou continua salvo.
+ *
+ * Grava também em smartads_cron_diagnostico (início, quantas contas achou, quantas linhas gravou,
+ * erro cru se algo explodir) — depois do fix acima, essa tabela CONTINUOU vazia mesmo passado o
+ * horário do cron, sem nenhum jeito de saber por quê a partir daqui (sem acesso a runtime logs do
+ * Vercel nesse ambiente). Isso dá um jeito de inspecionar direto pelo Supabase o que aconteceu na
+ * última rodada, em vez de continuar tentando corrigir às cegas. */
 export async function recalcularCampanhasRede(): Promise<{ contasVerificadas: number; campanhasAtivas: number }> {
   const supabase = criarClienteAdmin();
-  const { data: clientes } = await supabase
-    .from("smartads_clientes")
-    .select("id, smartads_empresas!inner(tipo), smartads_contas_meta(*)")
-    .eq("ativo", true)
-    .eq("smartads_empresas.tipo", "franquia");
 
-  const contas = (clientes ?? []).flatMap((cliente: any) =>
-    (cliente.smartads_contas_meta as any[]).filter((conta) => conta.ativo)
-  );
+  const { data: diagnostico } = await supabase
+    .from("smartads_cron_diagnostico")
+    .insert({ cron: "campanhas-rede" })
+    .select("id")
+    .single();
+  const diagnosticoId = diagnostico?.id as string | undefined;
 
-  const agora = new Date().toISOString();
+  try {
+    const { data: clientes, error: erroClientes } = await supabase
+      .from("smartads_clientes")
+      .select("id, smartads_empresas!inner(tipo), smartads_contas_meta(*)")
+      .eq("ativo", true)
+      .eq("smartads_empresas.tipo", "franquia");
 
-  const contagens = await mapearEmLotes(contas, async (conta): Promise<number> => {
-    const ativas: LinhaCache[] = [];
-    let after: string | undefined;
+    if (erroClientes) throw new Error(`Falha ao buscar clientes: ${erroClientes.message}`);
 
-    // Pagina até 5 páginas (250 campanhas) por conta como trava de segurança — mesmo limite já
-    // usado em obterResumoCampanhasAtivas, raríssima conta de agência chega perto disso.
-    for (let pagina = 0; pagina < 5; pagina++) {
-      const { campanhas, proximoCursor } = await listarCampanhas(conta.meta_ad_account_id, {
-        limit: 50,
-        after,
-      }).catch(() => ({ campanhas: [], proximoCursor: null }));
+    const contas = (clientes ?? []).flatMap((cliente: any) =>
+      (cliente.smartads_contas_meta as any[]).filter((conta) => conta.ativo)
+    );
 
-      for (const campanha of campanhas) {
-        if (!campanhaAtivaAgora(campanha)) continue;
-        ativas.push({
-          conta_id: conta.id,
-          meta_campaign_id: campanha.id,
-          nome: campanha.name,
-          objetivo: campanha.objective ?? null,
-          orcamento_diario_centavos: campanha.daily_budget ? Number(campanha.daily_budget) : null,
-        });
+    if (diagnosticoId) {
+      await supabase
+        .from("smartads_cron_diagnostico")
+        .update({ contas_encontradas: contas.length })
+        .eq("id", diagnosticoId);
+    }
+
+    const agora = new Date().toISOString();
+
+    const contagens = await mapearEmLotes(contas, async (conta): Promise<number> => {
+      const ativas: LinhaCache[] = [];
+      let after: string | undefined;
+
+      // Pagina até 5 páginas (250 campanhas) por conta como trava de segurança — mesmo limite já
+      // usado em obterResumoCampanhasAtivas, raríssima conta de agência chega perto disso.
+      for (let pagina = 0; pagina < 5; pagina++) {
+        const { campanhas, proximoCursor } = await listarCampanhas(conta.meta_ad_account_id, {
+          limit: 50,
+          after,
+        }).catch(() => ({ campanhas: [], proximoCursor: null }));
+
+        for (const campanha of campanhas) {
+          if (!campanhaAtivaAgora(campanha)) continue;
+          ativas.push({
+            conta_id: conta.id,
+            meta_campaign_id: campanha.id,
+            nome: campanha.name,
+            objetivo: campanha.objective ?? null,
+            orcamento_diario_centavos: campanha.daily_budget ? Number(campanha.daily_budget) : null,
+          });
+        }
+
+        if (!proximoCursor) break;
+        after = proximoCursor;
       }
 
-      if (!proximoCursor) break;
-      after = proximoCursor;
-    }
-
-    // Troca o snapshot só DESSA conta (não a tabela inteira) — uma campanha pausada/encerrada some
-    // sozinha da lista dela nessa substituição, sem mexer no que já foi gravado pras outras contas.
-    await supabase.from("smartads_campanhas_rede_cache").delete().eq("conta_id", conta.id);
-    if (ativas.length > 0) {
-      await supabase
+      // Troca o snapshot só DESSA conta (não a tabela inteira) — uma campanha pausada/encerrada
+      // some sozinha da lista dela nessa substituição, sem mexer no que já foi gravado pras outras.
+      const { error: erroDelete } = await supabase
         .from("smartads_campanhas_rede_cache")
-        .insert(ativas.map((c) => ({ ...c, atualizado_em: agora })));
+        .delete()
+        .eq("conta_id", conta.id);
+      if (erroDelete) throw new Error(`Falha ao limpar cache da conta ${conta.id}: ${erroDelete.message}`);
+
+      if (ativas.length > 0) {
+        const { error: erroInsert } = await supabase
+          .from("smartads_campanhas_rede_cache")
+          .insert(ativas.map((c) => ({ ...c, atualizado_em: agora })));
+        if (erroInsert) throw new Error(`Falha ao gravar cache da conta ${conta.id}: ${erroInsert.message}`);
+      }
+
+      return ativas.length;
+    });
+
+    const campanhasAtivas = contagens.reduce((soma, n) => soma + n, 0);
+
+    if (diagnosticoId) {
+      await supabase
+        .from("smartads_cron_diagnostico")
+        .update({ linhas_gravadas: campanhasAtivas, finalizado_em: new Date().toISOString() })
+        .eq("id", diagnosticoId);
     }
 
-    return ativas.length;
-  });
-
-  return { contasVerificadas: contas.length, campanhasAtivas: contagens.reduce((soma, n) => soma + n, 0) };
+    return { contasVerificadas: contas.length, campanhasAtivas };
+  } catch (erro) {
+    if (diagnosticoId) {
+      await supabase
+        .from("smartads_cron_diagnostico")
+        .update({
+          erro: erro instanceof Error ? erro.message : String(erro),
+          finalizado_em: new Date().toISOString(),
+        })
+        .eq("id", diagnosticoId);
+    }
+    throw erro;
+  }
 }
 
 export interface CampanhaRedeResumo {
