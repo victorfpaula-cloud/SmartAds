@@ -26,6 +26,7 @@ interface CardData {
   diasSemPostar: number | null;
   precisaAtencao: boolean;
   comparativo: ComparativoRede | null;
+  totalPostagens: number;
 }
 
 export default async function PostagensPage() {
@@ -51,6 +52,7 @@ export default async function PostagensPage() {
       diasSemPostar,
       precisaAtencao: diasSemPostar !== null && diasSemPostar >= DIAS_LIMITE_ATENCAO,
       comparativo: u.instagramVinculado ? classificarComparativoRede(u.totalPostagens, mediaRede) : null,
+      totalPostagens: u.totalPostagens,
     };
   });
 
@@ -111,7 +113,7 @@ const ROTULO_COMPARATIVO_CURTO: Record<ComparativoRede, string> = {
 
 const CLASSE_COMPARATIVO_CURTO: Record<ComparativoRede, string> = {
   acima: "text-ok",
-  na_media: "text-neutral-500",
+  na_media: "text-sky-300",
   abaixo: "text-amber-400",
   critico: "text-danger",
   sem_base: "",
@@ -187,7 +189,7 @@ function CardUnidade({ unidade }: { unidade: CardData }) {
         )}
         {unidade.comparativo && unidade.comparativo !== "sem_base" && (
           <p className={`mt-1 truncate text-[9.5px] font-bold uppercase tracking-wide ${CLASSE_COMPARATIVO_CURTO[unidade.comparativo]}`}>
-            {ROTULO_COMPARATIVO_CURTO[unidade.comparativo]}
+            {unidade.totalPostagens} {unidade.totalPostagens === 1 ? "post" : "posts"} · {ROTULO_COMPARATIVO_CURTO[unidade.comparativo]}
           </p>
         )}
       </div>
