@@ -1,31 +1,9 @@
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { listarPostsInstagram, type PostInstagram } from "@/lib/meta/api";
+import { diaEmSaoPaulo, horaEmSaoPaulo, formatarDiaExibicao, adicionarDias, FUSO_HORARIO_SP } from "@/lib/tempoSaoPaulo";
 
-const FUSO_HORARIO = "America/Sao_Paulo";
 const DIAS_JANELA = 30;
 const DIAS_LIMITE_ATENCAO = 5;
-
-function diaEmSaoPaulo(iso: string): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: FUSO_HORARIO }).format(new Date(iso));
-}
-
-function horaEmSaoPaulo(iso: string): string {
-  return new Intl.DateTimeFormat("pt-BR", { timeZone: FUSO_HORARIO, hour: "2-digit", minute: "2-digit" }).format(
-    new Date(iso)
-  );
-}
-
-function formatarDiaExibicao(diaISO: string): string {
-  const [, mes, dia] = diaISO.split("-");
-  return `${dia}/${mes}`;
-}
-
-// Aritmética de calendário pura (sem passar por Date com fuso horário) — diaISO já é a data no
-// fuso de São Paulo, então somar/subtrair dias aqui não pode reintroduzir erro de fuso.
-function adicionarDias(diaISO: string, quantidade: number): string {
-  const [ano, mes, dia] = diaISO.split("-").map(Number);
-  return new Date(Date.UTC(ano, mes - 1, dia + quantidade)).toISOString().slice(0, 10);
-}
 
 export interface DiaRelatorioPostagem {
   diaExibicao: string;
@@ -34,6 +12,11 @@ export interface DiaRelatorioPostagem {
    * 10, 15...) — o valor é a contagem real naquele dia, pro aviso poder dizer "10 dias sem postar"
    * de verdade, não repetir "5 dias" pra sempre num hiato que já passou disso. */
   diasSemPostarDestaque: number | null;
+  /** Quantidade de stories vistos naquele dia — vem de smartads_stories_vistos (ver
+   * src/lib/stories.ts), nunca da Meta ao vivo: diferente do feed, a API só expõe stories ATIVOS
+   * (últimas 24h), sem histórico, então o contador só existe a partir de quando o cron passou a
+   * rodar. Não participa de nenhum aviso/sinalização — é só informativo. */
+  storiesPostados: number;
 }
 
 export interface UnidadeRelatorioPostagens {
@@ -77,6 +60,21 @@ export async function obterRelatorioPostagens(): Promise<UnidadeRelatorioPostage
   const diasJanela: string[] = [];
   for (let i = DIAS_JANELA - 1; i >= 0; i--) diasJanela.push(adicionarDias(hojeSP, -i));
 
+  // Busca os stories já vistos de todas as unidades numa query só (não uma por conta) — mesma
+  // janela de 30 dias da tabela, agrupado por conta+dia pra montar o contador de cada célula.
+  const contaIds = unidades.map(({ conta }) => conta.id as string);
+  const { data: storiesLinhas } =
+    contaIds.length > 0
+      ? await supabase.from("smartads_stories_vistos").select("conta_id, dia").in("conta_id", contaIds).gte("dia", diasJanela[0])
+      : { data: [] as Array<{ conta_id: string; dia: string }> };
+
+  const storiesPorConta = new Map<string, Map<string, number>>();
+  for (const linha of storiesLinhas ?? []) {
+    const porDia = storiesPorConta.get(linha.conta_id) ?? new Map<string, number>();
+    porDia.set(linha.dia, (porDia.get(linha.dia) ?? 0) + 1);
+    storiesPorConta.set(linha.conta_id, porDia);
+  }
+
   return Promise.all(
     unidades.map(async ({ cliente, conta }): Promise<UnidadeRelatorioPostagens> => {
       const base = {
@@ -85,10 +83,11 @@ export async function obterRelatorioPostagens(): Promise<UnidadeRelatorioPostage
         contaId: conta.id as string,
         instagramUsername: (conta.instagram_username ?? null) as string | null,
       };
-
       if (!conta.instagram_business_id) {
         return { ...base, instagramVinculado: false, totalPostagens: 0, ultimoPostEm: null, dias: [] };
       }
+
+      const storiesPorDia = storiesPorConta.get(conta.id as string) ?? new Map<string, number>();
 
       const postsBrutos = await listarPostsInstagram(conta.instagram_business_id).catch(() => [] as PostInstagram[]);
       // Deduplica por id — proteção contra a Meta devolver o mesmo post mais de uma vez (não deveria
@@ -132,6 +131,7 @@ export async function obterRelatorioPostagens(): Promise<UnidadeRelatorioPostage
         diaExibicao: formatarDiaExibicao(dia),
         horasPost: horasPorDia.get(dia) ?? [],
         diasSemPostarDestaque: destaquePorDia.get(dia) ?? null,
+        storiesPostados: storiesPorDia.get(dia) ?? 0,
       }));
 
       // Vem da MESMA estrutura (horasPorDia, já restrita à janela de 30 dias pelos `dia` gerados
@@ -152,9 +152,15 @@ const FONTE = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Aria
 // grudadas, sem nenhuma marcação entre elas), sem virar grade pesada.
 const BORDA_LINHA = "border-bottom:1px solid #f1f1f1";
 
+// Coluna de stories: só informativa, não participa do aviso de "dias sem postar" nem tem cor de
+// alerta própria — por isso fica fora do `if` do destaque acima e sempre em cinza neutro.
+function celulaStories(dia: DiaRelatorioPostagem): string {
+  return `<td style="padding:6px 10px;font-size:11px;color:#a1a1aa;text-align:right;vertical-align:top;${BORDA_LINHA}">${dia.storiesPostados > 0 ? dia.storiesPostados : "—"}</td>`;
+}
+
 function celulaDia(dia: DiaRelatorioPostagem): string {
   if (dia.diasSemPostarDestaque !== null) {
-    return `<tr style="background:#fef2f2"><td colspan="2" style="padding:7px 10px 7px 8px;font-size:11px;color:#991b1b;font-weight:700;border-left:3px solid #dc2626;${BORDA_LINHA}">${dia.diaExibicao} — atenção: ${dia.diasSemPostarDestaque} dias sem postar</td></tr>`;
+    return `<tr style="background:#fef2f2"><td colspan="3" style="padding:7px 10px 7px 8px;font-size:11px;color:#991b1b;font-weight:700;border-left:3px solid #dc2626;${BORDA_LINHA}">${dia.diaExibicao} — atenção: ${dia.diasSemPostarDestaque} dias sem postar</td></tr>`;
   }
   if (dia.horasPost.length > 0) {
     // Um post só: "OK · 08:20", sem numerar — não precisa. Mais de um: numera cada um (Post 1,
@@ -164,16 +170,17 @@ function celulaDia(dia: DiaRelatorioPostagem): string {
       dia.horasPost.length === 1
         ? `OK · ${dia.horasPost[0]}`
         : dia.horasPost.map((hora, i) => `Post ${i + 1} · ${hora}`).join("<br>");
-    return `<tr><td style="padding:6px 10px;font-size:11px;color:#71717a;vertical-align:top;${BORDA_LINHA}">${dia.diaExibicao}</td><td style="padding:6px 10px;font-size:11px;font-weight:600;color:#15803d;line-height:1.6;${BORDA_LINHA}">${status}</td></tr>`;
+    return `<tr><td style="padding:6px 10px;font-size:11px;color:#71717a;vertical-align:top;${BORDA_LINHA}">${dia.diaExibicao}</td><td style="padding:6px 10px;font-size:11px;font-weight:600;color:#15803d;line-height:1.6;vertical-align:top;${BORDA_LINHA}">${status}</td>${celulaStories(dia)}</tr>`;
   }
-  return `<tr><td style="padding:6px 10px;font-size:11px;color:#a1a1aa;${BORDA_LINHA}">${dia.diaExibicao}</td><td style="padding:6px 10px;font-size:11px;color:#d4d4d8;${BORDA_LINHA}">—</td></tr>`;
+  return `<tr><td style="padding:6px 10px;font-size:11px;color:#a1a1aa;vertical-align:top;${BORDA_LINHA}">${dia.diaExibicao}</td><td style="padding:6px 10px;font-size:11px;color:#d4d4d8;vertical-align:top;${BORDA_LINHA}">—</td>${celulaStories(dia)}</tr>`;
 }
 
 // Cabeçalho pequeno acima de cada coluna de dias — antes a tabela começava direto nos dados, sem
 // dizer o que cada coluna é.
 const CABECALHO_COLUNA =
   `<tr><td style="padding:0 10px 6px;font-size:9.5px;font-weight:700;letter-spacing:.05em;color:#a1a1aa;text-transform:uppercase">Dia</td>` +
-  `<td style="padding:0 10px 6px;font-size:9.5px;font-weight:700;letter-spacing:.05em;color:#a1a1aa;text-transform:uppercase">Postagem</td></tr>`;
+  `<td style="padding:0 10px 6px;font-size:9.5px;font-weight:700;letter-spacing:.05em;color:#a1a1aa;text-transform:uppercase">Postagem</td>` +
+  `<td style="padding:0 10px 6px;font-size:9.5px;font-weight:700;letter-spacing:.05em;color:#a1a1aa;text-transform:uppercase;text-align:right">Stories</td></tr>`;
 
 export type ComparativoRede = "acima" | "na_media" | "abaixo" | "critico" | "sem_base";
 
@@ -302,7 +309,7 @@ export function montarHtmlRelatorioPostagens(unidades: UnidadeRelatorioPostagens
   <div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:20px;padding:28px 28px 8px;border:1px solid #ececef">
     <p style="margin:0 0 6px;font-size:10px;font-weight:700;letter-spacing:.12em;color:#a1a1aa;text-transform:uppercase">SmartAds · Central da rede</p>
     <h1 style="font-size:21px;margin:0 0 4px;font-weight:700;color:#18181b;letter-spacing:-.01em">Relatório de postagens</h1>
-    <p style="font-size:12px;color:#a1a1aa;margin:0 0 22px">Últimos 30 dias · gerado em ${new Date().toLocaleDateString("pt-BR", { timeZone: FUSO_HORARIO })}</p>
+    <p style="font-size:12px;color:#a1a1aa;margin:0 0 22px">Últimos 30 dias · gerado em ${new Date().toLocaleDateString("pt-BR", { timeZone: FUSO_HORARIO_SP })}</p>
     ${corpo}
     <p style="margin:14px 0 0;padding:14px 0;border-top:1px solid #f1f1f1;font-size:10.5px;color:#d4d4d8;text-align:center">Gerado automaticamente pelo SmartAds</p>
   </div>

@@ -20,6 +20,10 @@
     {
       "path": "/api/cron/boost-automatico",
       "schedule": "0 18 * * *"
+    },
+    {
+      "path": "/api/cron/stories",
+      "schedule": "50 2 * * *"
     }
   ]
 }

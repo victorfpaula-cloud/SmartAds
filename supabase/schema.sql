@@ -648,3 +648,22 @@ create table if not exists smartads_boost_automatico_log (
 create index if not exists smartads_boost_automatico_log_conta_idx on smartads_boost_automatico_log(conta_id);
 
 alter table smartads_boost_automatico_log enable row level security;
+
+-- ============================================================================
+-- Stories: diferente do feed, a Meta só expõe stories ATIVOS (postados nas últimas 24h) via Graph
+-- API — não existe endpoint de histórico. Por isso o cron diário (/api/cron/stories, ver
+-- src/lib/stories.ts) grava aqui cada story visto (id como chave primária, pra nunca contar o
+-- mesmo story duas vezes mesmo rodando o cron mais de uma vez), e o dia é derivado do timestamp de
+-- CRIAÇÃO do story (não de quando o cron rodou) — o contador nasce a partir de agora, sem como
+-- recuperar o passado (o Instagram não expõe o Arquivo de stories via API pública).
+-- ============================================================================
+create table if not exists smartads_stories_vistos (
+  id text primary key,
+  conta_id uuid not null references smartads_contas_meta(id) on delete cascade,
+  dia text not null,
+  criado_em timestamptz not null default now()
+);
+
+create index if not exists smartads_stories_vistos_conta_dia_idx on smartads_stories_vistos(conta_id, dia);
+
+alter table smartads_stories_vistos enable row level security;
