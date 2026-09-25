@@ -33,6 +33,15 @@ export interface UnidadeRelatorioPostagens {
   dias: DiaRelatorioPostagem[];
 }
 
+/** Formato salvo em smartads_relatorio_postagens_cache.dias — versão "crua" de DiaRelatorioPostagem
+ * (chave do dia em vez de já formatada, sem storiesPostados porque isso vem sempre fresco da
+ * mesma consulta local que já roda em toda chamada, cache ou não). */
+interface DiaBruto {
+  dia: string;
+  horasPost: string[];
+  diasSemPostarDestaque: number | null;
+}
+
 /** Relatório dia a dia dos últimos 30 dias, uma linha por dia, pra cada unidade de franquia — fonte
  * única pra tudo que envolve postagens: o download/e-mail (ver src/lib/email/relatorioPostagens.ts
  * e /api/relatorios/postagens), a página de detalhe por unidade
@@ -40,7 +49,14 @@ export interface UnidadeRelatorioPostagens {
  * (src/app/estrategias/postagens/page.tsx). A sequência de dias sem postar é calculada desde o
  * post mais antigo que `listarPostsInstagram` devolve (até 30 itens), não só desde o início da
  * janela de exibição — senão um hiato que já vinha de antes apareceria como se tivesse começado do
- * zero no primeiro dia do relatório, subestimando o atraso real. */
+ * zero no primeiro dia do relatório, subestimando o atraso real.
+ *
+ * Sempre busca ao vivo na Meta — SEM cache — exceto uma otimização pontual: uma unidade que já
+ * teve o post de hoje confirmado numa chamada anterior, hoje mesmo, não bate na Meta de novo (ver
+ * smartads_relatorio_postagens_cache). É bem improvável postar duas vezes no mesmo dia, e mesmo
+ * que aconteça, "0 dias sem postar" já está certo do mesmo jeito — só economiza chamada em quem já
+ * sabidamente não precisa ser checado nesse dia. Unidade que ainda não postou hoje continua sendo
+ * checada em TODA visita, porque aí sim a resposta pode mudar a qualquer momento. */
 export async function obterRelatorioPostagens(): Promise<UnidadeRelatorioPostagens[]> {
   const supabase = criarClienteAdmin();
   const { data: clientes } = await supabase
@@ -75,6 +91,20 @@ export async function obterRelatorioPostagens(): Promise<UnidadeRelatorioPostage
     storiesPorConta.set(linha.conta_id, porDia);
   }
 
+  // Cache do resultado do dia por conta (ver DiaBruto acima) — só é reaproveitado quando a
+  // unidade já tinha post confirmado de HOJE numa chamada anterior, hoje mesmo.
+  const contaIdsComInstagram = unidades
+    .filter(({ conta }) => conta.instagram_business_id)
+    .map(({ conta }) => conta.id as string);
+  const { data: cacheLinhas } =
+    contaIdsComInstagram.length > 0
+      ? await supabase
+          .from("smartads_relatorio_postagens_cache")
+          .select("conta_id, dia_calculado, ultimo_post_em, ultimo_post_dia, total_postagens, dias")
+          .in("conta_id", contaIdsComInstagram)
+      : { data: [] as any[] };
+  const cachePorConta = new Map((cacheLinhas ?? []).map((l: any) => [l.conta_id as string, l]));
+
   return Promise.all(
     unidades.map(async ({ cliente, conta }): Promise<UnidadeRelatorioPostagens> => {
       const base = {
@@ -88,56 +118,80 @@ export async function obterRelatorioPostagens(): Promise<UnidadeRelatorioPostage
       }
 
       const storiesPorDia = storiesPorConta.get(conta.id as string) ?? new Map<string, number>();
+      const cache = cachePorConta.get(conta.id as string);
+      const podeReaproveitar = cache && cache.dia_calculado === hojeSP && cache.ultimo_post_dia === hojeSP;
 
-      const postsBrutos = await listarPostsInstagram(conta.instagram_business_id).catch(() => [] as PostInstagram[]);
-      // Deduplica por id — proteção contra a Meta devolver o mesmo post mais de uma vez (não deveria
-      // acontecer numa chamada só sem paginação, mas é barato garantir e evita contagem inflada).
-      // Map preserva a ordem de inserção = ordem original da Meta (mais recente primeiro), então
-      // posts[0] continua sendo "o último post" depois da deduplicação.
-      const posts = [...new Map(postsBrutos.map((p) => [p.id, p])).values()];
-      const ultimoPostEm = posts[0]?.timestamp ?? null;
+      let diasBrutos: DiaBruto[];
+      let ultimoPostEm: string | null;
+      let totalPostagens: number;
 
-      const horasPorDia = new Map<string, string[]>();
-      for (const post of posts) {
-        const dia = diaEmSaoPaulo(post.timestamp);
-        const hora = horaEmSaoPaulo(post.timestamp);
-        const lista = horasPorDia.get(dia) ?? [];
-        lista.push(hora);
-        horasPorDia.set(dia, lista);
-      }
-      for (const lista of horasPorDia.values()) lista.sort();
+      if (podeReaproveitar) {
+        diasBrutos = cache.dias as DiaBruto[];
+        ultimoPostEm = cache.ultimo_post_em;
+        totalPostagens = cache.total_postagens;
+      } else {
+        const postsBrutos = await listarPostsInstagram(conta.instagram_business_id).catch(() => [] as PostInstagram[]);
+        // Deduplica por id — proteção contra a Meta devolver o mesmo post mais de uma vez (não
+        // deveria acontecer numa chamada só sem paginação, mas é barato garantir e evita contagem
+        // inflada). Map preserva a ordem de inserção = ordem original da Meta (mais recente
+        // primeiro), então posts[0] continua sendo "o último post" depois da deduplicação.
+        const posts = [...new Map(postsBrutos.map((p) => [p.id, p])).values()];
+        ultimoPostEm = posts[0]?.timestamp ?? null;
 
-      const diaMaisAntigoComPost =
-        posts.length > 0
-          ? posts.reduce((menor, p) => (p.timestamp < menor ? p.timestamp : menor), posts[0].timestamp)
-          : null;
-      const diaInicioCalculo = diaMaisAntigoComPost ? diaEmSaoPaulo(diaMaisAntigoComPost) : diasJanela[0];
-
-      let streak = 0;
-      const destaquePorDia = new Map<string, number>();
-      for (let cursor = diaInicioCalculo; cursor <= hojeSP; cursor = adicionarDias(cursor, 1)) {
-        if (horasPorDia.has(cursor)) {
-          streak = 0;
-        } else {
-          streak += 1;
-          // Acende em todo múltiplo de DIAS_LIMITE_ATENCAO (5, 10, 15...) — não só uma vez no
-          // primeiro corte, senão um hiato de 20 dias mostraria só um aviso de "5 dias" lá atrás
-          // e nada mais, escondendo o tamanho real do problema.
-          if (streak % DIAS_LIMITE_ATENCAO === 0) destaquePorDia.set(cursor, streak);
+        const horasPorDia = new Map<string, string[]>();
+        for (const post of posts) {
+          const dia = diaEmSaoPaulo(post.timestamp);
+          const hora = horaEmSaoPaulo(post.timestamp);
+          const lista = horasPorDia.get(dia) ?? [];
+          lista.push(hora);
+          horasPorDia.set(dia, lista);
         }
+        for (const lista of horasPorDia.values()) lista.sort();
+
+        const diaMaisAntigoComPost =
+          posts.length > 0
+            ? posts.reduce((menor, p) => (p.timestamp < menor ? p.timestamp : menor), posts[0].timestamp)
+            : null;
+        const diaInicioCalculo = diaMaisAntigoComPost ? diaEmSaoPaulo(diaMaisAntigoComPost) : diasJanela[0];
+
+        let streak = 0;
+        const destaquePorDia = new Map<string, number>();
+        for (let cursor = diaInicioCalculo; cursor <= hojeSP; cursor = adicionarDias(cursor, 1)) {
+          if (horasPorDia.has(cursor)) {
+            streak = 0;
+          } else {
+            streak += 1;
+            // Acende em todo múltiplo de DIAS_LIMITE_ATENCAO (5, 10, 15...) — não só uma vez no
+            // primeiro corte, senão um hiato de 20 dias mostraria só um aviso de "5 dias" lá atrás
+            // e nada mais, escondendo o tamanho real do problema.
+            if (streak % DIAS_LIMITE_ATENCAO === 0) destaquePorDia.set(cursor, streak);
+          }
+        }
+
+        diasBrutos = diasJanela.map((dia) => ({
+          dia,
+          horasPost: horasPorDia.get(dia) ?? [],
+          diasSemPostarDestaque: destaquePorDia.get(dia) ?? null,
+        }));
+        totalPostagens = diasBrutos.reduce((soma, d) => soma + d.horasPost.length, 0);
+
+        await supabase.from("smartads_relatorio_postagens_cache").upsert({
+          conta_id: conta.id,
+          dia_calculado: hojeSP,
+          ultimo_post_em: ultimoPostEm,
+          ultimo_post_dia: ultimoPostEm ? diaEmSaoPaulo(ultimoPostEm) : null,
+          total_postagens: totalPostagens,
+          dias: diasBrutos,
+          atualizado_em: new Date().toISOString(),
+        });
       }
 
-      const dias: DiaRelatorioPostagem[] = diasJanela.map((dia) => ({
-        diaExibicao: formatarDiaExibicao(dia),
-        horasPost: horasPorDia.get(dia) ?? [],
-        diasSemPostarDestaque: destaquePorDia.get(dia) ?? null,
-        storiesPostados: storiesPorDia.get(dia) ?? 0,
+      const dias: DiaRelatorioPostagem[] = diasBrutos.map((d) => ({
+        diaExibicao: formatarDiaExibicao(d.dia),
+        horasPost: d.horasPost,
+        diasSemPostarDestaque: d.diasSemPostarDestaque,
+        storiesPostados: storiesPorDia.get(d.dia) ?? 0,
       }));
-
-      // Vem da MESMA estrutura (horasPorDia, já restrita à janela de 30 dias pelos `dia` gerados
-      // acima) que alimenta a tabela — garante que o número do cabeçalho nunca destoe do que a
-      // pessoa vê célula por célula.
-      const totalPostagens = dias.reduce((soma, d) => soma + d.horasPost.length, 0);
 
       return { ...base, instagramVinculado: true, totalPostagens, ultimoPostEm, dias };
     })
