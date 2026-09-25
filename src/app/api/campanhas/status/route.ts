@@ -28,7 +28,11 @@ export async function GET(request: NextRequest) {
 
   try {
     const [{ campanhas, proximoCursor }, insights, { data: cache }] = await Promise.all([
-      listarCampanhas(conta.meta_ad_account_id, { after }),
+      // limit 50 (não o padrão de 10 de listarCampanhas) — com 10 por página, uma conta com mais
+      // de 10 campanhas cadastradas podia ter uma campanha ATIVA fora da primeira página, escondida
+      // até alguém clicar em "Carregar mais campanhas" (ninguém clica achando que só tem histórico
+      // antigo ali). 50 cobre a esmagadora maioria das contas numa página só, sem round-trip extra.
+      listarCampanhas(conta.meta_ad_account_id, { limit: 50, after }),
       // Últimos 30 dias, não a vida inteira da campanha — é o que a tela usa tanto pra mostrar
       // "Gasto (30d)" quanto pra decidir o que é "relevante agora" (ver PainelCampanhasDaConta,
       // filtro padrão ativa-ou-com-gasto-recente). `porDia: false` agrega num total só por
