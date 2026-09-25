@@ -249,7 +249,7 @@ function montarSecaoUnidade(unidade: UnidadeRelatorioPostagens, mediaRede: numbe
       <td style="vertical-align:top">
         <p style="margin:0;font-size:14.5px;font-weight:700;color:#18181b">${unidade.clienteNome}</p>
         <p style="margin:3px 0 0;font-size:11.5px;color:#a1a1aa">
-          ${unidade.instagramUsername ? `@${unidade.instagramUsername}<span style="margin:0 6px;color:#e4e4e7">·</span>` : ""}${unidade.totalPostagens} postagem${unidade.totalPostagens !== 1 ? "s" : ""} em 30 dias
+          ${unidade.instagramUsername ? `@${unidade.instagramUsername}<span style="margin:0 6px;color:#e4e4e7">·</span>` : ""}${unidade.totalPostagens} ${unidade.totalPostagens === 1 ? "postagem" : "postagens"} em 30 dias
         </p>
       </td>
       <td style="width:1%;white-space:nowrap;vertical-align:top;text-align:right">

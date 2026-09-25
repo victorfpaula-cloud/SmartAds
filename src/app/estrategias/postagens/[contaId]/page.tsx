@@ -51,7 +51,7 @@ export default async function DetalhePostagensPage({ params }: { params: Promise
             <h1 className="font-display text-2xl font-bold">{unidade.clienteNome}</h1>
             <p className="mt-1 text-sm text-neutral-400">
               {unidade.instagramUsername && <>@{unidade.instagramUsername} · </>}
-              {unidade.totalPostagens} postagem{unidade.totalPostagens !== 1 ? "s" : ""} nos últimos 30 dias
+              {unidade.totalPostagens} {unidade.totalPostagens === 1 ? "postagem" : "postagens"} nos últimos 30 dias
             </p>
           </div>
           {unidade.instagramVinculado && (
