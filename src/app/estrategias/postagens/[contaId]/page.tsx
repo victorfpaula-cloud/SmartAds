@@ -87,11 +87,13 @@ export default async function DetalhePostagensPage({ params }: { params: Promise
 }
 
 function LinhaDia({ dia }: { dia: DiaRelatorioPostagem }) {
-  if (dia.destaqueAtraso) {
+  if (dia.diasSemPostarDestaque !== null) {
     return (
       <div className="flex items-center gap-2 border-l-2 border-danger bg-danger/10 px-4 py-2.5">
         <WarningCircle size={13} weight="fill" className="shrink-0 text-danger" />
-        <p className="text-xs font-semibold text-danger">{dia.diaExibicao} — atenção: 5 dias sem postar</p>
+        <p className="text-xs font-semibold text-danger">
+          {dia.diaExibicao} — atenção: {dia.diasSemPostarDestaque} dias sem postar
+        </p>
       </div>
     );
   }
