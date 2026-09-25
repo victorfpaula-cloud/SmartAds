@@ -1,7 +1,7 @@
 import { obterRelatorioPostagens, montarHtmlRelatorioPostagens } from "@/lib/relatorioPostagens";
 import { enviarEmail } from "./resend";
 
-/** Mesmo e-mail que o botão "Enviar por e-mail agora" da aba Última postagem dispara na hora —
+/** Mesmo e-mail que o botão "Enviar por e-mail agora" da aba Radar de posts dispara na hora —
  * aqui é a versão chamada pelo cron semanal (ver /api/cron/relatorio-postagens e vercel.json), pro
  * dono não precisar entrar no app pra lembrar de conferir. Reaproveita RELATORIO_SEMANAL_EMAIL, o
  * mesmo destinatário do relatório semanal já existente — é o e-mail do próprio dono. */

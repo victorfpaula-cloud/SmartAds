@@ -27,6 +27,7 @@ interface CardData {
   precisaAtencao: boolean;
   comparativo: ComparativoRede | null;
   totalPostagens: number;
+  storiesHoje: number;
 }
 
 export default async function PostagensPage() {
@@ -53,6 +54,7 @@ export default async function PostagensPage() {
       precisaAtencao: diasSemPostar !== null && diasSemPostar >= DIAS_LIMITE_ATENCAO,
       comparativo: u.instagramVinculado ? classificarComparativoRede(u.totalPostagens, mediaRede) : null,
       totalPostagens: u.totalPostagens,
+      storiesHoje: u.dias[u.dias.length - 1]?.storiesPostados ?? 0,
     };
   });
 
@@ -65,11 +67,11 @@ export default async function PostagensPage() {
         </Link>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="mt-1 font-display text-2xl font-bold">Última postagem</h1>
+            <h1 className="mt-1 font-display text-2xl font-bold">Radar de posts</h1>
             <p className="mt-1 text-sm text-neutral-400">
               Post mais recente de cada unidade no Instagram — feed, Reels ou carrossel, vale
-              qualquer formato. 5 dias sem postar acende o alerta. Clique num card pra ver o
-              histórico completo dos últimos 30 dias.
+              qualquer formato — mais os stories do dia. 5 dias sem postar acende o alerta. Clique
+              num card pra ver o histórico completo dos últimos 30 dias.
             </p>
           </div>
           <div className="flex shrink-0 gap-2">
@@ -190,6 +192,11 @@ function CardUnidade({ unidade }: { unidade: CardData }) {
         {unidade.comparativo && unidade.comparativo !== "sem_base" && (
           <p className={`mt-1 truncate text-[9.5px] font-bold uppercase tracking-wide ${CLASSE_COMPARATIVO_CURTO[unidade.comparativo]}`}>
             {unidade.totalPostagens} {unidade.totalPostagens === 1 ? "post" : "posts"} · {ROTULO_COMPARATIVO_CURTO[unidade.comparativo]}
+          </p>
+        )}
+        {unidade.storiesHoje > 0 && (
+          <p className="mt-0.5 truncate text-[9.5px] font-semibold text-sky-300">
+            {unidade.storiesHoje} {unidade.storiesHoje === 1 ? "story" : "stories"} hoje
           </p>
         )}
       </div>

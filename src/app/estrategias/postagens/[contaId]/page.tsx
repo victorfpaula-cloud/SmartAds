@@ -43,7 +43,7 @@ export default async function DetalhePostagensPage({ params }: { params: Promise
       <Cabecalho ativo="/estrategias" />
       <main className="mx-auto max-w-3xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
         <Link href="/estrategias/postagens" className="text-xs text-neutral-500 hover:text-neutral-300">
-          ← Última postagem
+          ← Radar de posts
         </Link>
 
         <div className="mt-1 flex flex-wrap items-start justify-between gap-3">
