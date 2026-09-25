@@ -30,7 +30,10 @@ function adicionarDias(diaISO: string, quantidade: number): string {
 export interface DiaRelatorioPostagem {
   diaExibicao: string;
   horasPost: string[];
-  destaqueAtraso: boolean;
+  /** Não-nulo só no dia em que a sequência sem postar bate um múltiplo de DIAS_LIMITE_ATENCAO (5,
+   * 10, 15...) — o valor é a contagem real naquele dia, pro aviso poder dizer "10 dias sem postar"
+   * de verdade, não repetir "5 dias" pra sempre num hiato que já passou disso. */
+  diasSemPostarDestaque: number | null;
 }
 
 export interface UnidadeRelatorioPostagens {
@@ -106,22 +109,23 @@ export async function obterRelatorioPostagens(): Promise<UnidadeRelatorioPostage
       const diaInicioCalculo = diaMaisAntigoComPost ? diaEmSaoPaulo(diaMaisAntigoComPost) : diasJanela[0];
 
       let streak = 0;
-      const destaquePorDia = new Set<string>();
+      const destaquePorDia = new Map<string, number>();
       for (let cursor = diaInicioCalculo; cursor <= hojeSP; cursor = adicionarDias(cursor, 1)) {
         if (horasPorDia.has(cursor)) {
           streak = 0;
         } else {
           streak += 1;
-          // Acende já no dia em que completa DIAS_LIMITE_ATENCAO (5) dias corridos sem postar —
-          // não espera passar disso. Só uma vez por hiato (não repete nos dias seguintes).
-          if (streak === DIAS_LIMITE_ATENCAO) destaquePorDia.add(cursor);
+          // Acende em todo múltiplo de DIAS_LIMITE_ATENCAO (5, 10, 15...) — não só uma vez no
+          // primeiro corte, senão um hiato de 20 dias mostraria só um aviso de "5 dias" lá atrás
+          // e nada mais, escondendo o tamanho real do problema.
+          if (streak % DIAS_LIMITE_ATENCAO === 0) destaquePorDia.set(cursor, streak);
         }
       }
 
       const dias: DiaRelatorioPostagem[] = diasJanela.map((dia) => ({
         diaExibicao: formatarDiaExibicao(dia),
         horasPost: horasPorDia.get(dia) ?? [],
-        destaqueAtraso: destaquePorDia.has(dia),
+        diasSemPostarDestaque: destaquePorDia.get(dia) ?? null,
       }));
 
       // Vem da MESMA estrutura (horasPorDia, já restrita à janela de 30 dias pelos `dia` gerados
@@ -143,8 +147,8 @@ const FONTE = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Aria
 const BORDA_LINHA = "border-bottom:1px solid #f1f1f1";
 
 function celulaDia(dia: DiaRelatorioPostagem): string {
-  if (dia.destaqueAtraso) {
-    return `<tr style="background:#fef2f2"><td colspan="2" style="padding:7px 10px 7px 8px;font-size:11px;color:#991b1b;font-weight:700;border-left:3px solid #dc2626;${BORDA_LINHA}">${dia.diaExibicao} — atenção: 5 dias sem postar</td></tr>`;
+  if (dia.diasSemPostarDestaque !== null) {
+    return `<tr style="background:#fef2f2"><td colspan="2" style="padding:7px 10px 7px 8px;font-size:11px;color:#991b1b;font-weight:700;border-left:3px solid #dc2626;${BORDA_LINHA}">${dia.diaExibicao} — atenção: ${dia.diasSemPostarDestaque} dias sem postar</td></tr>`;
   }
   if (dia.horasPost.length > 0) {
     // Um post só: "OK · 08:20", sem numerar — não precisa. Mais de um: numera cada um (Post 1,
