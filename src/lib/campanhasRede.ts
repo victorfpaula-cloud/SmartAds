@@ -36,7 +36,17 @@ interface LinhaCache {
  * erro cru se algo explodir) — depois do fix acima, essa tabela CONTINUOU vazia mesmo passado o
  * horário do cron, sem nenhum jeito de saber por quê a partir daqui (sem acesso a runtime logs do
  * Vercel nesse ambiente). Isso dá um jeito de inspecionar direto pelo Supabase o que aconteceu na
- * última rodada, em vez de continuar tentando corrigir às cegas. */
+ * última rodada, em vez de continuar tentando corrigir às cegas.
+ *
+ * Agrupa por meta_ad_account_id ANTES de bater na Meta — duas contas locais (ex: "Dona Baunilha
+ * Principal" e "Dona Baunilha Expansão") podem apontar pra a MESMA conta de anúncio (ver
+ * sigla_campanha em smartads_contas_meta), e antes disso cada uma buscava e gravava a lista
+ * inteira de campanhas daquela conta de anúncio, duplicando tudo nas duas. Agora busca a Meta uma
+ * vez só por conta de anúncio, e quando mais de uma conta local compartilha ela, separa as
+ * campanhas por sigla: a que tem "(SIGLA)" no nome (mesmo prefixo que criarCampanhaCompleta grava,
+ * "🤖 (SIGLA) nome") vai pra conta local com essa sigla configurada; o resto vai pra conta local
+ * SEM sigla (a "base"). Efeito colateral bom: também corta chamada repetida à Meta pra mesma conta
+ * de anúncio. */
 export async function recalcularCampanhasRede(): Promise<{ contasVerificadas: number; campanhasAtivas: number }> {
   const supabase = criarClienteAdmin();
 
@@ -69,49 +79,80 @@ export async function recalcularCampanhasRede(): Promise<{ contasVerificadas: nu
 
     const agora = new Date().toISOString();
 
-    const contagens = await mapearEmLotes(contas, async (conta): Promise<number> => {
-      const ativas: LinhaCache[] = [];
+    const gruposPorContaDeAnuncio = new Map<string, typeof contas>();
+    for (const conta of contas) {
+      const grupo = gruposPorContaDeAnuncio.get(conta.meta_ad_account_id) ?? [];
+      grupo.push(conta);
+      gruposPorContaDeAnuncio.set(conta.meta_ad_account_id, grupo);
+    }
+
+    const contagens = await mapearEmLotes([...gruposPorContaDeAnuncio.values()], async (contasDoGrupo): Promise<number> => {
+      const campanhasAtivasMeta: Array<{ id: string; name: string; objective?: string; daily_budget?: string }> = [];
       let after: string | undefined;
 
-      // Pagina até 5 páginas (250 campanhas) por conta como trava de segurança — mesmo limite já
-      // usado em obterResumoCampanhasAtivas, raríssima conta de agência chega perto disso.
+      // Pagina até 5 páginas (250 campanhas) por conta de anúncio como trava de segurança — mesmo
+      // limite já usado em obterResumoCampanhasAtivas, raríssima conta de agência chega perto disso.
       for (let pagina = 0; pagina < 5; pagina++) {
-        const { campanhas, proximoCursor } = await listarCampanhas(conta.meta_ad_account_id, {
+        const { campanhas, proximoCursor } = await listarCampanhas(contasDoGrupo[0].meta_ad_account_id, {
           limit: 50,
           after,
         }).catch(() => ({ campanhas: [], proximoCursor: null }));
 
         for (const campanha of campanhas) {
-          if (!campanhaAtivaAgora(campanha)) continue;
-          ativas.push({
-            conta_id: conta.id,
-            meta_campaign_id: campanha.id,
-            nome: campanha.name,
-            objetivo: campanha.objective ?? null,
-            orcamento_diario_centavos: campanha.daily_budget ? Number(campanha.daily_budget) : null,
-          });
+          if (campanhaAtivaAgora(campanha)) campanhasAtivasMeta.push(campanha);
         }
 
         if (!proximoCursor) break;
         after = proximoCursor;
       }
 
-      // Troca o snapshot só DESSA conta (não a tabela inteira) — uma campanha pausada/encerrada
-      // some sozinha da lista dela nessa substituição, sem mexer no que já foi gravado pras outras.
-      const { error: erroDelete } = await supabase
-        .from("smartads_campanhas_rede_cache")
-        .delete()
-        .eq("conta_id", conta.id);
-      if (erroDelete) throw new Error(`Falha ao limpar cache da conta ${conta.id}: ${erroDelete.message}`);
+      // Uma conta local só (caso comum): tudo é dela. Mais de uma compartilhando a mesma conta de
+      // anúncio: separa por sigla (ver comentário da função).
+      const comSigla = contasDoGrupo.filter((c) => c.sigla_campanha);
+      const semSigla = contasDoGrupo.filter((c) => !c.sigla_campanha);
 
-      if (ativas.length > 0) {
-        const { error: erroInsert } = await supabase
-          .from("smartads_campanhas_rede_cache")
-          .insert(ativas.map((c) => ({ ...c, atualizado_em: agora })));
-        if (erroInsert) throw new Error(`Falha ao gravar cache da conta ${conta.id}: ${erroInsert.message}`);
+      function contaDaCampanha(nomeCampanha: string): (typeof contasDoGrupo)[number] | undefined {
+        if (contasDoGrupo.length === 1) return contasDoGrupo[0];
+        const porSigla = comSigla.find((c) => nomeCampanha.includes(`(${c.sigla_campanha})`));
+        return porSigla ?? semSigla[0];
       }
 
-      return ativas.length;
+      const linhasPorConta = new Map<string, LinhaCache[]>();
+      for (const campanha of campanhasAtivasMeta) {
+        const conta = contaDaCampanha(campanha.name);
+        if (!conta) continue; // compartilhada, sem sigla batendo e sem conta "base" configurada — ignora
+        const linhas = linhasPorConta.get(conta.id) ?? [];
+        linhas.push({
+          conta_id: conta.id,
+          meta_campaign_id: campanha.id,
+          nome: campanha.name,
+          objetivo: campanha.objective ?? null,
+          orcamento_diario_centavos: campanha.daily_budget ? Number(campanha.daily_budget) : null,
+        });
+        linhasPorConta.set(conta.id, linhas);
+      }
+
+      // Troca o snapshot de CADA conta local do grupo (não a tabela inteira) — uma campanha
+      // pausada/encerrada, ou que mudou de sigla, some sozinha da lista dela nessa substituição.
+      let totalGrupo = 0;
+      for (const conta of contasDoGrupo) {
+        const linhas = linhasPorConta.get(conta.id) ?? [];
+        const { error: erroDelete } = await supabase
+          .from("smartads_campanhas_rede_cache")
+          .delete()
+          .eq("conta_id", conta.id);
+        if (erroDelete) throw new Error(`Falha ao limpar cache da conta ${conta.id}: ${erroDelete.message}`);
+
+        if (linhas.length > 0) {
+          const { error: erroInsert } = await supabase
+            .from("smartads_campanhas_rede_cache")
+            .insert(linhas.map((l) => ({ ...l, atualizado_em: agora })));
+          if (erroInsert) throw new Error(`Falha ao gravar cache da conta ${conta.id}: ${erroInsert.message}`);
+        }
+        totalGrupo += linhas.length;
+      }
+
+      return totalGrupo;
     });
 
     const campanhasAtivas = contagens.reduce((soma, n) => soma + n, 0);
