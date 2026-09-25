@@ -54,7 +54,17 @@ function classificar(spend7dias: number, ctr7dias: number, medianaCtr: number | 
  * batia na Meta pra cada unidade a cada acesso (sem cache nenhum) — a rota mais cara do app em
  * invocações de function. Grava o resultado em smartads_semaforo_cache; calcularSemaforo (abaixo)
  * só lê esse cache. Em lotes (mapearEmLotes) em vez de tudo em paralelo de uma vez só — corta o
- * tempo total sem arriscar estourar rate limit da Meta quando o catálogo de clientes crescer. */
+ * tempo total sem arriscar estourar rate limit da Meta quando o catálogo de clientes crescer.
+ *
+ * Grava um valor PROVISÓRIO no cache assim que cada unidade termina de buscar na Meta (spend/ctr
+ * já reais, cor ainda sem comparar com a rede), em vez de guardar tudo em memória e só gravar no
+ * final — antes era assim, e por isso essa tabela nunca tinha uma linha sequer em produção: a
+ * function do Vercel estourava o tempo no meio dos lotes sequenciais e nada chegava a ser salvo
+ * (mesmo bug de robustez corrigido em recalcularCampanhasRede, ver campanhasRede.ts). A
+ * reclassificação final (que precisa de TODAS as unidades pra calcular a mediana da rede) roda
+ * depois, só em memória — não bate na Meta de novo, então dificilmente estoura o tempo nesse
+ * ponto; se estourar mesmo assim, quem já tem o valor provisório fica com ele até a próxima
+ * rodada, em vez de voltar pro "aguardando primeira rodada". */
 export async function recalcularSemaforo(): Promise<{ unidadesAvaliadas: number }> {
   const supabase = criarClienteAdmin();
   const { data: clientes } = await supabase
@@ -67,6 +77,8 @@ export async function recalcularSemaforo(): Promise<{ unidadesAvaliadas: number 
     (cliente.smartads_contas_meta as any[]).filter((conta) => conta.ativo).map((conta) => ({ cliente, conta }))
   );
 
+  const agora = new Date().toISOString();
+
   const comInsights = await mapearEmLotes(unidades, async ({ cliente, conta }) => {
     const insights = await obterInsightsConta(conta.meta_ad_account_id, {
       nivel: "account",
@@ -74,12 +86,30 @@ export async function recalcularSemaforo(): Promise<{ unidadesAvaliadas: number 
       porDia: false,
     }).catch(() => []);
     const total = insights[0];
-    return {
+    const dados = {
       empresaId: (cliente as any).empresa_id as string,
       contaId: conta.id as string,
       spend7dias: Number(total?.spend ?? 0),
       ctr7dias: Number(total?.ctr ?? 0),
     };
+
+    // Provisório: quem não tem gasto já é vermelho de verdade (não depende da mediana da rede);
+    // quem tem gasto fica "verde" até a reclassificação final substituir pelo valor comparado.
+    const provisorio =
+      dados.spend7dias === 0
+        ? { cor: "vermelho" as CorSemaforo, motivo: "Sem campanha ativa nos últimos 7 dias." }
+        : { cor: "verde" as CorSemaforo, motivo: "Calculando comparação com a rede…" };
+
+    await supabase.from("smartads_semaforo_cache").upsert({
+      conta_id: dados.contaId,
+      cor: provisorio.cor,
+      motivo: provisorio.motivo,
+      spend_7d_centavos: Math.round(dados.spend7dias * 100),
+      ctr_7d: dados.ctr7dias,
+      calculado_em: agora,
+    });
+
+    return dados;
   });
 
   // Mediana calculada por empresa — a rede de "Dona Baunilha" nunca se mistura com a de outra
@@ -92,7 +122,6 @@ export async function recalcularSemaforo(): Promise<{ unidadesAvaliadas: number 
     medianaPorEmpresa.set(empresaId, mediana(ctrsComGasto));
   }
 
-  const agora = new Date().toISOString();
   const linhas = comInsights.map((u) => {
     const { cor, motivo } = classificar(u.spend7dias, u.ctr7dias, medianaPorEmpresa.get(u.empresaId) ?? null);
     return {
