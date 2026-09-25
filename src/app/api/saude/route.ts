@@ -4,8 +4,10 @@ import { obterInsightsConta, obterResumoCampanhasAtivas } from "@/lib/meta/api";
 import { calcularSaudeConta } from "@/lib/saude";
 import { detectarAnomalia, janelasDeComparacao, type Anomalia } from "@/lib/anomalia";
 import { obterBoostInsightsPorConta, obterCampanhaMaeAtivaPorConta } from "@/lib/inicio/boostInsights";
+import { mapearEmLotes } from "@/lib/lotes";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 // Cache do selo por 1h — não precisa ser em tempo real (é só um sinal de "olha aqui", não um
 // número que alguém vai conferir centavo a centavo), e evita bater na Meta toda vez que a tela
@@ -46,7 +48,9 @@ export async function GET() {
 
   const [{ data: contas, error: erroContas }, { data: cache }] = await Promise.all([
     supabase.from("smartads_contas_meta").select("id, meta_ad_account_id").eq("ativo", true),
-    supabase.from("smartads_saude_contas").select("*"),
+    supabase
+      .from("smartads_saude_contas")
+      .select("conta_id, status, motivo, anomalia, campanhas_ativas, gasto_30d_centavos, orcamento_diario_ativo_centavos, calculado_em"),
   ]);
 
   if (erroContas) {
@@ -62,8 +66,10 @@ export async function GET() {
     obterCampanhaMaeAtivaPorConta((contas ?? []).map((c) => c.id)),
   ]);
 
-  const resultados = await Promise.all(
-    (contas ?? []).map(async (conta): Promise<SaudeContaResultado | null> => {
+  // Em lotes (mapearEmLotes) — quando o cache de várias contas vence no mesmo horário (todas
+  // calculadas juntas na primeira vez), evita disparar as chamadas Meta de TODAS elas ao mesmo
+  // tempo; cada conta já faz 4 chamadas em paralelo sozinha, então lote pequeno já poupa bastante.
+  const resultados = await mapearEmLotes(contas ?? [], async (conta): Promise<SaudeContaResultado | null> => {
       const cacheDaConta = cachePorConta.get(conta.id);
       const cacheValido =
         cacheDaConta && agora - new Date(cacheDaConta.calculado_em).getTime() < VALIDADE_MS;
@@ -138,8 +144,7 @@ export async function GET() {
             }
           : null;
       }
-    })
-  );
+  });
 
   const saude: Record<
     string,

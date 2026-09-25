@@ -1,6 +1,7 @@
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { obterInsightsConta, obterOrcamentoConjunto, definirOrcamentoConjunto, type LinhaInsight } from "@/lib/meta/api";
 import { registrarExecucao } from "./log";
+import { executarEmLotes } from "@/lib/lotes";
 
 const COOLDOWN_HORAS = 24;
 
@@ -20,10 +21,12 @@ export async function executarPilotoAutomatico() {
   const supabase = criarClienteAdmin();
   const { data: pilotos } = await supabase.from("smartads_piloto_automatico").select("*").eq("ativo", true);
 
-  for (const piloto of pilotos ?? []) {
+  // Em lotes (executarEmLotes) — cada piloto é de um cliente diferente, totalmente independente
+  // dos outros, então dá pra paralelizar em vez de avaliar um cliente de cada vez.
+  await executarEmLotes(pilotos ?? [], async (piloto) => {
     if (piloto.ultimo_ajuste_em) {
       const horasDesde = (Date.now() - new Date(piloto.ultimo_ajuste_em).getTime()) / 3_600_000;
-      if (horasDesde < COOLDOWN_HORAS) continue;
+      if (horasDesde < COOLDOWN_HORAS) return;
     }
 
     const { data: contas } = await supabase
@@ -68,8 +71,10 @@ export async function executarPilotoAutomatico() {
       if (maisEficiente.campanha.id === menosEficiente.campanha.id) continue;
 
       try {
-        const orcamentoMenosEficiente = await obterOrcamentoConjunto(menosEficiente.campanha.meta_adset_id);
-        const orcamentoMaisEficiente = await obterOrcamentoConjunto(maisEficiente.campanha.meta_adset_id);
+        const [orcamentoMenosEficiente, orcamentoMaisEficiente] = await Promise.all([
+          obterOrcamentoConjunto(menosEficiente.campanha.meta_adset_id),
+          obterOrcamentoConjunto(maisEficiente.campanha.meta_adset_id),
+        ]);
         if (!orcamentoMenosEficiente || !orcamentoMaisEficiente) {
           throw new Error("Não foi possível ler o orçamento atual de um dos conjuntos.");
         }
@@ -121,5 +126,5 @@ export async function executarPilotoAutomatico() {
         });
       }
     }
-  }
+  });
 }

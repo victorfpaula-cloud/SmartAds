@@ -2,6 +2,7 @@ import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { listarPostsInstagram } from "@/lib/meta/api";
 import { criarCampanhaCompleta } from "@/lib/meta/criarCampanhaCompleta";
 import type { Publico } from "@/lib/meta/tipos";
+import { mapearEmLotes } from "@/lib/lotes";
 
 const FUSO_HORARIO = "America/Sao_Paulo";
 
@@ -19,7 +20,9 @@ function ehPostDeHoje(timestampPost: string): boolean {
  * se ainda não foi turbinado (smartads_boost_automatico_log), e se sim dispara uma campanha de
  * engajamento nele — mesmo caminho de "turbinar publicação existente" que já existe manualmente em
  * /campanhas/nova, só que automático. Uma conta com erro (Instagram sem post, público apagado,
- * falha na Meta) não impede as outras — fica registrada no log pra investigar depois. */
+ * falha na Meta) não impede as outras — fica registrada no log pra investigar depois. Processa as
+ * contas em lotes (mapearEmLotes) em vez de uma por uma — corta o tempo total sem arriscar
+ * estourar rate limit da Meta quando o catálogo de clientes crescer. */
 export async function avaliarBoostAutomatico(): Promise<{
   contasAvaliadas: number;
   campanhasCriadas: number;
@@ -33,17 +36,15 @@ export async function avaliarBoostAutomatico(): Promise<{
     .eq("ativo", true)
     .eq("boost_automatico_ativo", true);
 
-  let campanhasCriadas = 0;
-
-  for (const conta of contas ?? []) {
+  const criadasPorConta = await mapearEmLotes(contas ?? [], async (conta): Promise<boolean> => {
     try {
       if (!conta.instagram_business_id || !conta.boost_automatico_publico_id || !conta.boost_automatico_orcamento_centavos) {
-        continue; // Ligado mas sem configurar público/orçamento ainda — nada a fazer.
+        return false; // Ligado mas sem configurar público/orçamento ainda — nada a fazer.
       }
 
       const posts = await listarPostsInstagram(conta.instagram_business_id);
       const maisRecente = posts[0];
-      if (!maisRecente || !ehPostDeHoje(maisRecente.timestamp)) continue;
+      if (!maisRecente || !ehPostDeHoje(maisRecente.timestamp)) return false;
 
       const { data: jaTurbinado } = await supabase
         .from("smartads_boost_automatico_log")
@@ -51,7 +52,7 @@ export async function avaliarBoostAutomatico(): Promise<{
         .eq("conta_id", conta.id)
         .eq("instagram_media_id", maisRecente.id)
         .maybeSingle();
-      if (jaTurbinado) continue;
+      if (jaTurbinado) return false;
 
       const { data: publicoSalvo } = await supabase
         .from("smartads_publicos_salvos")
@@ -66,7 +67,7 @@ export async function avaliarBoostAutomatico(): Promise<{
           sucesso: false,
           erro_mensagem: "O público salvo configurado pro boost automático não existe mais.",
         });
-        continue;
+        return false;
       }
 
       const dataFim = new Date();
@@ -95,7 +96,7 @@ export async function avaliarBoostAutomatico(): Promise<{
         erro_mensagem: resultado.ok ? null : resultado.erro,
       });
 
-      if (resultado.ok) campanhasCriadas++;
+      return resultado.ok;
     } catch (e) {
       await supabase.from("smartads_boost_automatico_log").insert({
         conta_id: conta.id,
@@ -103,8 +104,10 @@ export async function avaliarBoostAutomatico(): Promise<{
         sucesso: false,
         erro_mensagem: e instanceof Error ? e.message : "Falha inesperada ao avaliar o boost automático.",
       });
+      return false;
     }
-  }
+  });
 
+  const campanhasCriadas = criadasPorConta.filter(Boolean).length;
   return { contasAvaliadas: (contas ?? []).length, campanhasCriadas };
 }
