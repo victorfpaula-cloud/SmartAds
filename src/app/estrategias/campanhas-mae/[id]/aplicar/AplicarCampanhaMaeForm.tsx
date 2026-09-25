@@ -42,7 +42,6 @@ export default function AplicarCampanhaMaeForm({
       unidades.map((u) => [u.contaId, { marcada: false, publicoId: "", investimentoReais: valorMinimoInicial }])
     )
   );
-  const [incluirFacebook, setIncluirFacebook] = useState(false);
   const [aplicando, setAplicando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [resultado, setResultado] = useState<{ criados: number; falhas: { contaId: string; erro: string }[] } | null>(null);
@@ -68,7 +67,6 @@ export default function AplicarCampanhaMaeForm({
       contaId: string;
       investimentoCentavos: number;
       publicoId?: string;
-      incluirFacebook: boolean;
     }[] = [];
 
     for (const u of marcadas) {
@@ -87,7 +85,6 @@ export default function AplicarCampanhaMaeForm({
         contaId: u.contaId,
         investimentoCentavos,
         publicoId: linha.publicoId,
-        incluirFacebook,
       });
     }
 
@@ -121,19 +118,6 @@ export default function AplicarCampanhaMaeForm({
 
   return (
     <form onSubmit={aplicar} className="flex flex-col gap-4">
-      <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3">
-        <div>
-          <p className="text-sm font-medium text-neutral-200">Incluir Facebook além do Instagram</p>
-          <p className="text-xs text-neutral-500">Aplica pra todas as unidades marcadas abaixo.</p>
-        </div>
-        <input
-          type="checkbox"
-          checked={incluirFacebook}
-          onChange={(e) => setIncluirFacebook(e.target.checked)}
-          className="h-5 w-5 accent-accent"
-        />
-      </div>
-
       <div className="flex flex-col gap-2">
         {unidades.map((u) => {
           const linha = selecao[u.contaId];

@@ -51,7 +51,6 @@ export interface PlanoExecucao {
   nome: string;
   publicoId: string | null;
   publico: Publico | null;
-  incluirFacebook: boolean;
   investimentoTotalCentavos: number;
   dataInicio: string;
   metaNegocio: string | null;

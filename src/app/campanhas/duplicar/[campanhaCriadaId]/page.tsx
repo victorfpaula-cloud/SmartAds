@@ -34,7 +34,6 @@ export default async function DuplicarCampanhaPage({
   const valoresIniciais: ValoresIniciaisCampanha = {
     publico: config.publico,
     publicoId: config.publicoId,
-    incluirFacebook: config.incluirFacebook,
     orcamento: config.orcamento,
     nomeCampanha: config.nomeCampanha,
   };

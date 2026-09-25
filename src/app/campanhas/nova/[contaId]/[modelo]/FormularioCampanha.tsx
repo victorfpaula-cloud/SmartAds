@@ -31,7 +31,6 @@ const ETAPAS = ["Público", "Orçamento", "Criativo", "Revisão"];
 export interface ValoresIniciaisCampanha {
   publico: Publico;
   publicoId?: string;
-  incluirFacebook: boolean;
   orcamento: { tipo: "diario" | "vitalicio"; valorCentavos: number; dataInicio?: string; dataFim?: string };
   nomeCampanha?: string;
   /** Preenchido quando essa campanha nasce de uma etapa de Plano ligada a uma Campanha-Mãe — o
@@ -73,7 +72,6 @@ export default function FormularioCampanha({
     valoresIniciais && !valoresIniciais.publicoId ? "novo" : "salvo"
   );
   const [publicoNovo, setPublicoNovo] = useState<Publico>(valoresIniciais?.publico ?? PUBLICO_VAZIO);
-  const [incluirFacebook, setIncluirFacebook] = useState(valoresIniciais?.incluirFacebook ?? false);
   const [nomePublicoParaSalvar, setNomePublicoParaSalvar] = useState("");
   const [salvandoPublico, setSalvandoPublico] = useState(false);
   const [publicoSalvoFeedback, setPublicoSalvoFeedback] = useState<string | null>(null);
@@ -212,7 +210,6 @@ export default function FormularioCampanha({
         nomeCampanha: nomeCampanha.trim(),
         publico: publicoEfetivo,
         publicoId: modoPublico === "salvo" ? publicoSalvoId : undefined,
-        incluirFacebook,
         planoEtapaId,
         orcamento: {
           tipo: tipoOrcamento,
@@ -371,19 +368,6 @@ export default function FormularioCampanha({
                 )}
               </div>
             )}
-
-            <div className="mt-2 flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3">
-              <div>
-                <p className="text-sm font-medium text-neutral-200">Incluir Facebook além do Instagram</p>
-                <p className="text-xs text-neutral-500">Posicionamento fixo: Feed + Stories + Reels.</p>
-              </div>
-              <input
-                type="checkbox"
-                checked={incluirFacebook}
-                onChange={(e) => setIncluirFacebook(e.target.checked)}
-                className="h-5 w-5 accent-accent"
-              />
-            </div>
           </div>
         )}
 
@@ -671,7 +655,7 @@ export default function FormularioCampanha({
               <dt className="text-neutral-500">Localizações</dt>
               <dd className="text-neutral-200">{publicoEfetivo.localizacoes.length}</dd>
               <dt className="text-neutral-500">Plataforma</dt>
-              <dd className="text-neutral-200">{incluirFacebook ? "Instagram + Facebook" : "Instagram"}</dd>
+              <dd className="text-neutral-200">Instagram</dd>
               <dt className="text-neutral-500">Criativo</dt>
               <dd className="text-neutral-200">
                 {usarPostExistente

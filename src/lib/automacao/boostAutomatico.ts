@@ -79,7 +79,6 @@ export async function avaliarBoostAutomatico(): Promise<{
         nomeCampanha: `Boost automático ${new Date().toLocaleDateString("pt-BR")}`,
         publico: publicoSalvo.targeting as Publico,
         publicoId: conta.boost_automatico_publico_id,
-        incluirFacebook: true,
         orcamento: {
           tipo: "diario",
           valorCentavos: conta.boost_automatico_orcamento_centavos,

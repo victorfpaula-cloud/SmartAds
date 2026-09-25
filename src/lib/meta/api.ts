@@ -332,15 +332,17 @@ export async function listarPublicosSalvosDaMeta(adAccountId: string): Promise<P
 
 /**
  * Converte o público montado no SmartAds (localizações + interesses) pro formato `targeting` que
- * a Meta espera no conjunto de anúncios. Posicionamento é sempre Feed + Stories + Reels (decisão
- * do produto) — só a plataforma (Instagram só, ou + Facebook) é escolhida pelo usuário.
+ * a Meta espera no conjunto de anúncios. Sempre só Instagram, nunca Facebook — decisão do produto
+ * (pedido explícito em 25/09/2026: toda campanha, sem exceção). Posicionamento: feed sempre;
+ * Reels só entra quando o criativo vem de um post de vídeo (Reels de verdade) — foto e carrossel
+ * ficam só no feed, sem Stories (nenhum dos dois casos usa Stories).
  *
- * Os enums exatos de posicionamento (`instagram_positions`/`facebook_positions`) foram os mais
- * usados/documentados no momento da escrita — validar contra uma campanha de teste real antes do
- * primeiro uso em produção, igual já previsto pra outros pontos da integração (destination_type de
- * "visita ao perfil", anexo de formulário de Leads).
+ * Os enums exatos de posicionamento (`instagram_positions`) foram os mais usados/documentados no
+ * momento da escrita — validar contra uma campanha de teste real antes do primeiro uso em produção,
+ * igual já previsto pra outros pontos da integração (destination_type de "visita ao perfil", anexo
+ * de formulário de Leads).
  */
-export function montarTargeting(publico: Publico, incluirFacebook: boolean): Record<string, unknown> {
+export function montarTargeting(publico: Publico, ehReels: boolean = false): Record<string, unknown> {
   const geoLocations: Record<string, unknown[]> & { cities?: any[]; regions?: any[]; countries?: string[]; custom_locations?: any[] } = {};
 
   for (const localizacao of publico.localizacoes) {
@@ -351,8 +353,8 @@ export function montarTargeting(publico: Publico, incluirFacebook: boolean): Rec
     geo_locations: geoLocations,
     age_min: publico.idadeMin ?? 18,
     age_max: publico.idadeMax ?? 65,
-    publisher_platforms: incluirFacebook ? ["facebook", "instagram"] : ["instagram"],
-    instagram_positions: ["stream", "story", "reels"],
+    publisher_platforms: ["instagram"],
+    instagram_positions: ehReels ? ["stream", "reels"] : ["stream"],
     // Passou a ser obrigatório sinalizar explicitamente se o público Advantage (expansão
     // automática de público pela própria Meta) está ligado — "0" porque o SmartAds sempre
     // trabalha com o público definido manualmente na tela (localizações + interesses), sem
@@ -360,10 +362,6 @@ export function montarTargeting(publico: Publico, incluirFacebook: boolean): Rec
     // verdade: "sinalização de público Advantage é obrigatória").
     targeting_automation: { advantage_audience: 0 },
   };
-
-  if (incluirFacebook) {
-    targeting.facebook_positions = ["feed", "story", "facebook_reels"];
-  }
 
   if (publico.genero === "homens") targeting.genders = [1];
   if (publico.genero === "mulheres") targeting.genders = [2];
