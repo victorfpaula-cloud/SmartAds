@@ -66,7 +66,7 @@ export async function obterUltimasPostagensPorUnidade(): Promise<UnidadePostagem
         instagramVinculado: true,
         ultimoPostEm: maisRecente.timestamp,
         diasSemPostar,
-        precisaAtencao: diasSemPostar > DIAS_LIMITE_ATENCAO,
+        precisaAtencao: diasSemPostar >= DIAS_LIMITE_ATENCAO,
       };
     })
   );
