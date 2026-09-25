@@ -31,7 +31,8 @@ export default async function PostagensPage() {
             <h1 className="mt-1 font-display text-2xl font-bold">Última postagem</h1>
             <p className="mt-1 text-sm text-neutral-400">
               Post mais recente de cada unidade no Instagram — feed, Reels ou carrossel, vale
-              qualquer formato. Mais de 5 dias sem postar acende o alerta.
+              qualquer formato. 5 dias sem postar acende o alerta. Clique num card pra ver o
+              histórico completo dos últimos 30 dias.
             </p>
           </div>
           <div className="flex shrink-0 gap-2">
@@ -123,7 +124,7 @@ function CardUnidade({ unidade }: { unidade: UnidadePostagem }) {
 
   return (
     <Link
-      href={`/estrategias/diagnostico/${unidade.contaId}`}
+      href={`/estrategias/postagens/${unidade.contaId}`}
       className={`aspect-square rounded-xl border p-3 transition hover:border-accent/40 ${conteudo.classe} flex flex-col`}
     >
       <div>
