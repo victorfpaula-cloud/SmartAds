@@ -112,7 +112,9 @@ export async function obterRelatorioPostagens(): Promise<UnidadeRelatorioPostage
           streak = 0;
         } else {
           streak += 1;
-          if (streak === DIAS_LIMITE_ATENCAO + 1) destaquePorDia.add(cursor);
+          // Acende já no dia em que completa DIAS_LIMITE_ATENCAO (5) dias corridos sem postar —
+          // não espera passar disso. Só uma vez por hiato (não repete nos dias seguintes).
+          if (streak === DIAS_LIMITE_ATENCAO) destaquePorDia.add(cursor);
         }
       }
 
@@ -132,13 +134,17 @@ export async function obterRelatorioPostagens(): Promise<UnidadeRelatorioPostage
   );
 }
 
+// Fonte só de tipos web-safe — nada de fonte customizada: metade dos clientes de e-mail ignora
+// @font-face e cai no fallback de qualquer jeito, então o fallback já É a fonte.
+const FONTE = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+
 // Risquinho claro entre um dia e outro — só pra separar visualmente as linhas da tabela (antes
 // grudadas, sem nenhuma marcação entre elas), sem virar grade pesada.
-const BORDA_LINHA = "border-bottom:1px solid #f0f0f0";
+const BORDA_LINHA = "border-bottom:1px solid #f1f1f1";
 
 function celulaDia(dia: DiaRelatorioPostagem): string {
   if (dia.destaqueAtraso) {
-    return `<tr style="background:#fef2f2"><td colspan="2" style="padding:5px 8px;font-size:11px;color:#7f1d1d;font-weight:600;${BORDA_LINHA}">${dia.diaExibicao} — mais de 5 dias sem postar nada</td></tr>`;
+    return `<tr style="background:#fef2f2"><td colspan="2" style="padding:7px 10px 7px 8px;font-size:11px;color:#991b1b;font-weight:700;border-left:3px solid #dc2626;${BORDA_LINHA}">${dia.diaExibicao} — atenção: 5 dias sem postar</td></tr>`;
   }
   if (dia.horasPost.length > 0) {
     // Um post só: "OK · 08:20", sem numerar — não precisa. Mais de um: numera cada um (Post 1,
@@ -148,46 +154,74 @@ function celulaDia(dia: DiaRelatorioPostagem): string {
       dia.horasPost.length === 1
         ? `OK · ${dia.horasPost[0]}`
         : dia.horasPost.map((hora, i) => `Post ${i + 1} · ${hora}`).join("<br>");
-    return `<tr><td style="padding:5px 8px;font-size:11px;color:#666;vertical-align:top;${BORDA_LINHA}">${dia.diaExibicao}</td><td style="padding:5px 8px;font-size:11px;font-weight:600;color:#15803d;line-height:1.6;${BORDA_LINHA}">${status}</td></tr>`;
+    return `<tr><td style="padding:6px 10px;font-size:11px;color:#71717a;vertical-align:top;${BORDA_LINHA}">${dia.diaExibicao}</td><td style="padding:6px 10px;font-size:11px;font-weight:600;color:#15803d;line-height:1.6;${BORDA_LINHA}">${status}</td></tr>`;
   }
-  return `<tr><td style="padding:5px 8px;font-size:11px;color:#999;${BORDA_LINHA}">${dia.diaExibicao}</td><td style="padding:5px 8px;font-size:11px;color:#ccc;${BORDA_LINHA}">—</td></tr>`;
+  return `<tr><td style="padding:6px 10px;font-size:11px;color:#a1a1aa;${BORDA_LINHA}">${dia.diaExibicao}</td><td style="padding:6px 10px;font-size:11px;color:#d4d4d8;${BORDA_LINHA}">—</td></tr>`;
 }
+
+// Cabeçalho pequeno acima de cada coluna de dias — antes a tabela começava direto nos dados, sem
+// dizer o que cada coluna é.
+const CABECALHO_COLUNA =
+  `<tr><td style="padding:0 10px 6px;font-size:9.5px;font-weight:700;letter-spacing:.05em;color:#a1a1aa;text-transform:uppercase">Dia</td>` +
+  `<td style="padding:0 10px 6px;font-size:9.5px;font-weight:700;letter-spacing:.05em;color:#a1a1aa;text-transform:uppercase">Postagem</td></tr>`;
 
 // Banda de tolerância em torno da média pra "na média" não ficar oscilando com diferença de 1
 // post — mesma ideia da faixa usada no Semáforo (ver src/lib/semaforo.ts), só que mais folgada
 // porque aqui é contagem inteira de posts, não uma taxa como CTR.
 function compararComMedia(totalPostagens: number, media: number): { rotulo: string; cor: string; fundo: string } {
-  if (media <= 0) return { rotulo: "Sem base de comparação ainda", cor: "#666", fundo: "#f2f2f2" };
+  if (media <= 0) return { rotulo: "Sem base de comparação ainda", cor: "#71717a", fundo: "#f4f4f5" };
   const razao = totalPostagens / media;
   if (razao >= 1.15) return { rotulo: "Acima da média da rede", cor: "#15803d", fundo: "#dcfce7" };
   if (razao <= 0.85) return { rotulo: "Abaixo da média da rede", cor: "#b45309", fundo: "#fef3c7" };
-  return { rotulo: "Na média da rede", cor: "#4b5563", fundo: "#f2f2f2" };
+  return { rotulo: "Na média da rede", cor: "#52525b", fundo: "#f4f4f5" };
+}
+
+// Círculo com a(s) inicial(is) do nome da unidade — técnica compatível com e-mail (display:inline-
+// block + line-height, nada de flex, que o Outlook ignora): dá uma âncora visual pra cada card sem
+// precisar de foto nenhuma.
+function iniciais(nome: string): string {
+  const palavras = nome.replace(/^DB\s*-\s*/i, "").trim().split(/\s+/);
+  return (palavras[0]?.[0] ?? "").toUpperCase() + (palavras.length > 1 ? (palavras[1]?.[0] ?? "").toUpperCase() : "");
 }
 
 function montarSecaoUnidade(unidade: UnidadeRelatorioPostagens, mediaRede: number): string {
+  const avatar = `<div style="width:34px;height:34px;border-radius:50%;background:#f4f4f5;color:#71717a;font-size:12.5px;font-weight:700;text-align:center;line-height:34px">${iniciais(unidade.clienteNome)}</div>`;
+
   if (!unidade.instagramVinculado) {
-    return `<div style="margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid #eee">
-      <h2 style="font-size:15px;margin:0 0 4px;font-weight:600">${unidade.clienteNome}</h2>
-      <p style="font-size:12px;color:#999;margin:0">Instagram não vinculado.</p>
+    return `<div style="margin-bottom:14px;border:1px solid #ececef;border-radius:14px;padding:16px 18px">
+      <table style="width:100%;border-collapse:collapse"><tr>
+        <td style="width:44px;vertical-align:top">${avatar}</td>
+        <td style="vertical-align:top">
+          <p style="margin:0;font-size:14.5px;font-weight:700;color:#18181b">${unidade.clienteNome}</p>
+          <p style="margin:2px 0 0;font-size:12px;color:#a1a1aa">Instagram não vinculado</p>
+        </td>
+      </tr></table>
     </div>`;
   }
 
   const metade = Math.ceil(unidade.dias.length / 2);
   const colunas = [unidade.dias.slice(0, metade), unidade.dias.slice(metade)];
   const tabela = (dias: DiaRelatorioPostagem[]) =>
-    `<table style="width:100%;border-collapse:collapse">${dias.map(celulaDia).join("")}</table>`;
+    `<table style="width:100%;border-collapse:collapse">${CABECALHO_COLUNA}${dias.map(celulaDia).join("")}</table>`;
 
   const comparativo = compararComMedia(unidade.totalPostagens, mediaRede);
 
-  return `<div style="margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid #eee">
-    <h2 style="font-size:15px;margin:0 0 4px;font-weight:600">${unidade.clienteNome}</h2>
-    <p style="font-size:11px;color:#999;margin:0 0 10px">
-      ${unidade.instagramUsername ? `@${unidade.instagramUsername}<span style="margin:0 6px;color:#ddd">·</span>` : ""}${unidade.totalPostagens} postagem${unidade.totalPostagens !== 1 ? "s" : ""} em 30 dias
-      <span style="display:inline-block;margin-left:6px;padding:2px 9px;border-radius:99px;background:${comparativo.fundo};color:${comparativo.cor};font-size:10.5px;font-weight:700">${comparativo.rotulo}</span>
-    </p>
+  return `<div style="margin-bottom:14px;border:1px solid #ececef;border-radius:14px;padding:18px">
+    <table style="width:100%;border-collapse:collapse;margin-bottom:14px"><tr>
+      <td style="width:44px;vertical-align:top">${avatar}</td>
+      <td style="vertical-align:top">
+        <p style="margin:0;font-size:14.5px;font-weight:700;color:#18181b">${unidade.clienteNome}</p>
+        <p style="margin:3px 0 0;font-size:11.5px;color:#a1a1aa">
+          ${unidade.instagramUsername ? `@${unidade.instagramUsername}<span style="margin:0 6px;color:#e4e4e7">·</span>` : ""}${unidade.totalPostagens} postagem${unidade.totalPostagens !== 1 ? "s" : ""} em 30 dias
+        </p>
+      </td>
+      <td style="width:1%;white-space:nowrap;vertical-align:top;text-align:right">
+        <span style="display:inline-block;padding:3px 10px;border-radius:99px;background:${comparativo.fundo};color:${comparativo.cor};font-size:10.5px;font-weight:700">${comparativo.rotulo}</span>
+      </td>
+    </tr></table>
     <table style="width:100%;border-collapse:collapse"><tr>
-      <td style="width:50%;vertical-align:top;padding-right:12px">${tabela(colunas[0])}</td>
-      <td style="width:50%;vertical-align:top;padding-left:12px;border-left:1px solid #e5e5e5">${tabela(colunas[1])}</td>
+      <td style="width:50%;vertical-align:top;padding-right:14px">${tabela(colunas[0])}</td>
+      <td style="width:50%;vertical-align:top;padding-left:14px;border-left:1px solid #ececef">${tabela(colunas[1])}</td>
     </tr></table>
   </div>`;
 }
@@ -196,7 +230,12 @@ function montarSecaoUnidade(unidade: UnidadeRelatorioPostagens, mediaRede: numbe
  * download — o relatório visto num não é diferente do outro. `<meta charset="utf-8">` é
  * obrigatório aqui: sem ele, o Content-Type da resposta HTTP diz UTF-8 mas some assim que o
  * arquivo é salvo e reaberto fora do navegador (ex: app Arquivos do iPad), e sem a tag o leitor
- * assume Latin-1/Windows-1252 e todo acento vira "Ã³", "â€”" etc. */
+ * assume Latin-1/Windows-1252 e todo acento vira "Ã³", "â€”" etc.
+ *
+ * Visual pensado pra caber num e-mail de verdade (Gmail, Outlook incluso) — por isso nada de
+ * flexbox, blur ou sombra: só cor de fundo, borda, raio de canto e tabela pra alinhar colunas,
+ * que é o que sobrevive em qualquer cliente. O "cartão branco sobre fundo cinza claro" é o que dá
+ * a sensação de página impressa sem precisar de mais que isso. */
 export function montarHtmlRelatorioPostagens(unidades: UnidadeRelatorioPostagens[]): string {
   // Média só entre unidades com Instagram vinculado — sem isso, uma unidade sem conexão nenhuma
   // (sempre 0 postagens) puxaria a média pra baixo e distorceria o comparativo das outras.
@@ -207,7 +246,7 @@ export function montarHtmlRelatorioPostagens(unidades: UnidadeRelatorioPostagens
   const corpo =
     unidades.length > 0
       ? unidades.map((u) => montarSecaoUnidade(u, mediaRede)).join("")
-      : `<p style="font-size:13px;color:#999">Nenhuma unidade de franquia ativa ainda.</p>`;
+      : `<p style="font-size:13px;color:#a1a1aa">Nenhuma unidade de franquia ativa ainda.</p>`;
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -216,10 +255,14 @@ export function montarHtmlRelatorioPostagens(unidades: UnidadeRelatorioPostagens
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Relatório de postagens — últimos 30 dias</title>
 </head>
-<body style="font-family:-apple-system,Helvetica,Arial,sans-serif;color:#111;max-width:640px;margin:0 auto;padding:24px">
-  <h1 style="font-size:20px;margin:0 0 4px;font-weight:700">Relatório de postagens — últimos 30 dias</h1>
-  <p style="font-size:12px;color:#888;margin:0 0 24px">Gerado em ${new Date().toLocaleDateString("pt-BR", { timeZone: FUSO_HORARIO })}</p>
-  ${corpo}
+<body style="background:#f4f4f5;margin:0;padding:28px 16px;font-family:${FONTE}">
+  <div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:20px;padding:28px 28px 8px;border:1px solid #ececef">
+    <p style="margin:0 0 6px;font-size:10px;font-weight:700;letter-spacing:.12em;color:#a1a1aa;text-transform:uppercase">SmartAds · Central da rede</p>
+    <h1 style="font-size:21px;margin:0 0 4px;font-weight:700;color:#18181b;letter-spacing:-.01em">Relatório de postagens</h1>
+    <p style="font-size:12px;color:#a1a1aa;margin:0 0 22px">Últimos 30 dias · gerado em ${new Date().toLocaleDateString("pt-BR", { timeZone: FUSO_HORARIO })}</p>
+    ${corpo}
+    <p style="margin:14px 0 0;padding:14px 0;border-top:1px solid #f1f1f1;font-size:10.5px;color:#d4d4d8;text-align:center">Gerado automaticamente pelo SmartAds</p>
+  </div>
 </body>
 </html>`;
 }
