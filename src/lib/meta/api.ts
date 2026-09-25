@@ -736,7 +736,7 @@ export async function listarCampanhas(
  * passado continua voltando como ACTIVE da Meta às vezes (mesmo caso corrigido em
  * PainelCampanhasDaConta/statusExibicao, campanha com fim no passado marcada como "Ativa"), então o
  * prazo é checado aqui também. */
-function campanhaAtivaAgora(campanha: Pick<CampanhaMeta, "effective_status" | "stop_time">): boolean {
+export function campanhaAtivaAgora(campanha: Pick<CampanhaMeta, "effective_status" | "stop_time">): boolean {
   if (campanha.effective_status !== "ACTIVE") return false;
   if (campanha.stop_time && new Date(campanha.stop_time).getTime() < Date.now()) return false;
   return true;

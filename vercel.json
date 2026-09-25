@@ -32,6 +32,14 @@
     {
       "path": "/api/cron/limpeza",
       "schedule": "0 5 * * 0"
+    },
+    {
+      "path": "/api/cron/campanhas-rede",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/campanhas-rede",
+      "schedule": "0 21 * * *"
     }
   ]
 }
