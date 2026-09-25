@@ -1,7 +1,7 @@
 {
   "name": "SmartAds",
   "short_name": "SmartAds",
-  "start_url": "/contas",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#07080a",
   "theme_color": "#07080a",
