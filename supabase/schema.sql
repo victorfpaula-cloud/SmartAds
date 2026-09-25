@@ -631,6 +631,12 @@ alter table smartads_contas_meta add column if not exists boost_automatico_orcam
 -- (vale igual pra franquia e pra empresa individual, não é uma feature exclusiva de rede).
 alter table smartads_contas_meta add column if not exists boost_automatico_duracao_dias integer not null default 3 check (boost_automatico_duracao_dias in (3, 7));
 
+-- Teto de orçamento mensal comprometido pela unidade (ex: as R$500 combinadas com a franquia) —
+-- usado só pelo painel de Planejamento em /financeiro?rede=franquia (ver
+-- src/lib/financeiro/coletarFinanceiro.ts), pra comparar contra o que já tá reservado pro boost e o
+-- que sobra pra campanhas extras. Vale igual pra franquia e empresa individual, mesmo default.
+alter table smartads_contas_meta add column if not exists orcamento_mensal_centavos integer not null default 50000;
+
 -- Um post só é turbinado automaticamente UMA vez — unique(conta_id, instagram_media_id) trava isso
 -- mesmo que o cron rode mais de uma vez ou o post continue sendo "o mais recente" em dias seguintes
 -- (sem post novo, não teria como saber se é de hoje mesmo, mas a trava é redundante de propósito).

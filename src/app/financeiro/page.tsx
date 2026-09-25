@@ -1,8 +1,9 @@
 import Cabecalho from "@/components/Cabecalho";
 import Link from "next/link";
-import { coletarFinanceiro } from "@/lib/financeiro/coletarFinanceiro";
-import { Wallet, Info } from "@phosphor-icons/react/dist/ssr";
+import { coletarFinanceiro, calcularPlanejamento } from "@/lib/financeiro/coletarFinanceiro";
+import { Wallet, Info, ChartLine } from "@phosphor-icons/react/dist/ssr";
 import EditarSaldo from "./EditarSaldo";
+import EditarOrcamentoMensal from "./EditarOrcamentoMensal";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +36,17 @@ export default async function FinanceiroPage({
   const totalGasto7d = contas.reduce((s, c) => s + c.gasto7diasCentavos, 0);
   const totalPlanejado = contas.reduce((s, c) => s + c.investimentoPlanejadoCentavos, 0);
   const semSaldoConfigurado = contas.filter((c) => c.saldoDisponivelCentavos === null && !c.erro).length;
+
+  // Planejamento (orçamento mensal x reservado pro boost x sobra pra campanhas extras) só faz
+  // sentido pra rede de franquia — é onde existe o teto combinado (ex: R$500/unidade).
+  const planejamentoPorConta = new Map(contas.map((c) => [c.contaId, calcularPlanejamento(c)]));
+  const totalOrcamentoMensal = contas.reduce((s, c) => s + c.orcamentoMensalCentavos, 0);
+  const totalBoostReservado = contas.reduce(
+    (s, c) => s + (planejamentoPorConta.get(c.contaId)?.boostReservadoMensalCentavos ?? 0),
+    0
+  );
+  const totalProjecao = contas.reduce((s, c) => s + c.projecaoMensalCentavos, 0);
+  const unidadesEstourando = contas.filter((c) => planejamentoPorConta.get(c.contaId)?.estourou).length;
 
   return (
     <>
@@ -94,6 +106,86 @@ export default async function FinanceiroPage({
             <p className="mt-1 text-lg font-bold text-neutral-100">{reais(totalPlanejado)}</p>
           </div>
         </div>
+
+        {apenasRede && contas.length > 0 && (
+          <section className="cartao-vidro mt-6 overflow-hidden">
+            <div className="flex items-center gap-2.5 border-b border-white/10 px-5 py-3.5">
+              <ChartLine size={16} className="shrink-0 text-neutral-400" />
+              <div>
+                <h2 className="text-sm font-semibold text-neutral-200">Planejamento</h2>
+                <p className="mt-0.5 text-[11px] text-neutral-500">
+                  Estimativa a partir do orçamento diário do boost já configurado — não é gasto real
+                  campanha por campanha.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-4">
+              <div>
+                <p className="text-[10.5px] font-medium uppercase tracking-wide text-neutral-500">Orçamento mensal (rede)</p>
+                <p className="mt-0.5 text-sm font-semibold text-neutral-200">{reais(totalOrcamentoMensal)}</p>
+              </div>
+              <div>
+                <p className="text-[10.5px] font-medium uppercase tracking-wide text-neutral-500">Reservado pro boost</p>
+                <p className="mt-0.5 text-sm font-semibold text-neutral-200">{reais(totalBoostReservado)}</p>
+              </div>
+              <div>
+                <p className="text-[10.5px] font-medium uppercase tracking-wide text-neutral-500">Projeção total do mês</p>
+                <p className="mt-0.5 text-sm font-semibold text-neutral-200">{reais(totalProjecao)}</p>
+              </div>
+              <div>
+                <p className="text-[10.5px] font-medium uppercase tracking-wide text-neutral-500">Unidades estourando o teto</p>
+                <p className={`mt-0.5 text-sm font-semibold ${unidadesEstourando > 0 ? "text-danger" : "text-ok"}`}>
+                  {unidadesEstourando}
+                </p>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto border-t border-white/10">
+              <table className="w-full min-w-[680px] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-white/10 text-xs uppercase tracking-wide text-neutral-500">
+                    <th className="px-4 py-3 font-medium">Unidade</th>
+                    <th className="px-4 py-3 font-medium">Orçamento mensal</th>
+                    <th className="px-4 py-3 font-medium">Reservado pro boost</th>
+                    <th className="px-4 py-3 font-medium">Sobra pra extras</th>
+                    <th className="px-4 py-3 font-medium">Projeção total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {contas.map((conta) => {
+                    const p = planejamentoPorConta.get(conta.contaId)!;
+                    return (
+                      <tr key={conta.contaId}>
+                        <td className="px-4 py-3">
+                          <p className="font-medium text-neutral-100">{conta.clienteNome}</p>
+                          <p className="text-[10.5px] text-neutral-600">{conta.contaNome}</p>
+                        </td>
+                        <td className="px-4 py-3">
+                          <p className="text-neutral-300">{reais(conta.orcamentoMensalCentavos)}</p>
+                          <EditarOrcamentoMensal
+                            contaId={conta.contaId}
+                            orcamentoAtualCentavos={conta.orcamentoMensalCentavos}
+                          />
+                        </td>
+                        <td className="px-4 py-3 text-neutral-300">
+                          {conta.boostAutomaticoAtivo ? reais(p.boostReservadoMensalCentavos) : "Boost desligado"}
+                        </td>
+                        <td className={`px-4 py-3 ${p.sobraParaExtrasCentavos < 0 ? "text-danger" : "text-neutral-300"}`}>
+                          {reais(p.sobraParaExtrasCentavos)}
+                        </td>
+                        <td className={`px-4 py-3 font-medium ${p.estourou ? "text-danger" : "text-neutral-300"}`}>
+                          {reais(conta.projecaoMensalCentavos)}
+                          {p.estourou && <span className="ml-1.5 text-[10px] font-semibold uppercase">Estourando</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
 
         {contas.length === 0 ? (
           <p className="cartao-vidro mt-6 px-5 py-8 text-center text-sm text-neutral-500">
