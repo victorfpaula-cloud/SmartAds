@@ -16,6 +16,7 @@ const CLASSE_COMPARATIVO: Record<ComparativoRede, string> = {
   acima: "bg-ok/15 text-ok",
   na_media: "bg-white/[0.06] text-neutral-400",
   abaixo: "bg-amber-500/15 text-amber-400",
+  critico: "bg-danger/15 text-danger",
   sem_base: "bg-white/[0.06] text-neutral-400",
 };
 
