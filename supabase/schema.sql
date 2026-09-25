@@ -667,3 +667,20 @@ create table if not exists smartads_stories_vistos (
 create index if not exists smartads_stories_vistos_conta_dia_idx on smartads_stories_vistos(conta_id, dia);
 
 alter table smartads_stories_vistos enable row level security;
+
+-- ============================================================================
+-- Cache do Semáforo — calculado 1x/dia pelo cron (ver /api/cron/semaforo e recalcularSemaforo em
+-- src/lib/semaforo.ts), nunca ao vivo numa visita à tela "Central da rede": antes essa tela batia
+-- na Meta pra CADA unidade de franquia a cada acesso, sem cache nenhum (era a rota mais cara do
+-- app em invocações de function). Mesmo padrão já usado no Financeiro e na Saúde.
+-- ============================================================================
+create table if not exists smartads_semaforo_cache (
+  conta_id uuid primary key references smartads_contas_meta(id) on delete cascade,
+  cor text not null check (cor in ('verde','amarelo','vermelho')),
+  motivo text not null,
+  spend_7d_centavos integer not null default 0,
+  ctr_7d numeric not null default 0,
+  calculado_em timestamptz not null default now()
+);
+
+alter table smartads_semaforo_cache enable row level security;

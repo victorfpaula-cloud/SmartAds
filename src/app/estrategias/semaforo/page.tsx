@@ -10,6 +10,15 @@ const ESTILO_COR: Record<CorSemaforo, string> = {
   vermelho: "bg-red-500",
 };
 
+function formatarAtualizacao(iso: string | null): string {
+  if (!iso) return "Ainda sem dados — aguardando a primeira atualização automática";
+  const horas = Math.floor((Date.now() - new Date(iso).getTime()) / 3_600_000);
+  if (horas < 1) return "Atualizado há menos de 1h";
+  if (horas < 24) return `Atualizado há ${horas}h`;
+  const dias = Math.floor(horas / 24);
+  return `Atualizado há ${dias} dia${dias !== 1 ? "s" : ""}`;
+}
+
 export default async function SemaforoPage() {
   const unidades = await calcularSemaforo();
 
@@ -41,7 +50,7 @@ export default async function SemaforoPage() {
                   <p className="text-xs text-neutral-500">{u.contaNome}</p>
                   <p className="mt-1.5 text-xs text-neutral-400">{u.motivo}</p>
                   <p className="mt-1 text-[11px] text-neutral-500">
-                    Gasto 7d: R$ {(u.spend7dias).toFixed(2)} · CTR: {u.ctr7dias.toFixed(2)}%
+                    Gasto 7d: R$ {(u.spend7dias).toFixed(2)} · CTR: {u.ctr7dias.toFixed(2)}% · {formatarAtualizacao(u.calculadoEm)}
                   </p>
                 </div>
               </Link>
