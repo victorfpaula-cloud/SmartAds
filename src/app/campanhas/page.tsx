@@ -2,10 +2,22 @@ import Cabecalho from "@/components/Cabecalho";
 import Link from "next/link";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { Buildings, Storefront } from "@phosphor-icons/react/dist/ssr";
+import { obterCampanhasAtivasRede, ROTULO_OBJETIVO } from "@/lib/campanhasRede";
 
 const FILTRO_REDE = "franquia";
 
 export const dynamic = "force-dynamic";
+
+const formatoReal = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+
+function formatarAtualizacao(iso: string | null): string {
+  if (!iso) return "Ainda sem dados — aguardando a primeira atualização automática";
+  const horas = Math.floor((Date.now() - new Date(iso).getTime()) / 3_600_000);
+  if (horas < 1) return "Atualizado há menos de 1h";
+  if (horas < 24) return `Atualizado há ${horas}h`;
+  const dias = Math.floor(horas / 24);
+  return `Atualizado há ${dias} dia${dias !== 1 ? "s" : ""}`;
+}
 
 interface ContaResumo {
   id: string;
@@ -52,6 +64,13 @@ export default async function CampanhasPage({
     (soma, e) => soma + e.smartads_clientes.filter((c) => c.ativo).reduce((s, c) => s + c.smartads_contas_meta.length, 0),
     0
   );
+
+  // Panorama abaixo dos cards das unidades — só existe rede pra ter panorama se alguma empresa for
+  // franquia; independe do filtro ?rede=franquia, aparece nas duas variantes da tela.
+  const temFranquia = ((empresas ?? []) as EmpresaResumo[]).some((e) => e.tipo === "franquia");
+  const { campanhas: campanhasRede, atualizadoEm: campanhasRedeAtualizadoEm } = temFranquia
+    ? await obterCampanhasAtivasRede()
+    : { campanhas: [], atualizadoEm: null };
 
   return (
     <>
@@ -126,6 +145,56 @@ export default async function CampanhasPage({
               );
             })}
           </div>
+        )}
+
+        {temFranquia && (
+          <section className="cartao-vidro mt-6 overflow-hidden">
+            <div className="border-b border-white/10 px-5 py-3.5">
+              <h2 className="text-sm font-semibold text-neutral-100">Campanhas ativas na rede</h2>
+              <p className="mt-0.5 text-[11px] text-neutral-500">
+                {campanhasRede.length} campanha{campanhasRede.length !== 1 ? "s" : ""} ativa
+                {campanhasRede.length !== 1 ? "s" : ""} agora · {formatarAtualizacao(campanhasRedeAtualizadoEm)}
+              </p>
+            </div>
+
+            {campanhasRede.length === 0 ? (
+              <p className="px-5 py-8 text-center text-sm text-neutral-500">
+                Nenhuma campanha ativa na rede agora.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[600px] text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-white/10 text-xs uppercase tracking-wide text-neutral-500">
+                      <th className="px-4 py-3 font-medium">Unidade</th>
+                      <th className="px-4 py-3 font-medium">Campanha</th>
+                      <th className="px-4 py-3 font-medium">Tipo</th>
+                      <th className="px-4 py-3 font-medium">Orçamento diário</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {campanhasRede.map((campanha, indice) => (
+                      <tr key={`${campanha.contaId}-${indice}`}>
+                        <td className="px-4 py-3">
+                          <p className="font-medium text-neutral-100">{campanha.clienteNome}</p>
+                          <p className="text-[10.5px] text-neutral-600">{campanha.contaNome}</p>
+                        </td>
+                        <td className="px-4 py-3 text-neutral-300">{campanha.nome}</td>
+                        <td className="px-4 py-3 text-neutral-400">
+                          {campanha.objetivo ? ROTULO_OBJETIVO[campanha.objetivo] ?? campanha.objetivo : "-"}
+                        </td>
+                        <td className="px-4 py-3 text-neutral-300">
+                          {campanha.orcamentoDiarioCentavos != null
+                            ? `${formatoReal.format(campanha.orcamentoDiarioCentavos / 100)}/dia`
+                            : "-"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
         )}
       </main>
     </>

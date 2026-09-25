@@ -689,3 +689,25 @@ create table if not exists smartads_semaforo_cache (
 );
 
 alter table smartads_semaforo_cache enable row level security;
+
+-- ============================================================================
+-- Cache das campanhas ativas da rede — snapshot recalculado 2x/dia pelo cron (ver
+-- /api/cron/campanhas-rede e recalcularCampanhasRede em src/lib/campanhasRede.ts), nunca ao vivo:
+-- alimenta o panorama geral em /campanhas (abaixo dos cards das unidades) sem bater na Meta a cada
+-- visita. Cada rodada apaga o snapshot inteiro e insere de novo — uma campanha que deixou de estar
+-- ativa some sozinha nessa troca, sem precisar de lógica de diff.
+-- ============================================================================
+create table if not exists smartads_campanhas_rede_cache (
+  id uuid primary key default gen_random_uuid(),
+  conta_id uuid not null references smartads_contas_meta(id) on delete cascade,
+  meta_campaign_id text not null,
+  nome text not null,
+  objetivo text,
+  orcamento_diario_centavos integer,
+  atualizado_em timestamptz not null default now(),
+  unique (conta_id, meta_campaign_id)
+);
+
+create index if not exists smartads_campanhas_rede_cache_conta_idx on smartads_campanhas_rede_cache(conta_id);
+
+alter table smartads_campanhas_rede_cache enable row level security;
