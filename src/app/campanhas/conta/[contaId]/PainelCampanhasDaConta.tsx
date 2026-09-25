@@ -12,7 +12,12 @@ interface Campanha {
   objective: string;
   daily_budget?: string;
   lifetime_budget?: string;
+  /** Gasto dos últimos 30 dias — só usado pra decidir o que é "relevante" (ver campanhasRelevantes
+   * abaixo), não é mais exibido na tabela (ver spendTotal). */
   spend: string;
+  /** Gasto total acumulado da campanha (date_preset "maximum" na Meta) — o que a coluna "Gasto"
+   * mostra. */
+  spendTotal: string;
   start_time?: string;
   stop_time?: string;
   local: {
@@ -84,10 +89,12 @@ function formatarReais(centavosTexto?: string): string {
   return `R$ ${(Number(centavosTexto) / 100).toFixed(2).replace(".", ",")}`;
 }
 
-/** Campanhas de UMA conta só (a escolha de qual conta acontece antes, em /campanhas) — gasto
- * mostrado é dos últimos 30 dias, e por padrão só aparece o que está ativo ou teve gasto nesse
- * período. O resto (campanhas antigas, zeradas há meses) fica escondido atrás de "Ver todas", pra
- * não competir por atenção com o que importa agora — antes a lista misturava tudo junto, direto. */
+/** Campanhas de UMA conta só (a escolha de qual conta acontece antes, em /campanhas) — a coluna
+ * "Gasto" mostra o total acumulado da campanha (vida inteira), não só os últimos 30 dias. Por
+ * padrão só aparece o que está ativo ou teve gasto nos últimos 30 dias (esse critério de
+ * relevância continua olhando só o período recente, ver campanhasRelevantes). O resto (campanhas
+ * antigas, zeradas há meses) fica escondido atrás de "Ver todas", pra não competir por atenção com
+ * o que importa agora — antes a lista misturava tudo junto, direto. */
 export default function PainelCampanhasDaConta({ contaId }: { contaId: string }) {
   const [campanhas, setCampanhas] = useState<Campanha[]>([]);
   const [proximoCursor, setProximoCursor] = useState<string | null>(null);
@@ -204,8 +211,8 @@ export default function PainelCampanhasDaConta({ contaId }: { contaId: string })
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-neutral-500">
-          Gasto dos últimos 30 dias. Clique no status pra pausar/ativar — os outros estados (análise,
-          problema, encerrada) só mudam direto no Gerenciador de Anúncios.
+          Gasto total acumulado de cada campanha. Clique no status pra pausar/ativar — os outros
+          estados (análise, problema, encerrada) só mudam direto no Gerenciador de Anúncios.
         </p>
         {escondidas > 0 && (
           <button
@@ -233,7 +240,7 @@ export default function PainelCampanhasDaConta({ contaId }: { contaId: string })
                 <th className="px-4 py-3 font-medium">Tipo</th>
                 <th className="px-4 py-3 font-medium">Status</th>
                 <th className="px-4 py-3 font-medium">Orçamento</th>
-                <th className="px-4 py-3 font-medium">Gasto (30d)</th>
+                <th className="px-4 py-3 font-medium">Gasto total</th>
                 <th className="px-4 py-3 font-medium"></th>
               </tr>
             </thead>
@@ -269,7 +276,7 @@ export default function PainelCampanhasDaConta({ contaId }: { contaId: string })
                     {formatarReais(campanha.daily_budget ?? campanha.lifetime_budget)}
                     <span className="ml-1 text-neutral-600">{campanha.daily_budget ? "/dia" : ""}</span>
                   </td>
-                  <td className="px-4 py-3 text-neutral-300">{formatarReais(campanha.spend)}</td>
+                  <td className="px-4 py-3 text-neutral-300">{formatarReais(campanha.spendTotal)}</td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex justify-end gap-3">
                       <button
