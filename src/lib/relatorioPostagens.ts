@@ -156,12 +156,12 @@ function celulaDia(dia: DiaRelatorioPostagem): string {
 // Banda de tolerância em torno da média pra "na média" não ficar oscilando com diferença de 1
 // post — mesma ideia da faixa usada no Semáforo (ver src/lib/semaforo.ts), só que mais folgada
 // porque aqui é contagem inteira de posts, não uma taxa como CTR.
-function compararComMedia(totalPostagens: number, media: number): { rotulo: string; cor: string } {
-  if (media <= 0) return { rotulo: "Sem base de comparação ainda", cor: "#999" };
+function compararComMedia(totalPostagens: number, media: number): { rotulo: string; cor: string; fundo: string } {
+  if (media <= 0) return { rotulo: "Sem base de comparação ainda", cor: "#666", fundo: "#f2f2f2" };
   const razao = totalPostagens / media;
-  if (razao >= 1.15) return { rotulo: "Acima da média da rede", cor: "#15803d" };
-  if (razao <= 0.85) return { rotulo: "Abaixo da média da rede", cor: "#b45309" };
-  return { rotulo: "Na média da rede", cor: "#666" };
+  if (razao >= 1.15) return { rotulo: "Acima da média da rede", cor: "#15803d", fundo: "#dcfce7" };
+  if (razao <= 0.85) return { rotulo: "Abaixo da média da rede", cor: "#b45309", fundo: "#fef3c7" };
+  return { rotulo: "Na média da rede", cor: "#4b5563", fundo: "#f2f2f2" };
 }
 
 function montarSecaoUnidade(unidade: UnidadeRelatorioPostagens, mediaRede: number): string {
@@ -180,9 +180,10 @@ function montarSecaoUnidade(unidade: UnidadeRelatorioPostagens, mediaRede: numbe
   const comparativo = compararComMedia(unidade.totalPostagens, mediaRede);
 
   return `<div style="margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid #eee">
-    <h2 style="font-size:15px;margin:0 0 2px;font-weight:600">${unidade.clienteNome}</h2>
+    <h2 style="font-size:15px;margin:0 0 4px;font-weight:600">${unidade.clienteNome}</h2>
     <p style="font-size:11px;color:#999;margin:0 0 10px">
-      ${unidade.instagramUsername ? `@${unidade.instagramUsername}<span style="margin:0 6px;color:#ddd">·</span>` : ""}${unidade.totalPostagens} postagem${unidade.totalPostagens !== 1 ? "s" : ""} em 30 dias<span style="margin:0 6px;color:#ddd">·</span><span style="font-weight:600;color:${comparativo.cor}">${comparativo.rotulo}</span>
+      ${unidade.instagramUsername ? `@${unidade.instagramUsername}<span style="margin:0 6px;color:#ddd">·</span>` : ""}${unidade.totalPostagens} postagem${unidade.totalPostagens !== 1 ? "s" : ""} em 30 dias
+      <span style="display:inline-block;margin-left:6px;padding:2px 9px;border-radius:99px;background:${comparativo.fundo};color:${comparativo.cor};font-size:10.5px;font-weight:700">${comparativo.rotulo}</span>
     </p>
     <table style="width:100%;border-collapse:collapse"><tr>
       <td style="width:50%;vertical-align:top;padding-right:12px">${tabela(colunas[0])}</td>
