@@ -12,6 +12,7 @@ import {
   Stethoscope,
   Wallet,
   ArrowRight,
+  WarningCircle,
 } from "@phosphor-icons/react";
 import ModalBoostAutomatico, { type AlteracoesBoost } from "@/components/ModalBoostAutomatico";
 
@@ -54,6 +55,11 @@ export default function PainelInicio({ empresas }: { empresas: EmpresaResumo[] }
   // Só o número de campanhas ativas por conta (cache de 1h, ver /api/saude) — o resto do que essa
   // rota devolve (status, anomalia, gasto) não é mais usado nessa tela.
   const [campanhasAtivasPorConta, setCampanhasAtivasPorConta] = useState<Record<string, number>>({});
+  // Última falha do boost automático por conta (só as com boost ligado) — vira o aviso clicável no
+  // card. Ver /api/contas-meta/boost-status.
+  const [ultimasFalhasBoost, setUltimasFalhasBoost] = useState<
+    Record<string, { erroMensagem: string | null; criadoEm: string }>
+  >({});
 
   useEffect(() => {
     fetch("/api/saude")
@@ -65,6 +71,11 @@ export default function PainelInicio({ empresas }: { empresas: EmpresaResumo[] }
         }
         setCampanhasAtivasPorConta(mapa);
       })
+      .catch(() => {});
+
+    fetch("/api/contas-meta/boost-status")
+      .then((r) => r.json())
+      .then((corpo) => setUltimasFalhasBoost(corpo.ultimasFalhas ?? {}))
       .catch(() => {});
   }, []);
 
@@ -126,6 +137,7 @@ export default function PainelInicio({ empresas }: { empresas: EmpresaResumo[] }
                       cliente={cliente}
                       conta={contaComOverride(conta)}
                       campanhasAtivas={campanhasAtivasPorConta[conta.id]}
+                      falhaBoost={ultimasFalhasBoost[conta.id]}
                       onBoostAtualizado={(alteracoes) =>
                         setBoostOverrides((atual) => ({ ...atual, [conta.id]: alteracoes }))
                       }
@@ -145,15 +157,18 @@ function CardConta({
   cliente,
   conta,
   campanhasAtivas,
+  falhaBoost,
   onBoostAtualizado,
 }: {
   cliente: ClienteResumo;
   conta: ContaResumo;
   campanhasAtivas: number | undefined;
+  falhaBoost: { erroMensagem: string | null; criadoEm: string } | undefined;
   onBoostAtualizado: (alteracoes: AlteracoesBoost) => void;
 }) {
   const [modalBoostAberto, setModalBoostAberto] = useState(false);
   const [alternandoBoost, setAlternandoBoost] = useState(false);
+  const [mostrarErroBoost, setMostrarErroBoost] = useState(false);
 
   // Liga/desliga direto do card quando já tem público e orçamento salvos (não precisa abrir o
   // modal de novo só pra isso); sem essa config ainda, abre o modal — a API exige os dois pra
@@ -199,34 +214,54 @@ function CardConta({
       <SeloCampanhasAtivas quantidade={campanhasAtivas} />
 
       {conta.instagram_business_id && (
-        <div className="flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/[0.02] px-2.5 py-2">
-          <button
-            type="button"
-            onClick={() => setModalBoostAberto(true)}
-            className="flex items-center gap-1.5 text-[11px] font-semibold text-neutral-300 hover:text-neutral-100"
-          >
-            <Lightning
-              size={12}
-              weight={conta.boost_automatico_ativo ? "fill" : "regular"}
-              className={`shrink-0 ${conta.boost_automatico_ativo ? "text-ok" : "text-neutral-500"}`}
-            />
-            Boost automático
-          </button>
-          <button
-            type="button"
-            onClick={alternarBoost}
-            disabled={alternandoBoost}
-            aria-label={conta.boost_automatico_ativo ? "Desligar boost automático" : "Ligar boost automático"}
-            className={`relative h-5 w-9 shrink-0 rounded-full transition disabled:opacity-50 ${
-              conta.boost_automatico_ativo ? "bg-ok/70" : "bg-white/10"
-            }`}
-          >
-            <span
-              className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${
-                conta.boost_automatico_ativo ? "translate-x-4" : "translate-x-0"
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/[0.02] px-2.5 py-2">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setModalBoostAberto(true)}
+                className="flex items-center gap-1.5 text-[11px] font-semibold text-neutral-300 hover:text-neutral-100"
+              >
+                <Lightning
+                  size={12}
+                  weight={conta.boost_automatico_ativo ? "fill" : "regular"}
+                  className={`shrink-0 ${conta.boost_automatico_ativo ? "text-ok" : "text-neutral-500"}`}
+                />
+                Boost automático
+              </button>
+              {falhaBoost && (
+                <button
+                  type="button"
+                  onClick={() => setMostrarErroBoost((atual) => !atual)}
+                  aria-label="Boost automático precisa de atenção — ver erro"
+                  className="text-danger transition hover:text-danger/80"
+                >
+                  <WarningCircle size={14} weight="fill" />
+                </button>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={alternarBoost}
+              disabled={alternandoBoost}
+              aria-label={conta.boost_automatico_ativo ? "Desligar boost automático" : "Ligar boost automático"}
+              className={`relative h-5 w-9 shrink-0 rounded-full transition disabled:opacity-50 ${
+                conta.boost_automatico_ativo ? "bg-ok/70" : "bg-white/10"
               }`}
-            />
-          </button>
+            >
+              <span
+                className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${
+                  conta.boost_automatico_ativo ? "translate-x-4" : "translate-x-0"
+                }`}
+              />
+            </button>
+          </div>
+          {falhaBoost && mostrarErroBoost && (
+            <div className="rounded-lg border border-danger/30 bg-danger/10 px-2.5 py-2 text-[11px] leading-relaxed text-danger">
+              {falhaBoost.erroMensagem ?? "Falha desconhecida ao tentar turbinar o post de hoje."}
+              <span className="mt-1 block text-neutral-500">{formatarTempoRelativo(falhaBoost.criadoEm)}</span>
+            </div>
+          )}
         </div>
       )}
 
@@ -274,6 +309,14 @@ function CardConta({
       )}
     </div>
   );
+}
+
+function formatarTempoRelativo(iso: string): string {
+  const horas = Math.floor((Date.now() - new Date(iso).getTime()) / 3_600_000);
+  if (horas < 1) return "há menos de 1h";
+  if (horas < 24) return `há ${horas}h`;
+  const dias = Math.floor(horas / 24);
+  return `há ${dias} dia${dias !== 1 ? "s" : ""}`;
 }
 
 // Verde com campanha no ar, laranja sem nenhuma — bate o olho e já diz o que fazer (unidade
