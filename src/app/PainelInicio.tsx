@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Buildings,
   Storefront,
   Lightning,
+  Megaphone,
   PlusCircle,
   ListBullets,
   Stethoscope,
@@ -40,15 +41,32 @@ interface EmpresaResumo {
   smartads_clientes: ClienteResumo[];
 }
 
-/** Dashboard de verdade do app — cards simples e diretos ao ponto: nome da unidade, se o boost
- * automático está ligado, e atalhos pras funções que se usa dia a dia dentro de cada conta. Antes
- * tinha selo de saúde, anomalia e números (campanhas ativas, gasto 30d) puxados de /api/saude —
- * tirado por pedido explícito: "menos informações e mais praticidade". Quem quiser esse nível de
- * detalhe continua tendo o Semáforo e o Diagnóstico, um clique daqui. */
+/** Dashboard de verdade do app — cards simples e diretos ao ponto: nome da unidade, quantas
+ * campanhas estão ativas agora, se o boost automático está ligado, e atalhos pras funções que se
+ * usa dia a dia dentro de cada conta. Selo de saúde, anomalia e gasto 30d saíram por pedido
+ * explícito ("menos informações e mais praticidade") — campanhas ativas voltou, só que como
+ * selo colorido (verde com campanha no ar, laranja sem nenhuma) em vez de número solto. Quem quiser
+ * mais detalhe continua tendo o Semáforo e o Diagnóstico, um clique daqui. */
 export default function PainelInicio({ empresas }: { empresas: EmpresaResumo[] }) {
   // Alterações de boost feitas direto pelo card (toggle rápido ou modal) — sobrepõem o valor vindo
   // do servidor sem precisar re-buscar a árvore inteira de empresas/clientes/contas.
   const [boostOverrides, setBoostOverrides] = useState<Record<string, AlteracoesBoost>>({});
+  // Só o número de campanhas ativas por conta (cache de 1h, ver /api/saude) — o resto do que essa
+  // rota devolve (status, anomalia, gasto) não é mais usado nessa tela.
+  const [campanhasAtivasPorConta, setCampanhasAtivasPorConta] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    fetch("/api/saude")
+      .then((r) => r.json())
+      .then((corpo) => {
+        const mapa: Record<string, number> = {};
+        for (const [contaId, dados] of Object.entries<{ campanhasAtivas: number | null }>(corpo.saude ?? {})) {
+          if (dados.campanhasAtivas != null) mapa[contaId] = dados.campanhasAtivas;
+        }
+        setCampanhasAtivasPorConta(mapa);
+      })
+      .catch(() => {});
+  }, []);
 
   function contaComOverride(conta: ContaResumo): ContaResumo {
     const alteracoes = boostOverrides[conta.id];
@@ -107,6 +125,7 @@ export default function PainelInicio({ empresas }: { empresas: EmpresaResumo[] }
                       key={conta.id}
                       cliente={cliente}
                       conta={contaComOverride(conta)}
+                      campanhasAtivas={campanhasAtivasPorConta[conta.id]}
                       onBoostAtualizado={(alteracoes) =>
                         setBoostOverrides((atual) => ({ ...atual, [conta.id]: alteracoes }))
                       }
@@ -125,10 +144,12 @@ export default function PainelInicio({ empresas }: { empresas: EmpresaResumo[] }
 function CardConta({
   cliente,
   conta,
+  campanhasAtivas,
   onBoostAtualizado,
 }: {
   cliente: ClienteResumo;
   conta: ContaResumo;
+  campanhasAtivas: number | undefined;
   onBoostAtualizado: (alteracoes: AlteracoesBoost) => void;
 }) {
   const [modalBoostAberto, setModalBoostAberto] = useState(false);
@@ -174,6 +195,8 @@ function CardConta({
           {conta.nome_exibicao || conta.meta_ad_account_nome || conta.meta_ad_account_id}
         </p>
       </div>
+
+      <SeloCampanhasAtivas quantidade={campanhasAtivas} />
 
       {conta.instagram_business_id && (
         <div className="flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/[0.02] px-2.5 py-2">
@@ -250,5 +273,32 @@ function CardConta({
         />
       )}
     </div>
+  );
+}
+
+// Verde com campanha no ar, laranja sem nenhuma — bate o olho e já diz o que fazer (unidade
+// laranja precisa de campanha nova). Cinza neutro enquanto o cache de /api/saude ainda não chegou.
+function SeloCampanhasAtivas({ quantidade }: { quantidade: number | undefined }) {
+  if (quantidade === undefined) {
+    return (
+      <span className="flex w-fit items-center gap-1.5 rounded-full bg-white/[0.06] px-2.5 py-1 text-[10.5px] font-semibold text-neutral-500">
+        <Megaphone size={11} />
+        Carregando…
+      </span>
+    );
+  }
+  if (quantidade === 0) {
+    return (
+      <span className="flex w-fit items-center gap-1.5 rounded-full bg-orange-500/15 px-2.5 py-1 text-[10.5px] font-semibold text-orange-400">
+        <Megaphone size={11} />
+        Nenhuma campanha ativa
+      </span>
+    );
+  }
+  return (
+    <span className="flex w-fit items-center gap-1.5 rounded-full bg-ok/15 px-2.5 py-1 text-[10.5px] font-semibold text-ok">
+      <Megaphone size={11} weight="fill" />
+      {quantidade} campanha{quantidade !== 1 ? "s" : ""} ativa{quantidade !== 1 ? "s" : ""}
+    </span>
   );
 }
