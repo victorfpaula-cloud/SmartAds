@@ -165,15 +165,38 @@ const CABECALHO_COLUNA =
   `<tr><td style="padding:0 10px 6px;font-size:9.5px;font-weight:700;letter-spacing:.05em;color:#a1a1aa;text-transform:uppercase">Dia</td>` +
   `<td style="padding:0 10px 6px;font-size:9.5px;font-weight:700;letter-spacing:.05em;color:#a1a1aa;text-transform:uppercase">Postagem</td></tr>`;
 
+export type ComparativoRede = "acima" | "na_media" | "abaixo" | "sem_base";
+
 // Banda de tolerância em torno da média pra "na média" não ficar oscilando com diferença de 1
 // post — mesma ideia da faixa usada no Semáforo (ver src/lib/semaforo.ts), só que mais folgada
-// porque aqui é contagem inteira de posts, não uma taxa como CTR.
-function compararComMedia(totalPostagens: number, media: number): { rotulo: string; cor: string; fundo: string } {
-  if (media <= 0) return { rotulo: "Sem base de comparação ainda", cor: "#71717a", fundo: "#f4f4f5" };
+// porque aqui é contagem inteira de posts, não uma taxa como CTR. Devolve só a classificação (sem
+// cor nem texto) — cada lugar que exibe isso (o HTML do relatório aqui embaixo, e a página de
+// detalhe no app, ver src/app/estrategias/postagens/[contaId]/page.tsx) decide sua própria cor,
+// mas o limiar (1.15/0.85) é um só, definido aqui.
+export function classificarComparativoRede(totalPostagens: number, media: number): ComparativoRede {
+  if (media <= 0) return "sem_base";
   const razao = totalPostagens / media;
-  if (razao >= 1.15) return { rotulo: "Acima da média da rede", cor: "#15803d", fundo: "#dcfce7" };
-  if (razao <= 0.85) return { rotulo: "Abaixo da média da rede", cor: "#b45309", fundo: "#fef3c7" };
-  return { rotulo: "Na média da rede", cor: "#52525b", fundo: "#f4f4f5" };
+  if (razao >= 1.15) return "acima";
+  if (razao <= 0.85) return "abaixo";
+  return "na_media";
+}
+
+export const ROTULO_COMPARATIVO: Record<ComparativoRede, string> = {
+  acima: "Acima da média da rede",
+  na_media: "Na média da rede",
+  abaixo: "Abaixo da média da rede",
+  sem_base: "Sem base de comparação ainda",
+};
+
+function compararComMedia(totalPostagens: number, media: number): { rotulo: string; cor: string; fundo: string } {
+  const classificacao = classificarComparativoRede(totalPostagens, media);
+  const cores: Record<ComparativoRede, { cor: string; fundo: string }> = {
+    acima: { cor: "#15803d", fundo: "#dcfce7" },
+    na_media: { cor: "#52525b", fundo: "#f4f4f5" },
+    abaixo: { cor: "#b45309", fundo: "#fef3c7" },
+    sem_base: { cor: "#71717a", fundo: "#f4f4f5" },
+  };
+  return { rotulo: ROTULO_COMPARATIVO[classificacao], ...cores[classificacao] };
 }
 
 // Círculo com a(s) inicial(is) do nome da unidade — técnica compatível com e-mail (display:inline-
