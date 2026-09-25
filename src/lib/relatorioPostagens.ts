@@ -43,17 +43,21 @@ export interface UnidadeRelatorioPostagens {
   instagramUsername: string | null;
   instagramVinculado: boolean;
   totalPostagens: number;
+  /** Timestamp ISO do post mais recente (feed, Reels ou carrossel) — null se nunca postou ou sem
+   * Instagram vinculado. Usado tanto pelo relatório quanto pela grade de cards em
+   * /estrategias/postagens, que precisa da data/hora crua (não só "DD/MM" formatado). */
+  ultimoPostEm: string | null;
   dias: DiaRelatorioPostagem[];
 }
 
-/** Relatório dia a dia dos últimos 30 dias, uma linha por dia, pra cada unidade de franquia — base
- * tanto do download quanto do e-mail automático (ver src/lib/email/relatorioPostagens.ts e
- * /api/relatorios/postagens). Igual à aba "Última postagem" (src/lib/postagens.ts), só que aqui
- * olha o histórico inteiro dos posts recentes, não só o mais novo, pra marcar dia a dia quando
- * postou e quando não. A sequência de dias sem postar é calculada desde o post mais antigo que
- * `listarPostsInstagram` devolve (até 30 itens), não só desde o início da janela de exibição —
- * senão um hiato que já vinha de antes apareceria como se tivesse começado do zero no primeiro dia
- * do relatório, subestimando o atraso real. */
+/** Relatório dia a dia dos últimos 30 dias, uma linha por dia, pra cada unidade de franquia — fonte
+ * única pra tudo que envolve postagens: o download/e-mail (ver src/lib/email/relatorioPostagens.ts
+ * e /api/relatorios/postagens), a página de detalhe por unidade
+ * (src/app/estrategias/postagens/[contaId]/page.tsx) e a grade de cards
+ * (src/app/estrategias/postagens/page.tsx). A sequência de dias sem postar é calculada desde o
+ * post mais antigo que `listarPostsInstagram` devolve (até 30 itens), não só desde o início da
+ * janela de exibição — senão um hiato que já vinha de antes apareceria como se tivesse começado do
+ * zero no primeiro dia do relatório, subestimando o atraso real. */
 export async function obterRelatorioPostagens(): Promise<UnidadeRelatorioPostagens[]> {
   const supabase = criarClienteAdmin();
   const { data: clientes } = await supabase
@@ -72,7 +76,6 @@ export async function obterRelatorioPostagens(): Promise<UnidadeRelatorioPostage
   const hojeSP = diaEmSaoPaulo(new Date().toISOString());
   const diasJanela: string[] = [];
   for (let i = DIAS_JANELA - 1; i >= 0; i--) diasJanela.push(adicionarDias(hojeSP, -i));
-  const diasJanelaSet = new Set(diasJanela);
 
   return Promise.all(
     unidades.map(async ({ cliente, conta }): Promise<UnidadeRelatorioPostagens> => {
@@ -84,13 +87,16 @@ export async function obterRelatorioPostagens(): Promise<UnidadeRelatorioPostage
       };
 
       if (!conta.instagram_business_id) {
-        return { ...base, instagramVinculado: false, totalPostagens: 0, dias: [] };
+        return { ...base, instagramVinculado: false, totalPostagens: 0, ultimoPostEm: null, dias: [] };
       }
 
       const postsBrutos = await listarPostsInstagram(conta.instagram_business_id).catch(() => [] as PostInstagram[]);
       // Deduplica por id — proteção contra a Meta devolver o mesmo post mais de uma vez (não deveria
       // acontecer numa chamada só sem paginação, mas é barato garantir e evita contagem inflada).
+      // Map preserva a ordem de inserção = ordem original da Meta (mais recente primeiro), então
+      // posts[0] continua sendo "o último post" depois da deduplicação.
       const posts = [...new Map(postsBrutos.map((p) => [p.id, p])).values()];
+      const ultimoPostEm = posts[0]?.timestamp ?? null;
 
       const horasPorDia = new Map<string, string[]>();
       for (const post of posts) {
@@ -133,7 +139,7 @@ export async function obterRelatorioPostagens(): Promise<UnidadeRelatorioPostage
       // pessoa vê célula por célula.
       const totalPostagens = dias.reduce((soma, d) => soma + d.horasPost.length, 0);
 
-      return { ...base, instagramVinculado: true, totalPostagens, dias };
+      return { ...base, instagramVinculado: true, totalPostagens, ultimoPostEm, dias };
     })
   );
 }

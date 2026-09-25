@@ -1,12 +1,13 @@
 import Cabecalho from "@/components/Cabecalho";
 import Link from "next/link";
-import { obterUltimasPostagensPorUnidade, type UnidadePostagem } from "@/lib/postagens";
+import { obterRelatorioPostagens, classificarComparativoRede, type ComparativoRede } from "@/lib/relatorioPostagens";
 import { WarningCircle, InstagramLogo, DownloadSimple } from "@phosphor-icons/react/dist/ssr";
 import BotaoEnviarRelatorio from "./BotaoEnviarRelatorio";
 
 export const dynamic = "force-dynamic";
 
 const FUSO_HORARIO = "America/Sao_Paulo";
+const DIAS_LIMITE_ATENCAO = 5;
 
 function formatarData(iso: string): string {
   return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit", timeZone: FUSO_HORARIO });
@@ -16,8 +17,42 @@ function formatarHora(iso: string): string {
   return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: FUSO_HORARIO });
 }
 
+interface CardData {
+  contaId: string;
+  clienteNome: string;
+  instagramUsername: string | null;
+  instagramVinculado: boolean;
+  ultimoPostEm: string | null;
+  diasSemPostar: number | null;
+  precisaAtencao: boolean;
+  comparativo: ComparativoRede | null;
+}
+
 export default async function PostagensPage() {
-  const unidades = await obterUltimasPostagensPorUnidade();
+  // Mesma fonte de dados do relatório e da página de detalhe (obterRelatorioPostagens) — antes essa
+  // grade usava obterUltimasPostagensPorUnidade, uma busca separada que batia na Meta de novo e
+  // calculava "dias sem postar" com sua própria lógica, correndo o risco de um dia divergir do que
+  // o relatório mostra pra mesma unidade.
+  const unidadesRelatorio = await obterRelatorioPostagens();
+  const agora = Date.now();
+
+  const vinculadas = unidadesRelatorio.filter((u) => u.instagramVinculado);
+  const mediaRede =
+    vinculadas.length > 0 ? vinculadas.reduce((soma, u) => soma + u.totalPostagens, 0) / vinculadas.length : 0;
+
+  const unidades: CardData[] = unidadesRelatorio.map((u) => {
+    const diasSemPostar = u.ultimoPostEm ? Math.floor((agora - new Date(u.ultimoPostEm).getTime()) / 86_400_000) : null;
+    return {
+      contaId: u.contaId,
+      clienteNome: u.clienteNome,
+      instagramUsername: u.instagramUsername,
+      instagramVinculado: u.instagramVinculado,
+      ultimoPostEm: u.ultimoPostEm,
+      diasSemPostar,
+      precisaAtencao: diasSemPostar !== null && diasSemPostar >= DIAS_LIMITE_ATENCAO,
+      comparativo: u.instagramVinculado ? classificarComparativoRede(u.totalPostagens, mediaRede) : null,
+    };
+  });
 
   return (
     <>
@@ -64,7 +99,25 @@ export default async function PostagensPage() {
   );
 }
 
-function CardUnidade({ unidade }: { unidade: UnidadePostagem }) {
+// Texto curto, sem selo/fundo — o card já é pequeno (grade de 3-4 colunas), então a cor sozinha
+// mais a palavra já bate o olho sem competir por espaço com o resto do conteúdo.
+const ROTULO_COMPARATIVO_CURTO: Record<ComparativoRede, string> = {
+  acima: "Acima da média",
+  na_media: "Na média",
+  abaixo: "Abaixo da média",
+  critico: "Alerta crítico",
+  sem_base: "",
+};
+
+const CLASSE_COMPARATIVO_CURTO: Record<ComparativoRede, string> = {
+  acima: "text-ok",
+  na_media: "text-neutral-500",
+  abaixo: "text-amber-400",
+  critico: "text-danger",
+  sem_base: "",
+};
+
+function CardUnidade({ unidade }: { unidade: CardData }) {
   const conteudo = (() => {
     if (!unidade.instagramVinculado) {
       return {
@@ -131,6 +184,11 @@ function CardUnidade({ unidade }: { unidade: UnidadePostagem }) {
         <p className="truncate text-xs font-semibold text-neutral-200">{unidade.clienteNome}</p>
         {unidade.instagramUsername && (
           <p className="truncate text-[10.5px] text-neutral-500">@{unidade.instagramUsername}</p>
+        )}
+        {unidade.comparativo && unidade.comparativo !== "sem_base" && (
+          <p className={`mt-1 truncate text-[9.5px] font-bold uppercase tracking-wide ${CLASSE_COMPARATIVO_CURTO[unidade.comparativo]}`}>
+            {ROTULO_COMPARATIVO_CURTO[unidade.comparativo]}
+          </p>
         )}
       </div>
       {conteudo.corpo}
