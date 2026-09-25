@@ -102,13 +102,16 @@ function LinhaDia({ dia }: { dia: DiaRelatorioPostagem }) {
     return (
       <div className="flex items-start justify-between gap-3 px-4 py-2.5">
         <span className="pt-0.5 text-xs text-neutral-500">{dia.diaExibicao}</span>
-        <div className="flex flex-col items-end gap-0.5">
-          {dia.horasPost.map((hora, i) => (
-            <span key={i} className="text-xs font-semibold text-ok">
-              {dia.horasPost.length > 1 ? `Post ${i + 1} · ` : "OK · "}
-              {hora}
-            </span>
-          ))}
+        <div className="flex items-start gap-4">
+          <div className="flex flex-col items-end gap-0.5">
+            {dia.horasPost.map((hora, i) => (
+              <span key={i} className="text-xs font-semibold text-ok">
+                {dia.horasPost.length > 1 ? `Post ${i + 1} · ` : "OK · "}
+                {hora}
+              </span>
+            ))}
+          </div>
+          <ContadorStories quantidade={dia.storiesPostados} />
         </div>
       </div>
     );
@@ -117,7 +120,20 @@ function LinhaDia({ dia }: { dia: DiaRelatorioPostagem }) {
   return (
     <div className="flex items-center justify-between gap-3 px-4 py-2.5">
       <span className="text-xs text-neutral-600">{dia.diaExibicao}</span>
-      <span className="text-xs text-neutral-700">—</span>
+      <div className="flex items-center gap-4">
+        <span className="text-xs text-neutral-700">—</span>
+        <ContadorStories quantidade={dia.storiesPostados} />
+      </div>
     </div>
+  );
+}
+
+// Só informativo — stories não participam de aviso nem têm cor de destaque, por isso fica sempre
+// no mesmo cinza neutro dos dias sem post.
+function ContadorStories({ quantidade }: { quantidade: number }) {
+  return (
+    <span className="w-16 shrink-0 pt-0.5 text-right text-[11px] text-neutral-600">
+      {quantidade > 0 ? `${quantidade} ${quantidade === 1 ? "story" : "stories"}` : "—"}
+    </span>
   );
 }

@@ -158,6 +158,22 @@ export async function obterPostInstagram(mediaId: string): Promise<PostInstagram
   });
 }
 
+export interface StoryInstagram {
+  id: string;
+  timestamp: string;
+}
+
+/** Stories ATIVOS agora (postados nas últimas 24h) — diferente de listarPostsInstagram, a Meta não
+ * guarda histórico de stories expirados nenhum, então esse endpoint só serve pra um poll periódico
+ * ir registrando o que passou por aqui (ver smartads_stories_vistos em src/lib/stories.ts), nunca
+ * pra reconstruir um período passado. */
+export async function listarStoriesAtivosInstagram(instagramBusinessId: string): Promise<StoryInstagram[]> {
+  const dados = await chamar<{ data: StoryInstagram[] }>(`${instagramBusinessId}/stories`, {
+    query: { fields: "id,timestamp" },
+  });
+  return dados.data;
+}
+
 export interface ContaInstagramResumo {
   followers_count?: number;
   media_count?: number;
