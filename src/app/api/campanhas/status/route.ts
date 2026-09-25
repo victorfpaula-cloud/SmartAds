@@ -27,19 +27,18 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const [{ campanhas, proximoCursor }, insights30d, insightsTotal, { data: cache }] = await Promise.all([
+    const [{ campanhas, proximoCursor }, insights, { data: cache }] = await Promise.all([
       // limit 50 (não o padrão de 10 de listarCampanhas) — com 10 por página, uma conta com mais
       // de 10 campanhas cadastradas podia ter uma campanha ATIVA fora da primeira página, escondida
       // até alguém clicar em "Carregar mais campanhas" (ninguém clica achando que só tem histórico
       // antigo ali). 50 cobre a esmagadora maioria das contas numa página só, sem round-trip extra.
       listarCampanhas(conta.meta_ad_account_id, { limit: 50, after }),
-      // Só pra decidir o que é "relevante agora" (ver PainelCampanhasDaConta, filtro padrão
-      // ativa-ou-com-gasto-recente) — não é mais o número exibido na coluna "Gasto" (ver
-      // insightsTotal abaixo). `porDia: false` agrega num total só por campanha.
-      obterInsightsConta(conta.meta_ad_account_id, { nivel: "campaign", datePreset: "last_30d", porDia: false }),
-      // "maximum" = vida inteira da campanha (até 37 meses, o teto da própria API) — é o número que
-      // a coluna "Gasto" mostra. Trocado de "últimos 30 dias" porque uma campanha rodando há
-      // semanas com gasto real acumulado bem maior aparecia com um total baixo e enganoso.
+      // "maximum" = vida inteira da campanha (até 37 meses, o teto da própria API) — usado tanto
+      // pra decidir o que é "relevante agora" (ver PainelCampanhasDaConta) quanto pro número exibido
+      // na coluna "Gasto". Antes eram DUAS chamadas (uma de 30 dias só pra relevância, outra de
+      // vida inteira pro número exibido) — uma conta com gasto lifetime mas nada recente agora fica
+      // "relevante" por mais tempo do que antes, troca aceitável por bater na Meta metade das vezes
+      // nessa tela, que é visitada o tempo todo.
       obterInsightsConta(conta.meta_ad_account_id, { nivel: "campaign", datePreset: "maximum", porDia: false }),
       supabase
         .from("smartads_campanhas_criadas")
@@ -47,14 +46,12 @@ export async function GET(request: NextRequest) {
         .eq("conta_id", contaId),
     ]);
 
-    const gasto30dPorCampanha = new Map(insights30d.map((i) => [i.campaign_id, i.spend]));
-    const gastoTotalPorCampanha = new Map(insightsTotal.map((i) => [i.campaign_id, i.spend]));
+    const gastoPorCampanha = new Map(insights.map((i) => [i.campaign_id, i.spend]));
     const cachePorCampanha = new Map((cache ?? []).map((c) => [c.meta_campaign_id, c]));
 
     const linhas = campanhas.map((campanha) => ({
       ...campanha,
-      spend: gasto30dPorCampanha.get(campanha.id) ?? "0",
-      spendTotal: gastoTotalPorCampanha.get(campanha.id) ?? "0",
+      spendTotal: gastoPorCampanha.get(campanha.id) ?? "0",
       local: cachePorCampanha.get(campanha.id) ?? null,
     }));
 
