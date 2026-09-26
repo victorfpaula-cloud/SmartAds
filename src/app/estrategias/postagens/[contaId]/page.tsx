@@ -111,7 +111,7 @@ function LinhaDia({ dia }: { dia: DiaRelatorioPostagem }) {
               </span>
             ))}
           </div>
-          <ContadorStories quantidade={dia.storiesPostados} />
+          <ContadorStories quantidade={dia.storiesPostados} ehHoje={dia.ehHoje} />
         </div>
       </div>
     );
@@ -122,18 +122,17 @@ function LinhaDia({ dia }: { dia: DiaRelatorioPostagem }) {
       <span className="text-xs text-neutral-600">{dia.diaExibicao}</span>
       <div className="flex items-center gap-4">
         <span className="text-xs text-neutral-700">—</span>
-        <ContadorStories quantidade={dia.storiesPostados} />
+        <ContadorStories quantidade={dia.storiesPostados} ehHoje={dia.ehHoje} />
       </div>
     </div>
   );
 }
 
 // Só informativo — stories não participam de aviso nem têm cor de destaque, por isso fica sempre
-// no mesmo cinza neutro dos dias sem post.
-function ContadorStories({ quantidade }: { quantidade: number }) {
-  return (
-    <span className="w-16 shrink-0 pt-0.5 text-right text-[11px] text-neutral-600">
-      {quantidade > 0 ? `${quantidade} ${quantidade === 1 ? "story" : "stories"}` : "—"}
-    </span>
-  );
+// no mesmo cinza neutro dos dias sem post. Zero só é escrito de propósito em HOJE (ehHoje) — nos
+// outros dias, "—" continua sendo o certo, porque zero ali pode só significar que o cron de
+// stories ainda não tinha rodado naquele dia, não que confirmadamente não teve story nenhum.
+function ContadorStories({ quantidade, ehHoje }: { quantidade: number; ehHoje: boolean }) {
+  const texto = quantidade > 0 ? `${quantidade} ${quantidade === 1 ? "story" : "stories"}` : ehHoje ? "0 stories" : "—";
+  return <span className="w-16 shrink-0 pt-0.5 text-right text-[11px] text-neutral-600">{texto}</span>;
 }
