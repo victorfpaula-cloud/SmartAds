@@ -178,7 +178,9 @@ function CardUnidade({ unidade }: { unidade: CardData }) {
             {formatarData(unidade.ultimoPostEm)} <span className="font-normal text-neutral-400">{formatarHora(unidade.ultimoPostEm)}</span>
           </p>
           <p className="text-[11px] text-neutral-500">
-            há {unidade.diasSemPostar} dia{unidade.diasSemPostar !== 1 ? "s" : ""}
+            {unidade.diasSemPostar === 0
+              ? "Postou hoje"
+              : `há ${unidade.diasSemPostar} dia${unidade.diasSemPostar !== 1 ? "s" : ""}`}
           </p>
         </div>
       ),
