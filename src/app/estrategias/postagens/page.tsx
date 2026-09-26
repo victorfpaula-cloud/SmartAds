@@ -66,7 +66,7 @@ export default async function PostagensPage() {
   return (
     <>
       <Cabecalho ativo="/estrategias" />
-      <main className="mx-auto max-w-3xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
+      <main className="mx-auto max-w-6xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
         <Link href="/estrategias" className="text-xs text-neutral-500 hover:text-neutral-300">
           ← Central da rede
         </Link>
@@ -98,7 +98,7 @@ export default async function PostagensPage() {
             Nenhuma unidade de franquia ativa ainda.
           </p>
         ) : (
-          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          <div className="mt-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
             {unidades.map((unidade) => (
               <CardUnidade key={unidade.contaId} unidade={unidade} />
             ))}
@@ -190,11 +190,17 @@ function CardUnidade({ unidade }: { unidade: CardData }) {
   // "Adesivos": cada métrica (posts/comparativo, stories) mora no seu próprio subcontainer, com o
   // status (rótulo colorido) numa linha e a contagem em outra — antes vinham juntos numa linha só
   // com truncate, e "abaixo da média"/"na média" cortava no meio em cards estreitos.
+  //
+  // O rótulo tem altura mínima fixa (min-h, 2 linhas) porque uns são curtos ("Na média", 1 linha) e
+  // outros quebram em 2 ("Abaixo da média", "Stories hoje") — sem isso, a linha da contagem embaixo
+  // ficava em alturas diferentes entre os dois adesivos lado a lado, desalinhada.
   const adesivos: React.ReactNode[] = [];
   if (unidade.comparativo && unidade.comparativo !== "sem_base") {
     adesivos.push(
-      <div key="posts" className="rounded-lg bg-white/[0.04] px-2 py-1.5">
-        <p className={`text-[8.5px] font-bold uppercase tracking-wide ${CLASSE_COMPARATIVO_CURTO[unidade.comparativo]}`}>
+      <div key="posts" className="rounded-lg bg-white/[0.04] px-2.5 py-2">
+        <p
+          className={`min-h-[21px] leading-tight text-[8.5px] font-bold uppercase tracking-wide ${CLASSE_COMPARATIVO_CURTO[unidade.comparativo]}`}
+        >
           {ROTULO_COMPARATIVO_CURTO[unidade.comparativo]}
         </p>
         <p className="mt-1 flex items-center gap-1 text-[10.5px] font-semibold text-neutral-300">
@@ -206,8 +212,10 @@ function CardUnidade({ unidade }: { unidade: CardData }) {
   }
   if (unidade.instagramVinculado) {
     adesivos.push(
-      <div key="stories" className="rounded-lg bg-white/[0.04] px-2 py-1.5">
-        <p className={`text-[8.5px] font-bold uppercase tracking-wide ${unidade.storiesHoje > 0 ? "text-sky-300" : "text-neutral-600"}`}>
+      <div key="stories" className="rounded-lg bg-white/[0.04] px-2.5 py-2">
+        <p
+          className={`min-h-[21px] leading-tight text-[8.5px] font-bold uppercase tracking-wide ${unidade.storiesHoje > 0 ? "text-sky-300" : "text-neutral-600"}`}
+        >
           Stories hoje
         </p>
         <p className={`mt-1 flex items-center gap-1 text-[10.5px] font-semibold ${unidade.storiesHoje > 0 ? "text-neutral-200" : "text-neutral-500"}`}>
