@@ -133,7 +133,7 @@ function CardUnidade({ unidade }: { unidade: CardData }) {
       return {
         classe: "border-white/10 bg-white/[0.02]",
         corpo: (
-          <div className="flex flex-1 flex-col items-center justify-center gap-1.5 text-center">
+          <div className="mt-3 flex flex-1 flex-col items-center justify-center gap-1.5 text-center">
             <InstagramLogo size={18} className="text-neutral-600" />
             <p className="text-[11px] text-neutral-500">Instagram não vinculado</p>
           </div>
@@ -145,7 +145,7 @@ function CardUnidade({ unidade }: { unidade: CardData }) {
       return {
         classe: "border-danger/30 bg-danger/10",
         corpo: (
-          <div className="flex flex-1 flex-col items-center justify-center gap-1.5 text-center">
+          <div className="mt-3 flex flex-1 flex-col items-center justify-center gap-1.5 text-center">
             <WarningCircle size={18} weight="fill" className="text-danger" />
             <p className="text-[11px] font-medium text-danger">Nenhum post encontrado</p>
           </div>
@@ -157,7 +157,7 @@ function CardUnidade({ unidade }: { unidade: CardData }) {
       return {
         classe: "border-danger/30 bg-danger/10",
         corpo: (
-          <div className="flex flex-1 flex-col items-center justify-center gap-1 text-center">
+          <div className="mt-3 flex flex-1 flex-col items-center justify-center gap-1 text-center">
             <WarningCircle size={18} weight="fill" className="text-danger" />
             <p className="mt-0.5 text-sm font-bold text-neutral-100">
               {formatarData(unidade.ultimoPostEm)} <span className="font-normal text-neutral-400">{formatarHora(unidade.ultimoPostEm)}</span>
@@ -173,7 +173,7 @@ function CardUnidade({ unidade }: { unidade: CardData }) {
     return {
       classe: "border-white/10 bg-white/[0.02]",
       corpo: (
-        <div className="flex flex-1 flex-col items-center justify-center gap-1 text-center">
+        <div className="mt-3 flex flex-1 flex-col items-center justify-center gap-1 text-center">
           <p className="text-sm font-bold text-neutral-100">
             {formatarData(unidade.ultimoPostEm)} <span className="font-normal text-neutral-400">{formatarHora(unidade.ultimoPostEm)}</span>
           </p>
@@ -187,38 +187,50 @@ function CardUnidade({ unidade }: { unidade: CardData }) {
     };
   })();
 
+  // "Adesivos": cada métrica (posts/comparativo, stories) mora no seu próprio subcontainer, com o
+  // status (rótulo colorido) numa linha e a contagem em outra — antes vinham juntos numa linha só
+  // com truncate, e "abaixo da média"/"na média" cortava no meio em cards estreitos.
+  const adesivos: React.ReactNode[] = [];
+  if (unidade.comparativo && unidade.comparativo !== "sem_base") {
+    adesivos.push(
+      <div key="posts" className="rounded-lg bg-white/[0.04] px-2 py-1.5">
+        <p className={`text-[8.5px] font-bold uppercase tracking-wide ${CLASSE_COMPARATIVO_CURTO[unidade.comparativo]}`}>
+          {ROTULO_COMPARATIVO_CURTO[unidade.comparativo]}
+        </p>
+        <p className="mt-1 flex items-center gap-1 text-[10.5px] font-semibold text-neutral-300">
+          <GridFour size={11} weight="bold" className="shrink-0 text-neutral-500" />
+          {unidade.totalPostagens} {unidade.totalPostagens === 1 ? "post" : "posts"}
+        </p>
+      </div>
+    );
+  }
+  if (unidade.instagramVinculado) {
+    adesivos.push(
+      <div key="stories" className="rounded-lg bg-white/[0.04] px-2 py-1.5">
+        <p className={`text-[8.5px] font-bold uppercase tracking-wide ${unidade.storiesHoje > 0 ? "text-sky-300" : "text-neutral-600"}`}>
+          Stories hoje
+        </p>
+        <p className={`mt-1 flex items-center gap-1 text-[10.5px] font-semibold ${unidade.storiesHoje > 0 ? "text-neutral-200" : "text-neutral-500"}`}>
+          <CircleDashed size={11} weight="bold" className="shrink-0" />
+          {unidade.storiesHoje} {unidade.storiesHoje === 1 ? "story" : "stories"}
+        </p>
+      </div>
+    );
+  }
+
   return (
     <Link
       href={`/estrategias/postagens/${unidade.contaId}`}
-      className={`aspect-square rounded-xl border p-3 transition hover:border-accent/40 ${conteudo.classe} flex flex-col`}
+      className={`rounded-xl border p-3 transition hover:border-accent/40 ${conteudo.classe} flex flex-col`}
     >
       <div>
         <p className="truncate text-xs font-semibold text-neutral-200">{unidade.clienteNome}</p>
         {unidade.instagramUsername && (
           <p className="truncate text-[10.5px] text-neutral-500">@{unidade.instagramUsername}</p>
         )}
-        {(unidade.comparativo && unidade.comparativo !== "sem_base") || unidade.instagramVinculado ? (
-          <div className="mt-1.5 flex flex-col gap-0.5">
-            {unidade.comparativo && unidade.comparativo !== "sem_base" && (
-              <span
-                title="Posts nos últimos 30 dias"
-                className={`flex items-center gap-1 truncate text-[9.5px] font-bold uppercase tracking-wide ${CLASSE_COMPARATIVO_CURTO[unidade.comparativo]}`}
-              >
-                <GridFour size={10} weight="bold" className="shrink-0" />
-                {unidade.totalPostagens} {unidade.totalPostagens === 1 ? "post" : "posts"} · {ROTULO_COMPARATIVO_CURTO[unidade.comparativo]}
-              </span>
-            )}
-            {unidade.instagramVinculado && (
-              <span
-                title="Stories hoje"
-                className={`flex items-center gap-1 truncate text-[9.5px] font-bold ${unidade.storiesHoje > 0 ? "text-sky-300" : "text-neutral-600"}`}
-              >
-                <CircleDashed size={10} weight="bold" className="shrink-0" />
-                {unidade.storiesHoje} {unidade.storiesHoje === 1 ? "story" : "stories"} hoje
-              </span>
-            )}
-          </div>
-        ) : null}
+        {adesivos.length > 0 && (
+          <div className={`mt-2.5 grid gap-1.5 ${adesivos.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>{adesivos}</div>
+        )}
       </div>
       {conteudo.corpo}
     </Link>
