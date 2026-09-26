@@ -195,7 +195,7 @@ function CardUnidade({ unidade }: { unidade: CardData }) {
         {unidade.instagramUsername && (
           <p className="truncate text-[10.5px] text-neutral-500">@{unidade.instagramUsername}</p>
         )}
-        {(unidade.comparativo && unidade.comparativo !== "sem_base") || unidade.storiesHoje > 0 ? (
+        {(unidade.comparativo && unidade.comparativo !== "sem_base") || unidade.instagramVinculado ? (
           <div className="mt-1.5 flex flex-col gap-0.5">
             {unidade.comparativo && unidade.comparativo !== "sem_base" && (
               <span
@@ -206,8 +206,11 @@ function CardUnidade({ unidade }: { unidade: CardData }) {
                 {unidade.totalPostagens} {unidade.totalPostagens === 1 ? "post" : "posts"} · {ROTULO_COMPARATIVO_CURTO[unidade.comparativo]}
               </span>
             )}
-            {unidade.storiesHoje > 0 && (
-              <span title="Stories hoje" className="flex items-center gap-1 truncate text-[9.5px] font-bold text-sky-300">
+            {unidade.instagramVinculado && (
+              <span
+                title="Stories hoje"
+                className={`flex items-center gap-1 truncate text-[9.5px] font-bold ${unidade.storiesHoje > 0 ? "text-sky-300" : "text-neutral-600"}`}
+              >
                 <CircleDashed size={10} weight="bold" className="shrink-0" />
                 {unidade.storiesHoje} {unidade.storiesHoje === 1 ? "story" : "stories"} hoje
               </span>

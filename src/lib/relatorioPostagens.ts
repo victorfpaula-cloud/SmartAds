@@ -17,6 +17,12 @@ export interface DiaRelatorioPostagem {
    * (últimas 24h), sem histórico, então o contador só existe a partir de quando o cron passou a
    * rodar. Não participa de nenhum aviso/sinalização — é só informativo. */
   storiesPostados: number;
+  /** Só true no último dia da janela (hoje em SP) — usado pra mostrar "0" de propósito em vez de
+   * "—" quando storiesPostados é zero: pra hoje, zero é um dado real (o cron já rodou pelo menos
+   * uma vez, ao meio-dia, e roda de novo perto da meia-noite pra confirmar o número final do dia).
+   * Pros outros 29 dias, "—" continua sendo o certo — zero ali pode só significar que o cron não
+   * tinha rodado ainda naquele dia, não que realmente não teve story nenhum. */
+  ehHoje: boolean;
 }
 
 export interface UnidadeRelatorioPostagens {
@@ -191,6 +197,7 @@ export async function obterRelatorioPostagens(): Promise<UnidadeRelatorioPostage
         horasPost: d.horasPost,
         diasSemPostarDestaque: d.diasSemPostarDestaque,
         storiesPostados: storiesPorDia.get(d.dia) ?? 0,
+        ehHoje: d.dia === hojeSP,
       }));
 
       return { ...base, instagramVinculado: true, totalPostagens, ultimoPostEm, dias };
@@ -209,7 +216,11 @@ const BORDA_LINHA = "border-bottom:1px solid #f1f1f1";
 // Coluna de stories: só informativa, não participa do aviso de "dias sem postar" nem tem cor de
 // alerta própria — por isso fica fora do `if` do destaque acima e sempre em cinza neutro.
 function celulaStories(dia: DiaRelatorioPostagem): string {
-  return `<td style="padding:6px 10px;font-size:11px;color:#a1a1aa;text-align:right;vertical-align:top;${BORDA_LINHA}">${dia.storiesPostados > 0 ? dia.storiesPostados : "—"}</td>`;
+  // Zero só é escrito de propósito em HOJE (ver ehHoje) — nos outros dias, "—" continua sendo o
+  // certo, porque zero ali pode só significar que o cron de stories ainda não tinha rodado naquele
+  // dia, não que confirmadamente não teve story nenhum.
+  const texto = dia.storiesPostados > 0 ? dia.storiesPostados : dia.ehHoje ? "0" : "—";
+  return `<td style="padding:6px 10px;font-size:11px;color:#a1a1aa;text-align:right;vertical-align:top;${BORDA_LINHA}">${texto}</td>`;
 }
 
 function celulaDia(dia: DiaRelatorioPostagem): string {
