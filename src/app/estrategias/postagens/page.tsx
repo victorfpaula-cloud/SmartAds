@@ -1,7 +1,7 @@
 import Cabecalho from "@/components/Cabecalho";
 import Link from "next/link";
 import { obterRelatorioPostagens, classificarComparativoRede, type ComparativoRede } from "@/lib/relatorioPostagens";
-import { WarningCircle, InstagramLogo, DownloadSimple } from "@phosphor-icons/react/dist/ssr";
+import { WarningCircle, InstagramLogo, DownloadSimple, GridFour, CircleDashed } from "@phosphor-icons/react/dist/ssr";
 import BotaoEnviarRelatorio from "./BotaoEnviarRelatorio";
 
 export const dynamic = "force-dynamic";
@@ -37,6 +37,11 @@ export default async function PostagensPage() {
   // o relatório mostra pra mesma unidade.
   const unidadesRelatorio = await obterRelatorioPostagens();
   const agora = Date.now();
+  const horaVerificacao = new Date(agora).toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: FUSO_HORARIO,
+  });
 
   const vinculadas = unidadesRelatorio.filter((u) => u.instagramVinculado);
   const mediaRede =
@@ -73,6 +78,7 @@ export default async function PostagensPage() {
               qualquer formato — mais os stories do dia. 5 dias sem postar acende o alerta. Clique
               num card pra ver o histórico completo dos últimos 30 dias.
             </p>
+            <p className="mt-1 text-[11px] text-neutral-600">Verificado às {horaVerificacao}</p>
           </div>
           <div className="flex shrink-0 gap-2">
             <a
@@ -189,16 +195,25 @@ function CardUnidade({ unidade }: { unidade: CardData }) {
         {unidade.instagramUsername && (
           <p className="truncate text-[10.5px] text-neutral-500">@{unidade.instagramUsername}</p>
         )}
-        {unidade.comparativo && unidade.comparativo !== "sem_base" && (
-          <p className={`mt-1 truncate text-[9.5px] font-bold uppercase tracking-wide ${CLASSE_COMPARATIVO_CURTO[unidade.comparativo]}`}>
-            {unidade.totalPostagens} {unidade.totalPostagens === 1 ? "post" : "posts"} · {ROTULO_COMPARATIVO_CURTO[unidade.comparativo]}
-          </p>
-        )}
-        {unidade.storiesHoje > 0 && (
-          <p className="mt-0.5 truncate text-[9.5px] font-semibold text-sky-300">
-            {unidade.storiesHoje} {unidade.storiesHoje === 1 ? "story" : "stories"} hoje
-          </p>
-        )}
+        {(unidade.comparativo && unidade.comparativo !== "sem_base") || unidade.storiesHoje > 0 ? (
+          <div className="mt-1.5 flex flex-col gap-0.5">
+            {unidade.comparativo && unidade.comparativo !== "sem_base" && (
+              <span
+                title="Posts nos últimos 30 dias"
+                className={`flex items-center gap-1 truncate text-[9.5px] font-bold uppercase tracking-wide ${CLASSE_COMPARATIVO_CURTO[unidade.comparativo]}`}
+              >
+                <GridFour size={10} weight="bold" className="shrink-0" />
+                {unidade.totalPostagens} {unidade.totalPostagens === 1 ? "post" : "posts"} · {ROTULO_COMPARATIVO_CURTO[unidade.comparativo]}
+              </span>
+            )}
+            {unidade.storiesHoje > 0 && (
+              <span title="Stories hoje" className="flex items-center gap-1 truncate text-[9.5px] font-bold text-sky-300">
+                <CircleDashed size={10} weight="bold" className="shrink-0" />
+                {unidade.storiesHoje} {unidade.storiesHoje === 1 ? "story" : "stories"} hoje
+              </span>
+            )}
+          </div>
+        ) : null}
       </div>
       {conteudo.corpo}
     </Link>
