@@ -4,8 +4,9 @@ import { enviarRelatorioPostagens } from "@/lib/email/relatorioPostagens";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-/** Chamado pelo cron semanal da Vercel (ver vercel.json) — mesma autenticação por CRON_SECRET do
- * resto da automação. Roda logo depois do /api/cron/relatorio-semanal, mesmo dia. */
+/** Chamado pelo cron mensal da Vercel, todo dia 30 (ver vercel.json) — mesma autenticação por
+ * CRON_SECRET do resto da automação. Meses sem dia 30 (fevereiro) simplesmente não disparam nesse
+ * mês, é o comportamento padrão de cron por dia-do-mês. */
 export async function GET(request: NextRequest) {
   const segredoEsperado = process.env.CRON_SECRET;
   const autorizacao = request.headers.get("authorization");
