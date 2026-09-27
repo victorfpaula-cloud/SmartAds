@@ -12,14 +12,18 @@ function formatarReais(centavosOuReais: number, jaEmReais = true) {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+// E-mail do próprio dono — usado quando RELATORIO_SEMANAL_EMAIL não está configurado na Vercel
+// (mesmo padrão de src/lib/email/relatorioPostagens.ts). Configurar a env var continua valendo
+// pra trocar o destinatário depois.
+const DESTINATARIO_PADRAO = "victorfpaula@gmail.com";
+
 /** Monta e envia o relatório semanal — UM e-mail consolidado cobrindo todas as unidades ativas
  * (o dono opera sozinho hoje; separar por franqueado é extensão futura, não perde nada mudar
  * depois já que cada seção já é isolada por conta). Cada seção: panorama da semana, campanhas
  * ativas, o diagnóstico mais recente (se houver, "quais estratégias e por quê") e sugestões
  * pendentes com link de aprovar/rejeitar direto do e-mail — sem precisar abrir o app. */
 export async function enviarRelatorioSemanal(): Promise<{ enviado: boolean; motivo?: string }> {
-  const destinatario = process.env.RELATORIO_SEMANAL_EMAIL;
-  if (!destinatario) return { enviado: false, motivo: "RELATORIO_SEMANAL_EMAIL não configurado." };
+  const destinatario = process.env.RELATORIO_SEMANAL_EMAIL || DESTINATARIO_PADRAO;
 
   const supabase = criarClienteAdmin();
   const { data: clientes } = await supabase
