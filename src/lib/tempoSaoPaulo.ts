@@ -25,3 +25,14 @@ export function adicionarDias(diaISO: string, quantidade: number): string {
   const [ano, mes, dia] = diaISO.split("-").map(Number);
   return new Date(Date.UTC(ano, mes - 1, dia + quantidade)).toISOString().slice(0, 10);
 }
+
+// Diferença em DIAS DE CALENDÁRIO (SP) entre dois instantes — não "quantas horas corridas se
+// passaram, dividido por 24". Um post de ontem às 23h59 já é "há 1 dia" a partir da meia-noite,
+// mesmo sem ter completado 24h corridas; e um post de hoje às 00h05 continua "hoje" o dia inteiro.
+// Usar (agora.getTime() - post.getTime()) / 86_400_000 confunde essas duas noções — foi o bug do
+// "Postou hoje" continuando a aparecer depois da virada do dia (ver Radar de posts).
+export function diasEntreEmSaoPaulo(isoRecente: string, isoAntigo: string): number {
+  const [anoR, mesR, diaR] = diaEmSaoPaulo(isoRecente).split("-").map(Number);
+  const [anoA, mesA, diaA] = diaEmSaoPaulo(isoAntigo).split("-").map(Number);
+  return Math.round((Date.UTC(anoR, mesR - 1, diaR) - Date.UTC(anoA, mesA - 1, diaA)) / 86_400_000);
+}
