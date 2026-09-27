@@ -1,6 +1,7 @@
 import Cabecalho from "@/components/Cabecalho";
 import Link from "next/link";
 import { obterRelatorioPostagens, classificarComparativoRede, type ComparativoRede } from "@/lib/relatorioPostagens";
+import { diasEntreEmSaoPaulo } from "@/lib/tempoSaoPaulo";
 import { WarningCircle, InstagramLogo, DownloadSimple, GridFour, CircleDashed } from "@phosphor-icons/react/dist/ssr";
 import BotaoEnviarRelatorio from "./BotaoEnviarRelatorio";
 
@@ -47,8 +48,11 @@ export default async function PostagensPage() {
   const mediaRede =
     vinculadas.length > 0 ? vinculadas.reduce((soma, u) => soma + u.totalPostagens, 0) / vinculadas.length : 0;
 
+  const agoraISO = new Date(agora).toISOString();
   const unidades: CardData[] = unidadesRelatorio.map((u) => {
-    const diasSemPostar = u.ultimoPostEm ? Math.floor((agora - new Date(u.ultimoPostEm).getTime()) / 86_400_000) : null;
+    // Dias de calendário (SP), não horas corridas / 24 — senão um post de ontem à noite ainda
+    // aparece "Postou hoje" de manhã, só porque não completou 24h corridas ainda.
+    const diasSemPostar = u.ultimoPostEm ? diasEntreEmSaoPaulo(agoraISO, u.ultimoPostEm) : null;
     return {
       contaId: u.contaId,
       clienteNome: u.clienteNome,
