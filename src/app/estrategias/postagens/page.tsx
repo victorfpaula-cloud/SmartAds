@@ -171,14 +171,18 @@ function CardUnidade({ unidade }: { unidade: CardData }) {
       return {
         classe: "border-danger/30 bg-danger/10",
         corpo: (
-          <div className="mt-3 flex flex-1 flex-col items-center justify-center gap-1 text-center">
-            <WarningCircle size={18} weight="fill" className="text-danger" />
-            <p className="mt-0.5 text-sm font-bold text-neutral-100">
-              {formatarData(unidade.ultimoPostEm)} <span className="font-normal text-neutral-400">{formatarHora(unidade.ultimoPostEm)}</span>
-            </p>
-            <p className="text-[11px] font-semibold text-danger">
-              {unidade.diasSemPostar} dias sem postar
-            </p>
+          <div className="mt-3 flex flex-1 flex-col items-center justify-center text-center">
+            <div className="flex flex-wrap items-center justify-center gap-1.5">
+              <WarningCircle size={14} weight="fill" className="shrink-0 text-danger" />
+              <p className="text-sm font-bold text-neutral-100">
+                {formatarData(unidade.ultimoPostEm)}{" "}
+                <span className="font-normal text-neutral-400">{formatarHora(unidade.ultimoPostEm)}</span>
+              </p>
+              <span className="text-neutral-600">–</span>
+              <span className="rounded-full border border-danger/40 bg-danger/10 px-1.5 py-0.5 text-[9.5px] font-semibold text-danger">
+                {unidade.diasSemPostar} dias sem postar
+              </span>
+            </div>
           </div>
         ),
       };
@@ -253,10 +257,13 @@ function CardUnidade({ unidade }: { unidade: CardData }) {
     );
   }
 
+  // min-h fixo: sem isso cada card ficava do tamanho do próprio conteúdo — unidade sem Instagram
+  // (só ícone + texto) bem mais baixa que unidade com os dois adesivos + data. O corpo abaixo usa
+  // flex-1 justify-center, então preenche esse espaço extra centralizado em vez de esticar feio.
   return (
     <Link
       href={`/estrategias/postagens/${unidade.contaId}`}
-      className={`rounded-xl border p-3 transition hover:border-accent/40 ${conteudo.classe} flex flex-col`}
+      className={`flex min-h-[176px] flex-col rounded-xl border p-3 transition hover:border-accent/40 ${conteudo.classe}`}
     >
       <div>
         <div className="flex items-center gap-1.5">
