@@ -7,10 +7,10 @@ import { enviarEmail } from "./resend";
 const DESTINATARIO_PADRAO = "victorfpaula@gmail.com";
 
 /** Mesmo e-mail que o botão "Enviar por e-mail agora" da aba Radar de posts dispara na hora —
- * aqui é a versão chamada pelo cron mensal, todo dia 30 (ver /api/cron/relatorio-postagens e
- * vercel.json), pro dono não precisar entrar no app pra lembrar de conferir. Reaproveita
- * RELATORIO_SEMANAL_EMAIL, o mesmo destinatário do relatório semanal já existente — é o e-mail do
- * próprio dono. */
+ * aqui é a versão chamada pelo cron mensal, dia 30 (ou último dia do mês em fevereiro — ver a
+ * lógica em /api/cron/relatorio-postagens e vercel.json), pro dono não precisar entrar no app pra
+ * lembrar de conferir. Reaproveita RELATORIO_SEMANAL_EMAIL, o mesmo destinatário do relatório
+ * semanal já existente — é o e-mail do próprio dono. */
 export async function enviarRelatorioPostagens(): Promise<{ enviado: boolean; motivo?: string }> {
   const destinatario = process.env.RELATORIO_SEMANAL_EMAIL || DESTINATARIO_PADRAO;
 
