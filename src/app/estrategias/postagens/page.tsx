@@ -66,7 +66,7 @@ export default async function PostagensPage() {
   return (
     <>
       <Cabecalho ativo="/estrategias" />
-      <main className="mx-auto max-w-6xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
+      <main className="mx-auto max-w-5xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
         <Link href="/estrategias" className="text-xs text-neutral-500 hover:text-neutral-300">
           ← Central da rede
         </Link>
@@ -127,7 +127,21 @@ const CLASSE_COMPARATIVO_CURTO: Record<ComparativoRede, string> = {
   sem_base: "",
 };
 
+// Semáforo ao lado do nome: vermelho quando precisa de atenção (sem post ou alerta crítico de
+// ritmo), amarelo quando abaixo da média, verde quando acima, azul no "normal" (na média ou sem
+// base de comparação ainda). Só aparece pra unidade com Instagram vinculado — sem dado, sem status.
+function corSemaforo(unidade: CardData): string | null {
+  if (!unidade.instagramVinculado) return null;
+  if (unidade.ultimoPostEm === null || unidade.precisaAtencao || unidade.comparativo === "critico") {
+    return "bg-danger";
+  }
+  if (unidade.comparativo === "abaixo") return "bg-amber-400";
+  if (unidade.comparativo === "acima") return "bg-ok";
+  return "bg-sky-400";
+}
+
 function CardUnidade({ unidade }: { unidade: CardData }) {
+  const semaforo = corSemaforo(unidade);
   const conteudo = (() => {
     if (!unidade.instagramVinculado) {
       return {
@@ -170,18 +184,30 @@ function CardUnidade({ unidade }: { unidade: CardData }) {
       };
     }
 
+    // Data/hora e "há X dias" (ou "Postou hoje") numa linha só, com o adesivinho depois de um
+    // tracinho — antes eram duas linhas centralizadas, ocupando mais altura do card à toa.
     return {
       classe: "border-white/10 bg-white/[0.02]",
       corpo: (
-        <div className="mt-3 flex flex-1 flex-col items-center justify-center gap-1 text-center">
-          <p className="text-sm font-bold text-neutral-100">
-            {formatarData(unidade.ultimoPostEm)} <span className="font-normal text-neutral-400">{formatarHora(unidade.ultimoPostEm)}</span>
-          </p>
-          <p className="text-[11px] text-neutral-500">
-            {unidade.diasSemPostar === 0
-              ? "Postou hoje"
-              : `há ${unidade.diasSemPostar} dia${unidade.diasSemPostar !== 1 ? "s" : ""}`}
-          </p>
+        <div className="mt-3 flex flex-1 flex-col items-center justify-center text-center">
+          <div className="flex flex-wrap items-center justify-center gap-1.5">
+            <p className="text-sm font-bold text-neutral-100">
+              {formatarData(unidade.ultimoPostEm)}{" "}
+              <span className="font-normal text-neutral-400">{formatarHora(unidade.ultimoPostEm)}</span>
+            </p>
+            <span className="text-neutral-600">–</span>
+            <span
+              className={`rounded-full border px-1.5 py-0.5 text-[9.5px] font-semibold ${
+                unidade.diasSemPostar === 0
+                  ? "border-ok/40 bg-ok/10 text-ok"
+                  : "border-white/10 bg-white/[0.03] text-neutral-400"
+              }`}
+            >
+              {unidade.diasSemPostar === 0
+                ? "Postou hoje"
+                : `há ${unidade.diasSemPostar} dia${unidade.diasSemPostar !== 1 ? "s" : ""}`}
+            </span>
+          </div>
         </div>
       ),
     };
@@ -191,19 +217,20 @@ function CardUnidade({ unidade }: { unidade: CardData }) {
   // status (rótulo colorido) numa linha e a contagem em outra — antes vinham juntos numa linha só
   // com truncate, e "abaixo da média"/"na média" cortava no meio em cards estreitos.
   //
-  // O rótulo tem altura mínima fixa (min-h, 2 linhas) porque uns são curtos ("Na média", 1 linha) e
-  // outros quebram em 2 ("Abaixo da média", "Stories hoje") — sem isso, a linha da contagem embaixo
-  // ficava em alturas diferentes entre os dois adesivos lado a lado, desalinhada.
+  // O rótulo tem altura mínima fixa (min-h) só o bastante pra 1 linha — com os cards mais largos de
+  // agora o rótulo quase nunca quebra, então uma reserva de 2 linhas (como era antes) deixava um
+  // vão vazio grande demais entre o rótulo e a contagem embaixo. Uma reserva pequena ainda evita o
+  // desalinhamento entre os dois adesivos lado a lado no raro caso de um rótulo quebrar mesmo assim.
   const adesivos: React.ReactNode[] = [];
   if (unidade.comparativo && unidade.comparativo !== "sem_base") {
     adesivos.push(
-      <div key="posts" className="rounded-lg bg-white/[0.04] px-2.5 py-2">
+      <div key="posts" className="rounded-lg bg-white/[0.04] px-2 py-1.5">
         <p
-          className={`min-h-[21px] leading-tight text-[8.5px] font-bold uppercase tracking-wide ${CLASSE_COMPARATIVO_CURTO[unidade.comparativo]}`}
+          className={`min-h-[11px] leading-tight text-[8.5px] font-bold uppercase tracking-wide ${CLASSE_COMPARATIVO_CURTO[unidade.comparativo]}`}
         >
           {ROTULO_COMPARATIVO_CURTO[unidade.comparativo]}
         </p>
-        <p className="mt-1 flex items-center gap-1 text-[10.5px] font-semibold text-neutral-300">
+        <p className="mt-0.5 flex items-center gap-1 text-[10.5px] font-semibold text-neutral-300">
           <GridFour size={11} weight="bold" className="shrink-0 text-neutral-500" />
           {unidade.totalPostagens} {unidade.totalPostagens === 1 ? "post" : "posts"}
         </p>
@@ -212,13 +239,13 @@ function CardUnidade({ unidade }: { unidade: CardData }) {
   }
   if (unidade.instagramVinculado) {
     adesivos.push(
-      <div key="stories" className="rounded-lg bg-white/[0.04] px-2.5 py-2">
+      <div key="stories" className="rounded-lg bg-white/[0.04] px-2 py-1.5">
         <p
-          className={`min-h-[21px] leading-tight text-[8.5px] font-bold uppercase tracking-wide ${unidade.storiesHoje > 0 ? "text-sky-300" : "text-neutral-600"}`}
+          className={`min-h-[11px] leading-tight text-[8.5px] font-bold uppercase tracking-wide ${unidade.storiesHoje > 0 ? "text-sky-300" : "text-neutral-600"}`}
         >
           Stories hoje
         </p>
-        <p className={`mt-1 flex items-center gap-1 text-[10.5px] font-semibold ${unidade.storiesHoje > 0 ? "text-neutral-200" : "text-neutral-500"}`}>
+        <p className={`mt-0.5 flex items-center gap-1 text-[10.5px] font-semibold ${unidade.storiesHoje > 0 ? "text-neutral-200" : "text-neutral-500"}`}>
           <CircleDashed size={11} weight="bold" className="shrink-0" />
           {unidade.storiesHoje} {unidade.storiesHoje === 1 ? "story" : "stories"}
         </p>
@@ -232,7 +259,10 @@ function CardUnidade({ unidade }: { unidade: CardData }) {
       className={`rounded-xl border p-3 transition hover:border-accent/40 ${conteudo.classe} flex flex-col`}
     >
       <div>
-        <p className="truncate text-xs font-semibold text-neutral-200">{unidade.clienteNome}</p>
+        <div className="flex items-center gap-1.5">
+          {semaforo && <span className={`h-2 w-2 shrink-0 rounded-full ${semaforo}`} title="Status da unidade" />}
+          <p className="truncate text-xs font-semibold text-neutral-200">{unidade.clienteNome}</p>
+        </div>
         {unidade.instagramUsername && (
           <p className="truncate text-[10.5px] text-neutral-500">@{unidade.instagramUsername}</p>
         )}

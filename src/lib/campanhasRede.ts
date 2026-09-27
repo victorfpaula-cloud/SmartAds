@@ -17,6 +17,7 @@ interface LinhaCache {
   nome: string;
   objetivo: string | null;
   orcamento_diario_centavos: number | null;
+  vitalicio: boolean;
 }
 
 /** Recalcula o snapshot de TODAS as campanhas ativas das unidades de franquia — só é chamado pelo
@@ -87,7 +88,13 @@ export async function recalcularCampanhasRede(): Promise<{ contasVerificadas: nu
     }
 
     const contagens = await mapearEmLotes([...gruposPorContaDeAnuncio.values()], async (contasDoGrupo): Promise<number> => {
-      const campanhasAtivasMeta: Array<{ id: string; name: string; objective?: string; daily_budget?: string }> = [];
+      const campanhasAtivasMeta: Array<{
+        id: string;
+        name: string;
+        objective?: string;
+        daily_budget?: string;
+        lifetime_budget?: string;
+      }> = [];
       let after: string | undefined;
 
       // Pagina até 5 páginas (250 campanhas) por conta de anúncio como trava de segurança — mesmo
@@ -128,6 +135,7 @@ export async function recalcularCampanhasRede(): Promise<{ contasVerificadas: nu
           nome: campanha.name,
           objetivo: campanha.objective ?? null,
           orcamento_diario_centavos: campanha.daily_budget ? Number(campanha.daily_budget) : null,
+          vitalicio: !campanha.daily_budget && !!campanha.lifetime_budget,
         });
         linhasPorConta.set(conta.id, linhas);
       }
@@ -186,6 +194,7 @@ export interface CampanhaRedeResumo {
   nome: string;
   objetivo: string | null;
   orcamentoDiarioCentavos: number | null;
+  vitalicio: boolean;
 }
 
 /** Lê o panorama já calculado (ver recalcularCampanhasRede) — a tela nunca bate na Meta ao vivo. */
@@ -197,7 +206,7 @@ export async function obterCampanhasAtivasRede(): Promise<{
   const [{ data: cache }, { data: clientes }] = await Promise.all([
     supabase
       .from("smartads_campanhas_rede_cache")
-      .select("conta_id, nome, objetivo, orcamento_diario_centavos, atualizado_em"),
+      .select("conta_id, nome, objetivo, orcamento_diario_centavos, vitalicio, atualizado_em"),
     supabase
       .from("smartads_clientes")
       .select("id, nome, smartads_empresas!inner(tipo), smartads_contas_meta(*)")
@@ -226,6 +235,7 @@ export async function obterCampanhasAtivasRede(): Promise<{
         nome: c.nome,
         objetivo: c.objetivo,
         orcamentoDiarioCentavos: c.orcamento_diario_centavos,
+        vitalicio: c.vitalicio,
       };
     })
     .filter((c): c is CampanhaRedeResumo => c !== null)

@@ -710,6 +710,7 @@ create table if not exists smartads_campanhas_rede_cache (
   nome text not null,
   objetivo text,
   orcamento_diario_centavos integer,
+  vitalicio boolean not null default false,
   atualizado_em timestamptz not null default now(),
   unique (conta_id, meta_campaign_id)
 );
