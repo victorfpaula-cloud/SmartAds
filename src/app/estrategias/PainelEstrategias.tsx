@@ -141,11 +141,13 @@ export default async function PainelEstrategias() {
                       <p className="truncate text-xs font-medium text-neutral-200">{campanha.nome}</p>
                       <p className="text-[10.5px] text-neutral-500">
                         {campanha.objetivo ? ROTULO_OBJETIVO[campanha.objetivo] ?? campanha.objetivo : "-"}
-                        {campanha.orcamentoDiarioCentavos != null && (
+                        {campanha.orcamentoDiarioCentavos != null ? (
                           <span className="text-neutral-400">
                             {" "}
                             · {formatoReal.format(campanha.orcamentoDiarioCentavos / 100)}/dia
                           </span>
+                        ) : (
+                          campanha.vitalicio && <span className="text-neutral-400"> · Vitalício</span>
                         )}
                       </p>
                     </div>
