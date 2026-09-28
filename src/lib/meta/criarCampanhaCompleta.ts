@@ -170,10 +170,18 @@ export async function criarCampanhaCompleta(corpo: ParametrosCriarCampanha): Pro
       // como referência de "post existente" (testado exaustivamente em 13/09/2026 e 23/09/2026), só
       // o ID do post da própria Página.
       let postDaPaginaId: string | null = null;
+      let detalheFalha = "não foi possível checar (falha ao chamar a Meta).";
       try {
         const tokenPagina = await obterTokenDePagina(conta.page_id);
-        if (tokenPagina) {
-          postDaPaginaId = await encontrarPostDaPaginaCorrespondente(conta.page_id, tokenPagina, postExistente.timestamp);
+        if (!tokenPagina) {
+          detalheFalha = "não encontrei um token de acesso pra essa Página (conexão com o Facebook pode ter expirado).";
+        } else {
+          const resultado = await encontrarPostDaPaginaCorrespondente(conta.page_id, tokenPagina, postExistente.timestamp);
+          postDaPaginaId = resultado.postId;
+          detalheFalha =
+            resultado.totalPostsNoPeriodo === 0
+              ? "a Página não teve nenhuma publicação nesse período (o cross-post pode estar desligado nessa conta)."
+              : `a publicação mais próxima na Página estava a ${resultado.diferencaMaisProximaMin} min de distância — fora da janela aceita.`;
         }
       } catch {
         // Segue sem cross-post encontrado — cai no erro abaixo, sem fallback.
@@ -187,7 +195,7 @@ export async function criarCampanhaCompleta(corpo: ParametrosCriarCampanha): Pro
       // errado sem avisar.
       if (!postDaPaginaId) {
         throw new Error(
-          "Essa publicação ainda não tem o cross-post correspondente na Página do Facebook — sem ele não dá pra turbinar o post real. O SmartAds nunca recria como anúncio novo (o engajamento precisa acumular no post publicado, não numa cópia). Confirme se o cross-post automático Instagram→Facebook está ligado nessa conta, ou tente de novo em alguns minutos."
+          `Essa publicação ainda não tem o cross-post correspondente na Página do Facebook — sem ele não dá pra turbinar o post real. O SmartAds nunca recria como anúncio novo (o engajamento precisa acumular no post publicado, não numa cópia). Detalhe: ${detalheFalha}`
         );
       }
 
