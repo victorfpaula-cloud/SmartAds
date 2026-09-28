@@ -179,12 +179,18 @@ export async function criarCampanhaCompleta(corpo: ParametrosCriarCampanha): Pro
           const resultado = await encontrarPostDaPaginaCorrespondente(conta.page_id, tokenPagina, postExistente.timestamp);
           postDaPaginaId = resultado.postId;
           detalheFalha =
-            resultado.totalPostsNoPeriodo === 0
-              ? "a Página não teve nenhuma publicação nesse período (o cross-post pode estar desligado nessa conta)."
-              : `a publicação mais próxima na Página estava a ${resultado.diferencaMaisProximaMin} min de distância — fora da janela aceita.`;
+            resultado.totalPostsNoPeriodo > 0
+              ? `a publicação mais próxima na Página estava a ${resultado.diferencaMaisProximaMin} min de distância — fora da janela aceita.`
+              : postExistente.media_type === "CAROUSEL_ALBUM"
+                ? "a Página não teve nenhuma publicação nesse período — carrossel costuma não ser replicado automaticamente pro Facebook pela Meta, mesmo com o cross-post ligado (só feed simples e Reels costumam replicar)."
+                : "a Página não teve nenhuma publicação nesse período (o cross-post pode estar desligado nessa conta).";
         }
-      } catch {
-        // Segue sem cross-post encontrado — cai no erro abaixo, sem fallback.
+      } catch (erroBusca) {
+        // Investigado em 28/09/2026: um post que TINHA cross-post real (achado em ~15s) mesmo assim
+        // caiu nesse catch em produção e virou o mesmo erro genérico de "sem cross-post" — porque
+        // esse catch engolia qualquer exceção em silêncio, sem guardar o que de fato aconteceu
+        // (rate limit, timeout, token vencido no meio da chamada etc.). Agora entra no detalhe.
+        detalheFalha = `erro ao consultar a Página no Facebook: ${erroBusca instanceof Error ? erroBusca.message : String(erroBusca)}`;
       }
 
       // Proposital: SEM fallback pra "recriar como anúncio novo" quando não acha o cross-post. Um
