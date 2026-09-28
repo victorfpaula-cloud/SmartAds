@@ -288,6 +288,22 @@ export async function encontrarPostDaPaginaCorrespondente(
   };
 }
 
+/** Lista bruta de posts da Página num período qualquer, sem filtro de janela — só pra investigar
+ * (ver /api/cron/boost-diagnostico, temporário). encontrarPostDaPaginaCorrespondente já resolve o
+ * caso normal; essa aqui existe pra enxergar os dados crus quando o resultado dela é questionado. */
+export async function listarPostsDaPaginaBruto(
+  pageId: string,
+  tokenPagina: string,
+  desde: string,
+  ate: string
+): Promise<Array<{ id: string; created_time: string; message?: string }>> {
+  const dados = await chamar<{ data: Array<{ id: string; created_time: string; message?: string }> }>(
+    `${pageId}/posts`,
+    { tokenExplicito: tokenPagina, query: { fields: "id,created_time,message", since: desde, until: ate, limit: 50 } }
+  );
+  return dados.data;
+}
+
 // ============================================================================
 // Busca de localização e interesse (autocomplete do construtor de público)
 // ============================================================================
