@@ -235,25 +235,39 @@ export async function obterTokenDePagina(pageId: string): Promise<string | null>
   return dados.data.find((pagina) => pagina.id === pageId)?.access_token ?? null;
 }
 
-/** Procura, entre os posts recentes da Página, um publicado bem perto do horário do post do
- * Instagram selecionado em "usar publicação existente" — cobre o caso comum (principalmente
- * Reels) em que a própria Meta replica automaticamente o conteúdo do Instagram pra Página
- * quando o cross-post tá ligado na conta. Sem achar esse post da Página não tem como turbinar o
- * post de verdade: testado direto contra a API real em 23/09/2026 (via ação boost_post do
- * Windsor.ai) que a Meta rejeita o ID do Instagram como referência de "post existente" pra criar
- * anúncio, mas aceita o ID do post da Página normalmente. Janela apertada (10 min) porque
- * cross-post acontece quase simultâneo à publicação original; fora dela, melhor não arriscar
- * casar com o post errado — devolve null e quem chamar cai no caminho de recriar o conteúdo como
- * anúncio novo (ver route.ts). */
+export interface ResultadoBuscaPostDaPagina {
+  postId: string | null;
+  /** Quantos posts a Página teve nesse período (janela de busca) — 0 é sinal forte de cross-post
+   * desligado; >0 mas postId null é sinal de que o post certo só não caiu dentro da janela aceita. */
+  totalPostsNoPeriodo: number;
+  /** Distância (minutos) do post da Página mais próximo encontrado, aceito ou não — vai pro erro
+   * mostrado pra pessoa, pra não ficar só no genérico "não achei" sem dizer o quão perto chegou. */
+  diferencaMaisProximaMin: number | null;
+}
+
+// Janela aceita pro cross-post — era 10 min ("quase simultâneo"), mas o log de produção mostrou
+// boost automático falhando com "sem cross-post" em posts que tinham cross-post de verdade: o
+// replicar do Instagram pra Página nem sempre é rápido, a Meta pode demorar bem mais que isso.
+// 3h é folgado o bastante pra cobrir esse atraso sem risco real de casar com o post errado — a
+// conta posta no máximo poucas vezes por dia, e o match sempre pega o mais próximo do horário alvo.
+const JANELA_ACEITA_MS = 3 * 60 * 60 * 1000;
+
+/** Procura, entre os posts recentes da Página, um publicado perto do horário do post do Instagram
+ * selecionado em "usar publicação existente" — cobre o caso comum (principalmente Reels) em que a
+ * própria Meta replica automaticamente o conteúdo do Instagram pra Página quando o cross-post tá
+ * ligado na conta. Sem achar esse post da Página não tem como turbinar o post de verdade: testado
+ * direto contra a API real em 23/09/2026 (via ação boost_post do Windsor.ai) que a Meta rejeita o
+ * ID do Instagram como referência de "post existente" pra criar anúncio, mas aceita o ID do post
+ * da Página normalmente. Fora da janela aceita, devolve postId null (com o diagnóstico do que foi
+ * encontrado) e quem chamar cai no caminho de recriar o conteúdo como anúncio novo (ver route.ts). */
 export async function encontrarPostDaPaginaCorrespondente(
   pageId: string,
   tokenPagina: string,
   timestampPostInstagram: string
-): Promise<string | null> {
+): Promise<ResultadoBuscaPostDaPagina> {
   const alvo = new Date(timestampPostInstagram).getTime();
-  const janelaMs = 10 * 60 * 1000;
-  const desde = new Date(alvo - janelaMs).toISOString().slice(0, 10);
-  const ate = new Date(alvo + janelaMs).toISOString().slice(0, 10);
+  const desde = new Date(alvo - JANELA_ACEITA_MS).toISOString().slice(0, 10);
+  const ate = new Date(alvo + JANELA_ACEITA_MS).toISOString().slice(0, 10);
 
   const dados = await chamar<{ data: Array<{ id: string; created_time: string }> }>(`${pageId}/posts`, {
     tokenExplicito: tokenPagina,
@@ -263,11 +277,15 @@ export async function encontrarPostDaPaginaCorrespondente(
   let melhor: { id: string; diffMs: number } | null = null;
   for (const post of dados.data) {
     const diffMs = Math.abs(new Date(post.created_time).getTime() - alvo);
-    if (diffMs <= janelaMs && (!melhor || diffMs < melhor.diffMs)) {
-      melhor = { id: post.id, diffMs };
-    }
+    if (!melhor || diffMs < melhor.diffMs) melhor = { id: post.id, diffMs };
   }
-  return melhor?.id ?? null;
+
+  const dentroDaJanela = melhor !== null && melhor.diffMs <= JANELA_ACEITA_MS;
+  return {
+    postId: dentroDaJanela ? melhor!.id : null,
+    totalPostsNoPeriodo: dados.data.length,
+    diferencaMaisProximaMin: melhor ? Math.round(melhor.diffMs / 60_000) : null,
+  };
 }
 
 // ============================================================================
