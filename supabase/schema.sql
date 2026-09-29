@@ -655,6 +655,9 @@ create index if not exists smartads_boost_automatico_log_conta_idx on smartads_b
 -- Pra limpeza semanal (ver src/lib/limpeza.ts), que filtra só por created_at.
 create index if not exists smartads_boost_automatico_log_created_at_idx on smartads_boost_automatico_log(created_at);
 
+-- Quantas vezes o cron tentou turbinar esse post (falhas são retentadas até um limite; ver boostAutomatico.ts).
+alter table smartads_boost_automatico_log add column if not exists tentativas int not null default 1;
+
 alter table smartads_boost_automatico_log enable row level security;
 
 -- ============================================================================
