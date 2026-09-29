@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { VERSAO_API } from "@/lib/meta/token";
 
+const CONFIG_TOKEN_DE_USUARIO = "1399937805608291";
+
 function urlDeRedirecionamento(request: NextRequest): string {
   const base = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
   return `${base}/api/auth/meta/callback`;
@@ -17,7 +19,14 @@ function urlDeRedirecionamento(request: NextRequest): string {
  * 12/09/2026 testando o login em produção). */
 export async function GET(request: NextRequest) {
   const appId = process.env.META_APP_ID;
-  const configId = process.env.META_LOGIN_CONFIG_ID;
+  const clienteId = request.nextUrl.searchParams.get("cliente");
+  // Conta individual (?cliente=) usa a configuração de login com token de USUÁRIO: a da conexão
+  // principal é "usuário do sistema", presa ao portfólio, e só oferece ativos que estão dentro dele
+  // — o Instagram de um cliente parceiro (ligado à Página, mas fora do portfólio) nunca aparece
+  // (visto em 29/09/2026: debug_token da conexão principal = SYSTEM_USER). O ID não é segredo.
+  const configId = clienteId
+    ? process.env.META_LOGIN_CONFIG_ID_USUARIO || CONFIG_TOKEN_DE_USUARIO
+    : process.env.META_LOGIN_CONFIG_ID;
   if (!appId) {
     return NextResponse.json(
       { erro: "META_APP_ID não configurado no servidor." },
@@ -46,7 +55,6 @@ export async function GET(request: NextRequest) {
   // "Adicionar conta" chama isso com ?cliente=<id>: em vez de sobrescrever a conexão principal,
   // o callback cria uma conexão nova só pra essa conta (o login da Meta só deixa escolher UM
   // portfólio por vez, então portfólios diferentes precisam de logins diferentes).
-  const clienteId = request.nextUrl.searchParams.get("cliente");
   if (clienteId) {
     resposta.cookies.set("smartads_meta_oauth_nova_conta", clienteId, {
       httpOnly: true,
