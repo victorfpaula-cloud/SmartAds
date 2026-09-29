@@ -347,6 +347,7 @@ export default function PainelContas({
                 {clienteExpandidoId === cliente.id && (
                   <AdicionarConta
                     clienteId={cliente.id}
+                    franquia={cliente.smartads_empresas?.tipo === "franquia"}
                     conexaoId={novaConexao?.clienteId === cliente.id ? novaConexao.conexaoId : null}
                     onAssociada={(conta) => adicionarContaAoCliente(cliente.id, conta)}
                   />
@@ -471,10 +472,13 @@ function AvisoCAPI() {
 
 function AdicionarConta({
   clienteId,
+  franquia,
   conexaoId,
   onAssociada,
 }: {
   clienteId: string;
+  /** Unidade de franquia: já está no mesmo portfólio da conexão principal, então o padrão é usar ela. */
+  franquia: boolean;
   /** Conexão da Meta recém-criada pelo login desta conta (null = ainda não escolheu como conectar). */
   conexaoId: string | null;
   onAssociada: (conta: ContaMeta) => void;
@@ -550,19 +554,39 @@ function AdicionarConta({
           <strong className="text-neutral-200"> dessa conta</strong>. Cada conta usa o seu próprio login — as que já
           estão conectadas continuam funcionando.
         </p>
-        <a
-          href={`/api/auth/meta/login?cliente=${encodeURIComponent(clienteId)}`}
-          className="flex h-9 items-center justify-center rounded-lg bg-accent text-sm font-semibold text-white hover:bg-accent-strong"
-        >
-          Conectar pela Meta
-        </a>
-        <button
-          type="button"
-          onClick={() => setUsandoPrincipal(true)}
-          className="text-[11px] text-neutral-500 hover:text-neutral-300"
-        >
-          Usar a conexão principal (mesmo portfólio já conectado)
-        </button>
+        {franquia ? (
+          <>
+            <button
+              type="button"
+              onClick={() => setUsandoPrincipal(true)}
+              className="h-9 rounded-lg bg-accent text-sm font-semibold text-white hover:bg-accent-strong"
+            >
+              Usar a conexão principal
+            </button>
+            <a
+              href={`/api/auth/meta/login?cliente=${encodeURIComponent(clienteId)}`}
+              className="text-center text-[11px] text-neutral-500 hover:text-neutral-300"
+            >
+              Essa unidade é de outro portfólio? Conectar pela Meta
+            </a>
+          </>
+        ) : (
+          <>
+            <a
+              href={`/api/auth/meta/login?cliente=${encodeURIComponent(clienteId)}`}
+              className="flex h-9 items-center justify-center rounded-lg bg-accent text-sm font-semibold text-white hover:bg-accent-strong"
+            >
+              Conectar pela Meta
+            </a>
+            <button
+              type="button"
+              onClick={() => setUsandoPrincipal(true)}
+              className="text-[11px] text-neutral-500 hover:text-neutral-300"
+            >
+              Usar a conexão principal (mesmo portfólio já conectado)
+            </button>
+          </>
+        )}
       </div>
     );
   }
