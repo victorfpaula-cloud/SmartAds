@@ -8,6 +8,7 @@ import {
   obterPostInstagram,
   obterTokenDePagina,
   encontrarPostDaPaginaCorrespondente,
+  criarCriativoDoPostDoInstagram,
   criarCriativoDoPostDaPagina,
   criarCriativoNovo,
   criarAnuncio,
@@ -183,7 +184,12 @@ async function criarCampanhaCompletaComConexao(corpo: ParametrosCriarCampanha): 
         if (!tokenPagina) {
           detalheFalha = "não encontrei um token de acesso pra essa Página (conexão com o Facebook pode ter expirado).";
         } else {
-          const resultado = await encontrarPostDaPaginaCorrespondente(conta.page_id, tokenPagina, postExistente.timestamp);
+          const resultado = await encontrarPostDaPaginaCorrespondente(
+            conta.page_id,
+            tokenPagina,
+            postExistente.timestamp,
+            postExistente.caption
+          );
           postDaPaginaId = resultado.postId;
           detalheFalha =
             resultado.totalPostsNoPeriodo > 0
@@ -200,22 +206,31 @@ async function criarCampanhaCompletaComConexao(corpo: ParametrosCriarCampanha): 
         detalheFalha = `erro ao consultar a Página no Facebook: ${erroBusca instanceof Error ? erroBusca.message : String(erroBusca)}`;
       }
 
-      // Proposital: SEM fallback pra "recriar como anúncio novo" quando não acha o cross-post. Um
-      // anúncio novo é visualmente idêntico pra quem vê, mas o engajamento (curtidas, comentários)
-      // acumula nele, não no post publicado de verdade — e é exatamente esse número que a unidade
-      // precisa ver aparecendo no post dela. Preferível falhar aqui (a pessoa vê o erro, ou o boost
-      // automático loga a falha e simplesmente não cria nada naquele dia) do que turbinar do jeito
-      // errado sem avisar.
-      if (!postDaPaginaId) {
-        throw new Error(
-          `Essa publicação ainda não tem o cross-post correspondente na Página do Facebook — sem ele não dá pra turbinar o post real. O SmartAds nunca recria como anúncio novo (o engajamento precisa acumular no post publicado, não numa cópia). Detalhe: ${detalheFalha}`
-        );
+      // Sem post correspondente na Página: promove o post do próprio Instagram, como o Gerenciador de
+      // Anúncios faz — o engajamento acumula no post original, então continua sendo "turbinar o post
+      // real". Nunca recria como anúncio novo (aí o engajamento cairia numa cópia).
+      let criativo: { id: string };
+      if (postDaPaginaId) {
+        criativo = await criarCriativoDoPostDaPagina(adAccountId, {
+          objectStoryId: postDaPaginaId,
+          name: `${corpo.nomeCampanha} - criativo`,
+        });
+      } else {
+        try {
+          criativo = await criarCriativoDoPostDoInstagram(adAccountId, {
+            instagramMediaId: postExistente.id,
+            instagramUserId: conta.instagram_business_id,
+            pageId: conta.page_id,
+            name: `${corpo.nomeCampanha} - criativo`,
+          });
+        } catch (erroInstagram) {
+          throw new Error(
+            `Não achei essa publicação na Página do Facebook (${detalheFalha}) e a Meta também recusou promover direto o post do Instagram: ${
+              erroInstagram instanceof Error ? erroInstagram.message : String(erroInstagram)
+            }. O SmartAds nunca recria como anúncio novo (o engajamento precisa acumular no post publicado, não numa cópia).`
+          );
+        }
       }
-
-      const criativo = await criarCriativoDoPostDaPagina(adAccountId, {
-        objectStoryId: postDaPaginaId,
-        name: `${corpo.nomeCampanha} - criativo`,
-      });
 
       const anuncio = await criarAnuncio(adAccountId, {
         name: `${corpo.nomeCampanha} - anúncio`,

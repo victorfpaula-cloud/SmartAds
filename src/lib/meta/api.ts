@@ -311,21 +311,44 @@ const JANELA_ACEITA_MS = 3 * 60 * 60 * 1000;
 export async function encontrarPostDaPaginaCorrespondente(
   pageId: string,
   tokenPagina: string,
-  timestampPostInstagram: string
+  timestampPostInstagram: string,
+  legendaInstagram?: string
 ): Promise<ResultadoBuscaPostDaPagina> {
   const alvo = new Date(timestampPostInstagram).getTime();
-  const desde = new Date(alvo - JANELA_ACEITA_MS).toISOString().slice(0, 10);
-  const ate = new Date(alvo + JANELA_ACEITA_MS).toISOString().slice(0, 10);
+  // since/until em TIMESTAMP UNIX (segundos), nunca em data "AAAA-MM-DD": com data, uma janela de
+  // ±3h que cai inteira num dia só vira since == until e a Meta recusa com "(#100) since should be
+  // less than until" — foi o que derrubou o boost de um post das 12h (29/09/2026), e o catch engolia
+  // isso como "sem cross-post". Busca ±24h pra achar também o post que a pessoa publicou na Página
+  // à mão, bem depois do Instagram (cross-post que falhou); quem decide se serve é o filtro abaixo.
+  const DIA_MS = 24 * 60 * 60 * 1000;
+  const desde = Math.floor((alvo - DIA_MS) / 1000);
+  const ate = Math.ceil((alvo + DIA_MS) / 1000);
 
-  const dados = await chamar<{ data: Array<{ id: string; created_time: string }> }>(`${pageId}/posts`, {
-    tokenExplicito: tokenPagina,
-    query: { fields: "id,created_time", since: desde, until: ate, limit: 50 },
-  });
+  const dados = await chamar<{ data: Array<{ id: string; created_time: string; message?: string }> }>(
+    `${pageId}/posts`,
+    { tokenExplicito: tokenPagina, query: { fields: "id,created_time,message", since: desde, until: ate, limit: 100 } }
+  );
+
+  const normalizar = (t?: string) => (t ?? "").toLowerCase().replace(/\s+/g, " ").trim().slice(0, 40);
+  const legendaAlvo = normalizar(legendaInstagram);
 
   let melhor: { id: string; diffMs: number } | null = null;
+  let melhorPorLegenda: { id: string; diffMs: number } | null = null;
   for (const post of dados.data) {
     const diffMs = Math.abs(new Date(post.created_time).getTime() - alvo);
     if (!melhor || diffMs < melhor.diffMs) melhor = { id: post.id, diffMs };
+    // Mesma legenda = mesmo conteúdo, mesmo que a Página tenha recebido horas depois.
+    if (legendaAlvo.length >= 10 && normalizar(post.message) === legendaAlvo) {
+      if (!melhorPorLegenda || diffMs < melhorPorLegenda.diffMs) melhorPorLegenda = { id: post.id, diffMs };
+    }
+  }
+
+  if (melhorPorLegenda) {
+    return {
+      postId: melhorPorLegenda.id,
+      totalPostsNoPeriodo: dados.data.length,
+      diferencaMaisProximaMin: Math.round(melhorPorLegenda.diffMs / 60_000),
+    };
   }
 
   const dentroDaJanela = melhor !== null && melhor.diffMs <= JANELA_ACEITA_MS;
@@ -605,6 +628,37 @@ export async function criarCriativoDoPostDaPagina(
     metodo: "POST",
     corpo: { name: params.name, object_story_id: params.objectStoryId },
   });
+}
+
+/** Criativo a partir do post do PRÓPRIO Instagram, sem precisar de cross-post no Facebook — o mesmo
+ * que o Gerenciador de Anúncios faz em "Usar publicação existente > Instagram". O engajamento
+ * acumula no post original do Instagram. Testa as formas de envio aceitas pela Meta em ordem e
+ * devolve o erro de cada uma se nenhuma passar (não dá pra testar contra a Meta fora de produção). */
+export async function criarCriativoDoPostDoInstagram(
+  adAccountId: string,
+  params: { instagramMediaId: string; instagramUserId: string; pageId: string; name: string }
+): Promise<{ id: string }> {
+  const variantes: Array<Record<string, unknown>> = [
+    { source_instagram_media_id: params.instagramMediaId, instagram_user_id: params.instagramUserId },
+    { source_instagram_media_id: params.instagramMediaId, instagram_actor_id: params.instagramUserId },
+    {
+      source_instagram_media_id: params.instagramMediaId,
+      instagram_user_id: params.instagramUserId,
+      object_id: params.pageId,
+    },
+  ];
+  const erros: string[] = [];
+  for (const variante of variantes) {
+    try {
+      return await chamar<{ id: string }>(`${adAccountId}/adcreatives`, {
+        metodo: "POST",
+        corpo: { name: params.name, ...variante },
+      });
+    } catch (e) {
+      erros.push(e instanceof Error ? e.message : String(e));
+    }
+  }
+  throw new Error(erros.join(" | "));
 }
 
 /** Anúncio novo ("dark post" — não aparece no feed orgânico, só roda como anúncio), com imagem e
