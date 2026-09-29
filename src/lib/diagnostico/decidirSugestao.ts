@@ -1,5 +1,6 @@
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { pausarCampanha, definirOrcamentoConjunto } from "@/lib/meta/api";
+import { comContaMeta } from "@/lib/meta/conexao";
 
 export type DecisaoSugestao = "aprovar" | "rejeitar";
 
@@ -52,13 +53,13 @@ export async function decidirSugestao(
       ) {
         throw new Error("Sugestão sem os parâmetros esperados pra ajustar orçamento automaticamente.");
       }
-      await definirOrcamentoConjunto(adsetId, tipoOrcamento, valorCentavos);
+      await comContaMeta(sugestao.conta_id, () => definirOrcamentoConjunto(adsetId, tipoOrcamento, valorCentavos));
     } else if (sugestao.tipo === "pausar_campanha") {
       const metaCampaignId = dados.metaCampaignId;
       if (typeof metaCampaignId !== "string") {
         throw new Error("Sugestão sem o ID da campanha pra pausar automaticamente.");
       }
-      await pausarCampanha(metaCampaignId);
+      await comContaMeta(sugestao.conta_id, () => pausarCampanha(metaCampaignId));
     }
     // nova_campanha / turbinar_post / outro: só marca aprovada, sem ação automática (ver comentário
     // da função).

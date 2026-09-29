@@ -1,4 +1,5 @@
 import { BASE_URL, obterTokenValido } from "./token";
+import { resolverConexaoId, conexaoIdDoAtivo } from "./conexao";
 import { ErroGraphAPIException } from "./erros";
 import type { Localizacao, Publico } from "./tipos";
 
@@ -19,9 +20,14 @@ async function chamar<T = any>(
     /** Usa esse token em vez do token de usuário salvo — só pra chamadas que exigem token de
      * Página (ver obterTokenDePagina). */
     tokenExplicito?: string;
+    /** Conexão da Meta (smartads_meta_conexoes) a usar; null = a principal. Sem isso, decide sozinho
+     * (contexto da conta em andamento ou o ID no caminho — ver conexao.ts). */
+    conexaoId?: string | null;
   } = {}
 ): Promise<T> {
-  const token = opcoes.tokenExplicito ?? (await obterTokenValido());
+  const token =
+    opcoes.tokenExplicito ??
+    (await obterTokenValido(opcoes.conexaoId !== undefined ? opcoes.conexaoId : await resolverConexaoId(caminho)));
   const { metodo = "GET", corpo, query } = opcoes;
 
   const url = new URL(`${BASE_URL}/${caminho}`);
@@ -59,8 +65,9 @@ export interface ContaDeAnuncioMeta {
 }
 
 /** Todas as contas de anúncio que o usuário logado enxerga (de todas as Business Managers dele). */
-export async function listarContasDeAnuncio(): Promise<ContaDeAnuncioMeta[]> {
+export async function listarContasDeAnuncio(conexaoId: string | null = null): Promise<ContaDeAnuncioMeta[]> {
   const dados = await chamar<{ data: ContaDeAnuncioMeta[] }>("me/adaccounts", {
+    conexaoId,
     query: { fields: "id,name,account_status,business{id,name}", limit: 500 },
   });
   return dados.data;
@@ -116,8 +123,9 @@ export interface PaginaMeta {
 
 /** Páginas do Facebook que o usuário logado administra, com a conta do Instagram vinculada (se
  * houver) já embutida — é isso que preenche o seletor de página/Instagram na tela de contas. */
-export async function listarPaginas(): Promise<PaginaMeta[]> {
+export async function listarPaginas(conexaoId: string | null = null): Promise<PaginaMeta[]> {
   const dados = await chamar<{ data: PaginaMeta[] }>("me/accounts", {
+    conexaoId,
     query: { fields: "id,name,instagram_business_account{id,username}", limit: 500 },
   });
   return dados.data;
@@ -230,6 +238,7 @@ export async function obterInsightsContaInstagram(
  * usuário original. */
 export async function obterTokenDePagina(pageId: string): Promise<string | null> {
   const dados = await chamar<{ data: Array<{ id: string; access_token: string }> }>("me/accounts", {
+    conexaoId: await conexaoIdDoAtivo(pageId),
     query: { fields: "id,access_token", limit: 500 },
   });
   return dados.data.find((pagina) => pagina.id === pageId)?.access_token ?? null;

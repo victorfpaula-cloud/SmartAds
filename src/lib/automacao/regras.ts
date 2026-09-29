@@ -1,4 +1,5 @@
 import { criarClienteAdmin } from "@/lib/supabase/admin";
+import { comContaMeta } from "@/lib/meta/conexao";
 import {
   obterInsightsConta,
   pausarCampanha,
@@ -97,7 +98,7 @@ export async function avaliarRegras() {
 
       try {
         if (regra.acao === "pausar") {
-          await pausarCampanha(campanha.meta_campaign_id);
+          await comContaMeta(regra.conta_id, () => pausarCampanha(campanha.meta_campaign_id));
           await registrarExecucao({
             tipo: "regra",
             regraId: regra.id,
@@ -110,14 +111,14 @@ export async function avaliarRegras() {
           if (!campanha.meta_adset_id) {
             throw new Error("Campanha sem conjunto de anúncios rastreado localmente.");
           }
-          const orcamentoAtual = await obterOrcamentoConjunto(campanha.meta_adset_id);
+          const orcamentoAtual = await comContaMeta(regra.conta_id, () => obterOrcamentoConjunto(campanha.meta_adset_id));
           if (!orcamentoAtual) throw new Error("Não foi possível ler o orçamento atual do conjunto.");
 
           const percentual = regra.acao_percentual ?? 10;
           const fator = regra.acao === "aumentar_orcamento" ? 1 + percentual / 100 : 1 - percentual / 100;
           const novoValor = Math.max(1, Math.round(orcamentoAtual.valorCentavos * fator));
 
-          await definirOrcamentoConjunto(campanha.meta_adset_id, orcamentoAtual.tipo, novoValor);
+          await comContaMeta(regra.conta_id, () => definirOrcamentoConjunto(campanha.meta_adset_id, orcamentoAtual.tipo, novoValor));
           await registrarExecucao({
             tipo: "regra",
             regraId: regra.id,

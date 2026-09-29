@@ -21,34 +21,46 @@ export class ErroMetaNaoConectado extends Error {
   }
 }
 
+// A conexão principal vive em smartads_meta_status (id 'default') — é a que todas as contas antigas
+// usam. Conexões adicionais (uma por login/portfólio da Meta) ficam em smartads_meta_conexoes, e
+// smartads_contas_meta.conexao_id diz qual usar (null = a principal).
+function alvoDaConexao(conexaoId?: string | null) {
+  return conexaoId
+    ? { tabela: "smartads_meta_conexoes" as const, coluna: "id" as const, valor: conexaoId }
+    : { tabela: "smartads_meta_status" as const, coluna: "id" as const, valor: "default" };
+}
+
 /**
  * Token de usuário válido pra chamar a Graph API — busca no Supabase, renova sozinho quando está
  * perto de vencer (sem precisar de login de novo). Toda função de src/lib/meta/api.ts começa
- * chamando essa aqui.
+ * chamando essa aqui. Sem `conexaoId`, usa a conexão principal.
  */
-export async function obterTokenValido(): Promise<string> {
+export async function obterTokenValido(conexaoId?: string | null): Promise<string> {
   const supabase = criarClienteAdmin();
+  const alvo = alvoDaConexao(conexaoId);
   const { data, error } = await supabase
-    .from("smartads_meta_status")
+    .from(alvo.tabela)
     .select("access_token, token_expira_em, conectado")
-    .eq("id", "default")
+    .eq(alvo.coluna, alvo.valor)
     .single();
 
   if (error || !data || !data.conectado || !data.access_token) {
-    throw new ErroMetaNaoConectado();
+    throw new ErroMetaNaoConectado(
+      conexaoId ? "A conexão da Meta dessa conta não está ativa. Reconecte a conta em Contas." : undefined
+    );
   }
 
   const expiraEm = data.token_expira_em ? new Date(data.token_expira_em) : null;
   const faltamDias = expiraEm ? (expiraEm.getTime() - Date.now()) / 86_400_000 : 0;
 
   if (expiraEm && faltamDias < 0) {
-    await marcarDesconectado("O token expirou sem uma renovação automática bem-sucedida.");
+    await marcarDesconectado("O token expirou sem uma renovação automática bem-sucedida.", conexaoId);
     throw new ErroMetaNaoConectado();
   }
 
   if (expiraEm && faltamDias < DIAS_ANTES_DE_RENOVAR) {
     try {
-      return await renovarToken(data.access_token);
+      return await renovarToken(data.access_token, conexaoId);
     } catch (erro) {
       // A renovação falhou, mas o token atual ainda vale por enquanto — segue usando ele agora e
       // tenta renovar de novo na próxima chamada, em vez de quebrar a ação do usuário à toa.
@@ -60,7 +72,7 @@ export async function obterTokenValido(): Promise<string> {
   return data.access_token;
 }
 
-async function renovarToken(tokenAtual: string): Promise<string> {
+async function renovarToken(tokenAtual: string, conexaoId?: string | null): Promise<string> {
   const url = new URL(`${BASE_URL}/oauth/access_token`);
   url.searchParams.set("grant_type", "fb_exchange_token");
   url.searchParams.set("client_id", process.env.META_APP_ID!);
@@ -76,8 +88,9 @@ async function renovarToken(tokenAtual: string): Promise<string> {
 
   const expiraEm = new Date(Date.now() + (corpo.expires_in ?? 60 * 86_400) * 1000);
   const supabase = criarClienteAdmin();
+  const alvo = alvoDaConexao(conexaoId);
   await supabase
-    .from("smartads_meta_status")
+    .from(alvo.tabela)
     .update({
       access_token: corpo.access_token,
       token_expira_em: expiraEm.toISOString(),
@@ -85,22 +98,31 @@ async function renovarToken(tokenAtual: string): Promise<string> {
       ultimo_erro: null,
       verificado_em: new Date().toISOString(),
     })
-    .eq("id", "default");
+    .eq(alvo.coluna, alvo.valor);
 
   return corpo.access_token as string;
 }
 
-async function marcarDesconectado(motivo: string) {
+async function marcarDesconectado(motivo: string, conexaoId?: string | null) {
   const supabase = criarClienteAdmin();
+  const alvo = alvoDaConexao(conexaoId);
   await supabase
-    .from("smartads_meta_status")
+    .from(alvo.tabela)
     .update({ conectado: false, ultimo_erro: motivo, verificado_em: new Date().toISOString() })
-    .eq("id", "default");
+    .eq(alvo.coluna, alvo.valor);
 }
 
 /** Chamada pela rota /api/auth/meta/callback depois do login — troca o código OAuth por um token
- * de curta duração, esse por um de longa duração (60 dias), e salva tudo no Supabase. */
-export async function concluirLogin(codigoOAuth: string, redirectUri: string): Promise<void> {
+ * de curta duração, esse por um de longa duração (60 dias), e salva tudo no Supabase.
+ *
+ * Com `novaConexao`, NÃO sobrescreve a conexão principal: cria uma conexão nova em
+ * smartads_meta_conexoes e devolve o id dela — usado quando uma conta nova precisa do seu próprio
+ * login (outro portfólio da Meta). Sem isso é o "Conectar/Reconectar Meta" de sempre. */
+export async function concluirLogin(
+  codigoOAuth: string,
+  redirectUri: string,
+  opcoes: { novaConexao?: boolean } = {}
+): Promise<{ conexaoId: string | null }> {
   const urlToken = new URL(`${BASE_URL}/oauth/access_token`);
   urlToken.searchParams.set("client_id", process.env.META_APP_ID!);
   urlToken.searchParams.set("client_secret", process.env.META_APP_SECRET!);
@@ -134,18 +156,24 @@ export async function concluirLogin(codigoOAuth: string, redirectUri: string): P
   const corpoEu = await respostaEu.json();
 
   const supabase = criarClienteAdmin();
-  await supabase
-    .from("smartads_meta_status")
-    .update({
-      access_token: tokenLongo,
-      token_expira_em: expiraEm.toISOString(),
-      meta_user_id: corpoEu?.id ?? null,
-      meta_user_nome: corpoEu?.name ?? null,
-      conectado: true,
-      ultimo_erro: null,
-      verificado_em: new Date().toISOString(),
-    })
-    .eq("id", "default");
+  const campos = {
+    access_token: tokenLongo,
+    token_expira_em: expiraEm.toISOString(),
+    meta_user_id: corpoEu?.id ?? null,
+    meta_user_nome: corpoEu?.name ?? null,
+    conectado: true,
+    ultimo_erro: null,
+    verificado_em: new Date().toISOString(),
+  };
+
+  if (opcoes.novaConexao) {
+    const { data, error } = await supabase.from("smartads_meta_conexoes").insert(campos).select("id").single();
+    if (error || !data) throw new Error(error?.message || "Falha ao salvar a nova conexão.");
+    return { conexaoId: data.id as string };
+  }
+
+  await supabase.from("smartads_meta_status").update(campos).eq("id", "default");
+  return { conexaoId: null };
 }
 
 /** Desconecta manualmente (botão "Desconectar" nas configurações) — não revoga o token na Meta,

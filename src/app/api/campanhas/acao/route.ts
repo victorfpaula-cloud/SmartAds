@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { pausarCampanha, ativarCampanha, definirOrcamentoConjunto } from "@/lib/meta/api";
 import { registrarAcao } from "@/lib/meta/acoesLog";
+import { comContaMeta } from "@/lib/meta/conexao";
 import { ErroMetaNaoConectado } from "@/lib/meta/token";
 import { ErroGraphAPIException } from "@/lib/meta/erros";
 
@@ -18,13 +19,20 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    if (corpo.acao === "pausar") {
-      await pausarCampanha(corpo.campaignId);
-    } else if (corpo.acao === "ativar") {
-      await ativarCampanha(corpo.campaignId);
-    } else if (corpo.acao === "orcamento") {
-      await definirOrcamentoConjunto(corpo.adsetId, corpo.tipo, corpo.valorCentavos);
-    } else {
+    // IDs de campanha/conjunto não dizem de qual conta são — usa a conexão da Meta da conta.
+    const acaoValida = await comContaMeta(corpo.contaId, async () => {
+      if (corpo.acao === "pausar") {
+        await pausarCampanha(corpo.campaignId);
+      } else if (corpo.acao === "ativar") {
+        await ativarCampanha(corpo.campaignId);
+      } else if (corpo.acao === "orcamento") {
+        await definirOrcamentoConjunto(corpo.adsetId, corpo.tipo, corpo.valorCentavos);
+      } else {
+        return false;
+      }
+      return true;
+    });
+    if (!acaoValida) {
       return NextResponse.json({ erro: "Ação inválida." }, { status: 400 });
     }
 

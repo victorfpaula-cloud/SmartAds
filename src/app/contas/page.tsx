@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export default async function ContasPage({
   searchParams,
 }: {
-  searchParams: { meta_conectado?: string; meta_erro?: string };
+  searchParams: { meta_conectado?: string; meta_erro?: string; nova_conexao?: string; cliente?: string };
 }) {
   const supabase = criarClienteAdmin();
 
@@ -36,6 +36,11 @@ export default async function ContasPage({
             searchParams.meta_conectado ? "conectado" : searchParams.meta_erro ? "erro" : null
           }
           mensagemErro={searchParams.meta_erro}
+          novaConexao={
+            searchParams.nova_conexao && searchParams.cliente
+              ? { conexaoId: searchParams.nova_conexao, clienteId: searchParams.cliente }
+              : null
+          }
         />
       </main>
     </>
