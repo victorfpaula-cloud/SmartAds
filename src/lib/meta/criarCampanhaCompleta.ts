@@ -177,8 +177,10 @@ async function criarCampanhaCompletaComConexao(corpo: ParametrosCriarCampanha): 
           name: `${corpo.nomeCampanha} - criativo`,
         });
         criativoDoPostId = criativoInstagram.id;
-        // Só o Engajamento tem destino no conjunto (ON_POST); o do post do Instagram é "No seu anúncio".
-        if (modelo.destinationType === "ON_POST") destinoDoConjunto = "ON_AD";
+        // "No seu anúncio" do Gerenciador NÃO é ON_AD na API: a Meta recusa ("tipo de destino não é
+        // aceito para este objetivo", 29/09/2026). É o destino padrão, sem valor — então sai do
+        // conjunto. Só o Engajamento tinha destino (ON_POST, pra post da Página).
+        if (modelo.destinationType === "ON_POST") destinoDoConjunto = undefined;
       } catch (erroInstagram) {
         erroInstagramTexto = erroInstagram instanceof Error ? erroInstagram.message : String(erroInstagram);
       }
