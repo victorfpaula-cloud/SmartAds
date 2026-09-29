@@ -6,6 +6,11 @@ import { mapearEmLotes } from "@/lib/lotes";
 
 const FUSO_HORARIO = "America/Sao_Paulo";
 
+// O cron roda algumas vezes por dia (ver vercel.json) e cada rodada retenta os posts que falharam,
+// até esse limite — mais que isso é erro que não se resolve sozinho, e ficar criando e apagando
+// campanha na conta do cliente a cada rodada só chama a atenção do antifraude da Meta.
+const MAX_TENTATIVAS_POR_POST = 3;
+
 function dataEmSaoPaulo(iso: string): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: FUSO_HORARIO }).format(new Date(iso));
 }
@@ -46,13 +51,36 @@ export async function avaliarBoostAutomatico(): Promise<{
       const maisRecente = posts[0];
       if (!maisRecente || !ehPostDeHoje(maisRecente.timestamp)) return false;
 
-      const { data: jaTurbinado } = await supabase
+      // Só sucesso conta como "já turbinado". Falha anterior é retentada (até MAX_TENTATIVAS_POR_POST):
+      // antes qualquer linha no log, inclusive de falha, travava o post pra sempre — um erro
+      // passageiro às 15h significava que o post nunca mais era tentado (29/09/2026).
+      const { data: registro } = await supabase
         .from("smartads_boost_automatico_log")
-        .select("id")
+        .select("sucesso, tentativas")
         .eq("conta_id", conta.id)
         .eq("instagram_media_id", maisRecente.id)
         .maybeSingle();
-      if (jaTurbinado) return false;
+      if (registro?.sucesso) return false;
+      const tentativasAnteriores = registro?.tentativas ?? 0;
+      if (tentativasAnteriores >= MAX_TENTATIVAS_POR_POST) return false;
+
+      const gravarResultado = async (dados: {
+        campanha_criada_id?: string | null;
+        sucesso: boolean;
+        erro_mensagem: string | null;
+      }) => {
+        await supabase.from("smartads_boost_automatico_log").upsert(
+          {
+            conta_id: conta.id,
+            instagram_media_id: maisRecente.id,
+            tentativas: tentativasAnteriores + 1,
+            created_at: new Date().toISOString(),
+            campanha_criada_id: null,
+            ...dados,
+          },
+          { onConflict: "conta_id,instagram_media_id" }
+        );
+      };
 
       const { data: publicoSalvo } = await supabase
         .from("smartads_publicos_salvos")
@@ -61,9 +89,7 @@ export async function avaliarBoostAutomatico(): Promise<{
         .single();
 
       if (!publicoSalvo) {
-        await supabase.from("smartads_boost_automatico_log").insert({
-          conta_id: conta.id,
-          instagram_media_id: maisRecente.id,
+        await gravarResultado({
           sucesso: false,
           erro_mensagem: "O público salvo configurado pro boost automático não existe mais.",
         });
@@ -87,9 +113,7 @@ export async function avaliarBoostAutomatico(): Promise<{
         criativo: { usarPostExistente: true, postSelecionadoId: maisRecente.id, mensagem: "" },
       });
 
-      await supabase.from("smartads_boost_automatico_log").insert({
-        conta_id: conta.id,
-        instagram_media_id: maisRecente.id,
+      await gravarResultado({
         campanha_criada_id: resultado.ok ? (resultado.campanhaSalva as { id: string })?.id ?? null : null,
         sucesso: resultado.ok,
         erro_mensagem: resultado.ok ? null : resultado.erro,
