@@ -44,10 +44,6 @@
     {
       "path": "/api/cron/campanhas-rede",
       "schedule": "0 21 * * *"
-    },
-    {
-      "path": "/api/cron/meta-diagnostico",
-      "schedule": "0 3 1 1 *"
     }
   ]
 }
