@@ -157,17 +157,30 @@ async function criarCampanhaCompletaComConexao(corpo: ParametrosCriarCampanha): 
     const promotedObject =
       modelo.exigeFormulario || corpo.criativo.usarPostExistente ? { page_id: conta.page_id } : undefined;
 
-    // Turbinar publicação existente: o criativo é resolvido ANTES do conjunto, porque o tipo de
-    // destino do conjunto depende de qual criativo vai ser usado.
-    //  1. Post do próprio Instagram (source_instagram_media_id) — é o que o Gerenciador de Anúncios faz
-    //     em "Post do Instagram" (conjunto com local da conversão "No seu anúncio" = ON_AD) e não
-    //     depende de cross-post nenhum no Facebook (visto nos prints do Gerenciador em 29/09/2026).
-    //  2. Post correspondente na Página (object_story_id, conjunto ON_POST) — caminho de sempre, só
-    //     se o do Instagram for recusado.
-    // Nunca recria como anúncio novo: o engajamento precisa acumular no post publicado, não numa cópia.
-    let criativoDoPostId: string | null = null;
-    let destinoDoConjunto = modelo.destinationType;
+    const adset = await criarConjuntoDeAnuncios(adAccountId, {
+      name: `${corpo.nomeCampanha} - conjunto`,
+      campaignId: campanha.id,
+      optimizationGoal: modelo.optimizationGoal,
+      billingEvent: modelo.billingEvent,
+      destinationType: modelo.destinationType,
+      promotedObject,
+      targeting,
+      orcamentoCentavos: corpo.orcamento.valorCentavos,
+      tipoOrcamento: corpo.orcamento.tipo,
+      dataInicio: corpo.orcamento.dataInicio,
+      dataFim: corpo.orcamento.dataFim,
+    });
+    adsetId = adset.id;
+
     if (postExistente) {
+      // Conjunto SEMPRE no formato que a Meta já aceita pra turbinar post (ON_POST + promoted_object
+      // da Página). Tentativas de mudar o destino do conjunto pra imitar o "No seu anúncio" do
+      // Gerenciador falharam em produção em 29/09/2026 (ON_AD e conjunto sem destino: a Meta
+      // recusou os dois), então só o CRIATIVO varia:
+      //  1. post do próprio Instagram (source_instagram_media_id) — não depende de cross-post;
+      //  2. post correspondente na Página (object_story_id) — caminho de sempre.
+      // Nunca recria como anúncio novo: o engajamento precisa acumular no post publicado.
+      let anuncioId: string | null = null;
       let erroInstagramTexto = "";
       try {
         const criativoInstagram = await criarCriativoDoPostDoInstagram(adAccountId, {
@@ -176,16 +189,17 @@ async function criarCampanhaCompletaComConexao(corpo: ParametrosCriarCampanha): 
           pageId: conta.page_id,
           name: `${corpo.nomeCampanha} - criativo`,
         });
-        criativoDoPostId = criativoInstagram.id;
-        // "No seu anúncio" do Gerenciador NÃO é ON_AD na API: a Meta recusa ("tipo de destino não é
-        // aceito para este objetivo", 29/09/2026). É o destino padrão, sem valor — então sai do
-        // conjunto. Só o Engajamento tinha destino (ON_POST, pra post da Página).
-        if (modelo.destinationType === "ON_POST") destinoDoConjunto = undefined;
+        const anuncioInstagram = await criarAnuncio(adAccountId, {
+          name: `${corpo.nomeCampanha} - anúncio`,
+          adsetId: adset.id,
+          creativeId: criativoInstagram.id,
+        });
+        anuncioId = anuncioInstagram.id;
       } catch (erroInstagram) {
         erroInstagramTexto = erroInstagram instanceof Error ? erroInstagram.message : String(erroInstagram);
       }
 
-      if (!criativoDoPostId) {
+      if (!anuncioId) {
         let postDaPaginaId: string | null = null;
         let detalheFalha = "não foi possível checar (falha ao chamar a Meta).";
         try {
@@ -220,32 +234,14 @@ async function criarCampanhaCompletaComConexao(corpo: ParametrosCriarCampanha): 
           objectStoryId: postDaPaginaId,
           name: `${corpo.nomeCampanha} - criativo`,
         });
-        criativoDoPostId = criativoPagina.id;
+        const anuncioPagina = await criarAnuncio(adAccountId, {
+          name: `${corpo.nomeCampanha} - anúncio`,
+          adsetId: adset.id,
+          creativeId: criativoPagina.id,
+        });
+        anuncioId = anuncioPagina.id;
       }
-    }
-
-    const adset = await criarConjuntoDeAnuncios(adAccountId, {
-      name: `${corpo.nomeCampanha} - conjunto`,
-      campaignId: campanha.id,
-      optimizationGoal: modelo.optimizationGoal,
-      billingEvent: modelo.billingEvent,
-      destinationType: destinoDoConjunto,
-      promotedObject,
-      targeting,
-      orcamentoCentavos: corpo.orcamento.valorCentavos,
-      tipoOrcamento: corpo.orcamento.tipo,
-      dataInicio: corpo.orcamento.dataInicio,
-      dataFim: corpo.orcamento.dataFim,
-    });
-    adsetId = adset.id;
-
-    if (postExistente && criativoDoPostId) {
-      const anuncio = await criarAnuncio(adAccountId, {
-        name: `${corpo.nomeCampanha} - anúncio`,
-        adsetId: adset.id,
-        creativeId: criativoDoPostId,
-      });
-      anuncioIds.push(anuncio.id);
+      anuncioIds.push(anuncioId);
     } else {
       // Uma imagem = um Anúncio, todos no MESMO conjunto criado acima — não um conjunto por
       // imagem (ver comentário no tipo ParametrosCriarCampanha.criativo.imagensBase64 do porquê).
