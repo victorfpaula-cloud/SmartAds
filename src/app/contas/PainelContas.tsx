@@ -60,12 +60,15 @@ export default function PainelContas({
   statusMetaInicial,
   avisoConexao,
   mensagemErro,
+  novaConexao,
 }: {
   clientesIniciais: Cliente[];
   empresasIniciais: Empresa[];
   statusMetaInicial: StatusMeta;
   avisoConexao: "conectado" | "erro" | null;
   mensagemErro?: string;
+  /** Volta do login da Meta feito a partir de "Adicionar conta": conexão nova + cliente que a pediu. */
+  novaConexao?: { conexaoId: string; clienteId: string } | null;
 }) {
   const [clientes, setClientes] = useState(clientesIniciais);
   const [empresas, setEmpresas] = useState(empresasIniciais);
@@ -75,7 +78,7 @@ export default function PainelContas({
   const [nomeNovaEmpresa, setNomeNovaEmpresa] = useState("");
   const [tipoNovaEmpresa, setTipoNovaEmpresa] = useState<"individual" | "franquia">("individual");
   const [criandoCliente, setCriandoCliente] = useState(false);
-  const [clienteExpandidoId, setClienteExpandidoId] = useState<string | null>(null);
+  const [clienteExpandidoId, setClienteExpandidoId] = useState<string | null>(novaConexao?.clienteId ?? null);
   const [boostContaSelecionada, setBoostContaSelecionada] = useState<{ clienteId: string; conta: ContaMeta } | null>(
     null
   );
@@ -342,7 +345,11 @@ export default function PainelContas({
                 )}
 
                 {clienteExpandidoId === cliente.id && (
-                  <AdicionarConta clienteId={cliente.id} onAssociada={(conta) => adicionarContaAoCliente(cliente.id, conta)} />
+                  <AdicionarConta
+                    clienteId={cliente.id}
+                    conexaoId={novaConexao?.clienteId === cliente.id ? novaConexao.conexaoId : null}
+                    onAssociada={(conta) => adicionarContaAoCliente(cliente.id, conta)}
+                  />
                 )}
               </li>
                     ))}
@@ -464,11 +471,19 @@ function AvisoCAPI() {
 
 function AdicionarConta({
   clienteId,
+  conexaoId,
   onAssociada,
 }: {
   clienteId: string;
+  /** Conexão da Meta recém-criada pelo login desta conta (null = ainda não escolheu como conectar). */
+  conexaoId: string | null;
   onAssociada: (conta: ContaMeta) => void;
 }) {
+  // O login da Meta ("Facebook para Empresas") só deixa escolher UM portfólio por vez — então cada
+  // conta nova conecta pelo seu próprio login, e o seletor abaixo lista só o que aquele login
+  // enxerga. "Usar a conexão principal" é o atalho pras unidades do mesmo portfólio já conectado.
+  const [usandoPrincipal, setUsandoPrincipal] = useState(false);
+  const etapaFormulario = !!conexaoId || usandoPrincipal;
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [contas, setContas] = useState<ContaDisponivel[]>([]);
@@ -480,7 +495,9 @@ function AdicionarConta({
   const [salvando, setSalvando] = useState(false);
 
   useEffect(() => {
-    fetch("/api/meta/contas-disponiveis")
+    if (!etapaFormulario) return;
+    setCarregando(true);
+    fetch(`/api/meta/contas-disponiveis${conexaoId ? `?conexaoId=${encodeURIComponent(conexaoId)}` : ""}`)
       .then(async (r) => {
         const corpo = await r.json();
         if (!r.ok) throw new Error(corpo.erro || "Falha ao buscar contas.");
@@ -489,7 +506,7 @@ function AdicionarConta({
       })
       .catch((e) => setErro(e.message))
       .finally(() => setCarregando(false));
-  }, []);
+  }, [etapaFormulario, conexaoId]);
 
   async function associar(evento: React.FormEvent) {
     evento.preventDefault();
@@ -512,6 +529,7 @@ function AdicionarConta({
         instagramUsername: pagina?.instagram_business_account?.username,
         nomeExibicao: nomeExibicao.trim() || undefined,
         siglaCampanha: siglaCampanha.trim() || undefined,
+        conexaoId: conexaoId || undefined,
       }),
     });
     const corpo = await resposta.json();
@@ -524,6 +542,30 @@ function AdicionarConta({
     }
   }
 
+  if (!etapaFormulario) {
+    return (
+      <div className="cartao-vidro-interno mt-3 flex flex-col gap-2.5 p-4">
+        <p className="text-xs leading-relaxed text-neutral-400">
+          Conecte pela Meta e escolha o portfólio, a conta de anúncio, a Página e o Instagram
+          <strong className="text-neutral-200"> dessa conta</strong>. Cada conta usa o seu próprio login — as que já
+          estão conectadas continuam funcionando.
+        </p>
+        <a
+          href={`/api/auth/meta/login?cliente=${encodeURIComponent(clienteId)}`}
+          className="flex h-9 items-center justify-center rounded-lg bg-accent text-sm font-semibold text-white hover:bg-accent-strong"
+        >
+          Conectar pela Meta
+        </a>
+        <button
+          type="button"
+          onClick={() => setUsandoPrincipal(true)}
+          className="text-[11px] text-neutral-500 hover:text-neutral-300"
+        >
+          Usar a conexão principal (mesmo portfólio já conectado)
+        </button>
+      </div>
+    );
+  }
   if (carregando) {
     return <p className="mt-3 text-xs text-neutral-500">Carregando contas da Meta…</p>;
   }

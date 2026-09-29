@@ -1,5 +1,6 @@
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { obterInsightsConta, pausarAnuncio } from "@/lib/meta/api";
+import { comContaMeta } from "@/lib/meta/conexao";
 import { registrarExecucao } from "./log";
 
 /** Roda os testes A/B ainda "em andamento" — chamada pelo cron (ver /api/cron/automacao). Um
@@ -68,7 +69,7 @@ export async function avaliarTestesAb() {
     if (!vencedor?.ad_id) continue;
 
     const perdedores = idsDoTeste.filter((id) => id !== vencedor.ad_id);
-    await Promise.all(perdedores.map((id) => pausarAnuncio(id).catch(() => {})));
+    await Promise.all(perdedores.map((id) => comContaMeta(campanha.conta_id, () => pausarAnuncio(id)).catch(() => {})));
 
     await supabase
       .from("smartads_testes_ab")

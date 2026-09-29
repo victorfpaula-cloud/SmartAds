@@ -42,6 +42,22 @@ export async function GET(request: NextRequest) {
   url.searchParams.set("response_type", "code");
 
   const resposta = NextResponse.redirect(url.toString());
+
+  // "Adicionar conta" chama isso com ?cliente=<id>: em vez de sobrescrever a conexão principal,
+  // o callback cria uma conexão nova só pra essa conta (o login da Meta só deixa escolher UM
+  // portfólio por vez, então portfólios diferentes precisam de logins diferentes).
+  const clienteId = request.nextUrl.searchParams.get("cliente");
+  if (clienteId) {
+    resposta.cookies.set("smartads_meta_oauth_nova_conta", clienteId, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      maxAge: 1800,
+      path: "/",
+    });
+  } else {
+    resposta.cookies.delete("smartads_meta_oauth_nova_conta");
+  }
   // 30 minutos — o fluxo "Login do Facebook para Empresas" pode ter várias telas de revisão
   // (Página, conta de anúncios, Instagram, Pix, catálogo...), e os 10 minutos usados antes eram
   // curtos demais pra alguém revisando com calma pela primeira vez: o cookie expirava antes da

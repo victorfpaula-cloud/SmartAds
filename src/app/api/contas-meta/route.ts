@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
+import { invalidarMapaDeConexoes } from "@/lib/meta/conexao";
 
 export async function POST(request: NextRequest) {
   const corpo = await request.json().catch(() => null);
@@ -14,6 +15,7 @@ export async function POST(request: NextRequest) {
     instagramUsername,
     nomeExibicao,
     siglaCampanha,
+    conexaoId,
   } = corpo ?? {};
 
   if (!clienteId || !metaAdAccountId || !pageId) {
@@ -37,6 +39,7 @@ export async function POST(request: NextRequest) {
       instagram_username: instagramUsername,
       nome_exibicao: nomeExibicao,
       sigla_campanha: siglaCampanha?.trim() || null,
+      conexao_id: conexaoId || null,
     })
     .select()
     .single();
@@ -45,5 +48,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ erro: error.message }, { status: 400 });
   }
 
+  invalidarMapaDeConexoes();
   return NextResponse.json({ conta: data }, { status: 201 });
 }

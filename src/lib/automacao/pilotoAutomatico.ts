@@ -1,4 +1,5 @@
 import { criarClienteAdmin } from "@/lib/supabase/admin";
+import { comContaMeta } from "@/lib/meta/conexao";
 import { obterInsightsConta, obterOrcamentoConjunto, definirOrcamentoConjunto, type LinhaInsight } from "@/lib/meta/api";
 import { registrarExecucao } from "./log";
 import { executarEmLotes } from "@/lib/lotes";
@@ -72,8 +73,8 @@ export async function executarPilotoAutomatico() {
 
       try {
         const [orcamentoMenosEficiente, orcamentoMaisEficiente] = await Promise.all([
-          obterOrcamentoConjunto(menosEficiente.campanha.meta_adset_id),
-          obterOrcamentoConjunto(maisEficiente.campanha.meta_adset_id),
+          comContaMeta(conta.id, () => obterOrcamentoConjunto(menosEficiente.campanha.meta_adset_id)),
+          comContaMeta(conta.id, () => obterOrcamentoConjunto(maisEficiente.campanha.meta_adset_id)),
         ]);
         if (!orcamentoMenosEficiente || !orcamentoMaisEficiente) {
           throw new Error("Não foi possível ler o orçamento atual de um dos conjuntos.");
@@ -84,15 +85,19 @@ export async function executarPilotoAutomatico() {
         const novoOrcamentoMenosEficiente = Math.max(1, orcamentoMenosEficiente.valorCentavos - valorDeslocado);
         const novoOrcamentoMaisEficiente = orcamentoMaisEficiente.valorCentavos + valorDeslocado;
 
-        await definirOrcamentoConjunto(
-          menosEficiente.campanha.meta_adset_id,
-          orcamentoMenosEficiente.tipo,
-          novoOrcamentoMenosEficiente
+        await comContaMeta(conta.id, () =>
+          definirOrcamentoConjunto(
+            menosEficiente.campanha.meta_adset_id,
+            orcamentoMenosEficiente.tipo,
+            novoOrcamentoMenosEficiente
+          )
         );
-        await definirOrcamentoConjunto(
-          maisEficiente.campanha.meta_adset_id,
-          orcamentoMaisEficiente.tipo,
-          novoOrcamentoMaisEficiente
+        await comContaMeta(conta.id, () =>
+          definirOrcamentoConjunto(
+            maisEficiente.campanha.meta_adset_id,
+            orcamentoMaisEficiente.tipo,
+            novoOrcamentoMaisEficiente
+          )
         );
 
         const nomeMenosEficiente = menosEficiente.campanha.config_criacao?.nomeCampanha ?? menosEficiente.campanha.meta_campaign_id;

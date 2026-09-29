@@ -16,6 +16,7 @@ import {
   type PostInstagram,
 } from "@/lib/meta/api";
 import { ErroGraphAPIException } from "@/lib/meta/erros";
+import { comContaMeta } from "@/lib/meta/conexao";
 import { ErroMetaNaoConectado } from "@/lib/meta/token";
 import type { TipoModeloCampanha, Publico } from "@/lib/meta/tipos";
 
@@ -66,6 +67,12 @@ export type ResultadoCriarCampanha =
  * rollback, mesmo log, sem duplicar a lógica.
  */
 export async function criarCampanhaCompleta(corpo: ParametrosCriarCampanha): Promise<ResultadoCriarCampanha> {
+  // Campanha, conjunto, anúncio e mídia são IDs que não dizem de qual conta são — roda tudo com a
+  // conexão da Meta dessa conta (cada conta pode ter o seu próprio login/portfólio).
+  return comContaMeta(corpo.contaId, () => criarCampanhaCompletaComConexao(corpo));
+}
+
+async function criarCampanhaCompletaComConexao(corpo: ParametrosCriarCampanha): Promise<ResultadoCriarCampanha> {
   const modelo = MODELOS_CAMPANHA[corpo.tipoModelo];
   if (!modelo) {
     return { ok: false, erro: "Modelo de campanha inválido.", status: 400, etapaAlcancada: { anuncioIds: [] } };

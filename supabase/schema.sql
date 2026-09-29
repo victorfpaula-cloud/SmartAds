@@ -718,3 +718,27 @@ create table if not exists smartads_campanhas_rede_cache (
 create index if not exists smartads_campanhas_rede_cache_conta_idx on smartads_campanhas_rede_cache(conta_id);
 
 alter table smartads_campanhas_rede_cache enable row level security;
+
+
+-- ============================================================================
+-- Várias conexões com a Meta: o "Login do Facebook para Empresas" só deixa escolher UM portfólio
+-- por login, então cada conta nova pode precisar do seu próprio login (e token). A conexão
+-- principal continua em smartads_meta_status (id 'default'); as demais ficam aqui, e
+-- smartads_contas_meta.conexao_id aponta pra qual usar (null = a principal).
+-- ============================================================================
+create table if not exists smartads_meta_conexoes (
+  id uuid primary key default gen_random_uuid(),
+  access_token text,
+  token_expira_em timestamptz,
+  meta_user_id text,
+  meta_user_nome text,
+  conectado boolean not null default true,
+  ultimo_erro text,
+  verificado_em timestamptz,
+  criado_em timestamptz not null default now()
+);
+
+alter table smartads_meta_conexoes enable row level security;
+
+alter table smartads_contas_meta
+  add column if not exists conexao_id uuid references smartads_meta_conexoes(id) on delete set null;

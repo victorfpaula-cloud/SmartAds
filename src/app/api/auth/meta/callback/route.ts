@@ -43,9 +43,19 @@ export async function GET(request: NextRequest) {
   const base = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
   const redirectUri = `${base}/api/auth/meta/callback`;
 
+  const clienteNovaConta = request.cookies.get("smartads_meta_oauth_nova_conta")?.value;
+
   try {
-    await concluirLogin(code, redirectUri);
-    destino.searchParams.set("meta_conectado", "1");
+    if (clienteNovaConta) {
+      // Login de "Adicionar conta": cria uma conexão nova e volta pra tela de contas já com o
+      // seletor daquele cliente aberto, listando só o que ESSE login enxerga.
+      const { conexaoId } = await concluirLogin(code, redirectUri, { novaConexao: true });
+      destino.searchParams.set("nova_conexao", conexaoId ?? "");
+      destino.searchParams.set("cliente", clienteNovaConta);
+    } else {
+      await concluirLogin(code, redirectUri);
+      destino.searchParams.set("meta_conectado", "1");
+    }
   } catch (erro) {
     destino.searchParams.set(
       "meta_erro",
@@ -55,5 +65,6 @@ export async function GET(request: NextRequest) {
 
   const resposta = NextResponse.redirect(destino);
   resposta.cookies.delete("smartads_meta_oauth_state");
+  resposta.cookies.delete("smartads_meta_oauth_nova_conta");
   return resposta;
 }
