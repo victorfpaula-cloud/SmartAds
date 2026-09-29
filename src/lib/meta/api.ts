@@ -121,14 +121,53 @@ export interface PaginaMeta {
   instagram_business_account?: { id: string; username?: string };
 }
 
-/** Páginas do Facebook que o usuário logado administra, com a conta do Instagram vinculada (se
- * houver) já embutida — é isso que preenche o seletor de página/Instagram na tela de contas. */
+type InstagramDaPagina = { id: string; username?: string };
+
+/** Páginas do Facebook que o usuário logado enxerga, com a conta do Instagram vinculada (se houver)
+ * já embutida — é isso que preenche o seletor de página/Instagram na tela de contas.
+ *
+ * A Meta expõe o Instagram de uma Página por DOIS campos: `instagram_business_account` (vinculado
+ * pelo Gerenciador de Negócios) e `connected_instagram_account` (vinculado pelas configurações da
+ * Página / app do Instagram). Página de cliente que compartilhou o acesso como parceiro de negócios
+ * costuma trazer só um deles — e às vezes nenhum quando consultado com o token do usuário, porque
+ * o ativo "Instagram" pode não ter sido atribuído ao usuário (só a Página e a conta de anúncio).
+ * Consultar com o token da PRÓPRIA Página enxerga o vínculo mesmo assim, por isso as Páginas que
+ * vierem sem Instagram na primeira consulta são reconsultadas assim. */
 export async function listarPaginas(conexaoId: string | null = null): Promise<PaginaMeta[]> {
-  const dados = await chamar<{ data: PaginaMeta[] }>("me/accounts", {
+  const camposInstagram = "instagram_business_account{id,username},connected_instagram_account{id,username}";
+  const dados = await chamar<{
+    data: Array<{
+      id: string;
+      name: string;
+      access_token?: string;
+      instagram_business_account?: InstagramDaPagina;
+      connected_instagram_account?: InstagramDaPagina;
+    }>;
+  }>("me/accounts", {
     conexaoId,
-    query: { fields: "id,name,instagram_business_account{id,username}", limit: 500 },
+    query: { fields: `id,name,access_token,${camposInstagram}`, limit: 500 },
   });
-  return dados.data;
+
+  return Promise.all(
+    dados.data.map(async (pagina): Promise<PaginaMeta> => {
+      let instagram = pagina.instagram_business_account ?? pagina.connected_instagram_account;
+
+      if (!instagram && pagina.access_token) {
+        try {
+          const comTokenDaPagina = await chamar<{
+            instagram_business_account?: InstagramDaPagina;
+            connected_instagram_account?: InstagramDaPagina;
+          }>(pagina.id, { tokenExplicito: pagina.access_token, query: { fields: camposInstagram } });
+          instagram = comTokenDaPagina.instagram_business_account ?? comTokenDaPagina.connected_instagram_account;
+        } catch {
+          // Sem permissão de ler o vínculo com o token da Página — segue sem Instagram, como antes.
+        }
+      }
+
+      // O access_token da Página fica só aqui dentro: essa lista vai pro navegador.
+      return { id: pagina.id, name: pagina.name, instagram_business_account: instagram };
+    })
+  );
 }
 
 export interface PostInstagram {
