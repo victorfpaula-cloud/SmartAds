@@ -157,12 +157,77 @@ async function criarCampanhaCompletaComConexao(corpo: ParametrosCriarCampanha): 
     const promotedObject =
       modelo.exigeFormulario || corpo.criativo.usarPostExistente ? { page_id: conta.page_id } : undefined;
 
+    // Turbinar publicação existente: o criativo é resolvido ANTES do conjunto, porque o tipo de
+    // destino do conjunto depende de qual criativo vai ser usado.
+    //  1. Post do próprio Instagram (source_instagram_media_id) — é o que o Gerenciador de Anúncios faz
+    //     em "Post do Instagram" (conjunto com local da conversão "No seu anúncio" = ON_AD) e não
+    //     depende de cross-post nenhum no Facebook (visto nos prints do Gerenciador em 29/09/2026).
+    //  2. Post correspondente na Página (object_story_id, conjunto ON_POST) — caminho de sempre, só
+    //     se o do Instagram for recusado.
+    // Nunca recria como anúncio novo: o engajamento precisa acumular no post publicado, não numa cópia.
+    let criativoDoPostId: string | null = null;
+    let destinoDoConjunto = modelo.destinationType;
+    if (postExistente) {
+      let erroInstagramTexto = "";
+      try {
+        const criativoInstagram = await criarCriativoDoPostDoInstagram(adAccountId, {
+          instagramMediaId: postExistente.id,
+          instagramUserId: conta.instagram_business_id,
+          pageId: conta.page_id,
+          name: `${corpo.nomeCampanha} - criativo`,
+        });
+        criativoDoPostId = criativoInstagram.id;
+        // Só o Engajamento tem destino no conjunto (ON_POST); o do post do Instagram é "No seu anúncio".
+        if (modelo.destinationType === "ON_POST") destinoDoConjunto = "ON_AD";
+      } catch (erroInstagram) {
+        erroInstagramTexto = erroInstagram instanceof Error ? erroInstagram.message : String(erroInstagram);
+      }
+
+      if (!criativoDoPostId) {
+        let postDaPaginaId: string | null = null;
+        let detalheFalha = "não foi possível checar (falha ao chamar a Meta).";
+        try {
+          const tokenPagina = await obterTokenDePagina(conta.page_id);
+          if (!tokenPagina) {
+            detalheFalha = "não encontrei um token de acesso pra essa Página (conexão com o Facebook pode ter expirado).";
+          } else {
+            const resultado = await encontrarPostDaPaginaCorrespondente(
+              conta.page_id,
+              tokenPagina,
+              postExistente.timestamp,
+              postExistente.caption
+            );
+            postDaPaginaId = resultado.postId;
+            detalheFalha =
+              resultado.totalPostsNoPeriodo > 0
+                ? `a publicação mais próxima na Página estava a ${resultado.diferencaMaisProximaMin} min de distância — fora da janela aceita.`
+                : postExistente.media_type === "CAROUSEL_ALBUM"
+                  ? "a Página não teve nenhuma publicação nesse período — carrossel costuma não ser replicado automaticamente pro Facebook pela Meta, mesmo com o cross-post ligado (só feed simples e Reels costumam replicar)."
+                  : "a Página não teve nenhuma publicação nesse período (o cross-post pode estar desligado nessa conta).";
+          }
+        } catch (erroBusca) {
+          detalheFalha = `erro ao consultar a Página no Facebook: ${erroBusca instanceof Error ? erroBusca.message : String(erroBusca)}`;
+        }
+
+        if (!postDaPaginaId) {
+          throw new Error(
+            `A Meta recusou promover direto o post do Instagram (${erroInstagramTexto}) e também não achei essa publicação na Página do Facebook (${detalheFalha}). O SmartAds nunca recria como anúncio novo (o engajamento precisa acumular no post publicado, não numa cópia).`
+          );
+        }
+        const criativoPagina = await criarCriativoDoPostDaPagina(adAccountId, {
+          objectStoryId: postDaPaginaId,
+          name: `${corpo.nomeCampanha} - criativo`,
+        });
+        criativoDoPostId = criativoPagina.id;
+      }
+    }
+
     const adset = await criarConjuntoDeAnuncios(adAccountId, {
       name: `${corpo.nomeCampanha} - conjunto`,
       campaignId: campanha.id,
       optimizationGoal: modelo.optimizationGoal,
       billingEvent: modelo.billingEvent,
-      destinationType: modelo.destinationType,
+      destinationType: destinoDoConjunto,
       promotedObject,
       targeting,
       orcamentoCentavos: corpo.orcamento.valorCentavos,
@@ -172,70 +237,11 @@ async function criarCampanhaCompletaComConexao(corpo: ParametrosCriarCampanha): 
     });
     adsetId = adset.id;
 
-    if (postExistente) {
-      // Tenta achar o mesmo post cross-postado na Página pra turbinar o post de verdade —
-      // engajamento acumulando nele, sem duplicar conteúdo. A Meta nunca aceita o ID do Instagram
-      // como referência de "post existente" (testado exaustivamente em 13/09/2026 e 23/09/2026), só
-      // o ID do post da própria Página.
-      let postDaPaginaId: string | null = null;
-      let detalheFalha = "não foi possível checar (falha ao chamar a Meta).";
-      try {
-        const tokenPagina = await obterTokenDePagina(conta.page_id);
-        if (!tokenPagina) {
-          detalheFalha = "não encontrei um token de acesso pra essa Página (conexão com o Facebook pode ter expirado).";
-        } else {
-          const resultado = await encontrarPostDaPaginaCorrespondente(
-            conta.page_id,
-            tokenPagina,
-            postExistente.timestamp,
-            postExistente.caption
-          );
-          postDaPaginaId = resultado.postId;
-          detalheFalha =
-            resultado.totalPostsNoPeriodo > 0
-              ? `a publicação mais próxima na Página estava a ${resultado.diferencaMaisProximaMin} min de distância — fora da janela aceita.`
-              : postExistente.media_type === "CAROUSEL_ALBUM"
-                ? "a Página não teve nenhuma publicação nesse período — carrossel costuma não ser replicado automaticamente pro Facebook pela Meta, mesmo com o cross-post ligado (só feed simples e Reels costumam replicar)."
-                : "a Página não teve nenhuma publicação nesse período (o cross-post pode estar desligado nessa conta).";
-        }
-      } catch (erroBusca) {
-        // Investigado em 28/09/2026: um post que TINHA cross-post real (achado em ~15s) mesmo assim
-        // caiu nesse catch em produção e virou o mesmo erro genérico de "sem cross-post" — porque
-        // esse catch engolia qualquer exceção em silêncio, sem guardar o que de fato aconteceu
-        // (rate limit, timeout, token vencido no meio da chamada etc.). Agora entra no detalhe.
-        detalheFalha = `erro ao consultar a Página no Facebook: ${erroBusca instanceof Error ? erroBusca.message : String(erroBusca)}`;
-      }
-
-      // Sem post correspondente na Página: promove o post do próprio Instagram, como o Gerenciador de
-      // Anúncios faz — o engajamento acumula no post original, então continua sendo "turbinar o post
-      // real". Nunca recria como anúncio novo (aí o engajamento cairia numa cópia).
-      let criativo: { id: string };
-      if (postDaPaginaId) {
-        criativo = await criarCriativoDoPostDaPagina(adAccountId, {
-          objectStoryId: postDaPaginaId,
-          name: `${corpo.nomeCampanha} - criativo`,
-        });
-      } else {
-        try {
-          criativo = await criarCriativoDoPostDoInstagram(adAccountId, {
-            instagramMediaId: postExistente.id,
-            instagramUserId: conta.instagram_business_id,
-            pageId: conta.page_id,
-            name: `${corpo.nomeCampanha} - criativo`,
-          });
-        } catch (erroInstagram) {
-          throw new Error(
-            `Não achei essa publicação na Página do Facebook (${detalheFalha}) e a Meta também recusou promover direto o post do Instagram: ${
-              erroInstagram instanceof Error ? erroInstagram.message : String(erroInstagram)
-            }. O SmartAds nunca recria como anúncio novo (o engajamento precisa acumular no post publicado, não numa cópia).`
-          );
-        }
-      }
-
+    if (postExistente && criativoDoPostId) {
       const anuncio = await criarAnuncio(adAccountId, {
         name: `${corpo.nomeCampanha} - anúncio`,
         adsetId: adset.id,
-        creativeId: criativo.id,
+        creativeId: criativoDoPostId,
       });
       anuncioIds.push(anuncio.id);
     } else {
