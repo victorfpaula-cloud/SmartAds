@@ -1,6 +1,7 @@
 import Cabecalho from "@/components/Cabecalho";
 import Link from "next/link";
 import { obterResumoPorUnidade } from "@/lib/campanhasRede";
+import { criarClienteAdmin } from "@/lib/supabase/admin";
 import PanoramaCampanhasRede from "@/components/PanoramaCampanhasRede";
 
 const FILTRO_REDE = "franquia";
@@ -14,20 +15,31 @@ export const dynamic = "force-dynamic";
 export default async function CampanhasPage({
   searchParams,
 }: {
-  searchParams: { rede?: string };
+  searchParams: { rede?: string; empresa?: string };
 }) {
   const apenasRede = searchParams.rede === FILTRO_REDE;
-  const { unidades, atualizadoEm } = await obterResumoPorUnidade({ apenasFranquia: apenasRede });
+  const empresaId = searchParams.empresa;
+  const { data: empresa } = empresaId
+    ? await criarClienteAdmin().from("smartads_empresas").select("id, nome").eq("id", empresaId).maybeSingle()
+    : { data: null };
+  const { unidades, atualizadoEm } = await obterResumoPorUnidade({
+    apenasFranquia: apenasRede,
+    empresaId: empresa?.id,
+  });
 
   return (
     <>
-      <Cabecalho ativo="/campanhas" rede={apenasRede} geralHref="/campanhas" />
+      <Cabecalho ativo="/campanhas" rede={apenasRede} geralHref="/campanhas" empresa={empresa ?? undefined} />
       <main className="mx-auto max-w-6xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="font-display text-2xl font-bold">{apenasRede ? "Campanhas da rede" : "Campanhas"}</h1>
+            <h1 className="font-display text-2xl font-bold">
+              {empresa ? `Campanhas · ${empresa.nome}` : apenasRede ? "Campanhas da rede" : "Campanhas"}
+            </h1>
             <p className="mt-1 text-sm text-neutral-400">
-              {apenasRede
+              {empresa
+                ? "Só as contas desta empresa. Escolha uma pra ver e mexer nas campanhas dela."
+                : apenasRede
                 ? "Só as unidades de franquia. Escolha uma pra ver e mexer nas campanhas dela."
                 : "Todas as contas, de todas as empresas. Escolha uma pra ver e mexer nas campanhas dela."}
             </p>
@@ -44,8 +56,10 @@ export default async function CampanhasPage({
           <PanoramaCampanhasRede
             unidades={unidades}
             atualizadoEm={atualizadoEm}
-            agruparPorEmpresa={!apenasRede}
-            titulo={apenasRede ? "Campanhas ativas na rede" : "Campanhas ativas em todas as contas"}
+            agruparPorEmpresa={!apenasRede && !empresa}
+            titulo={
+              empresa ? `Campanhas ativas · ${empresa.nome}` : apenasRede ? "Campanhas ativas na rede" : "Campanhas ativas em todas as contas"
+            }
           />
         </div>
       </main>

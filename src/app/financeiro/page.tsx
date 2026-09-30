@@ -27,11 +27,17 @@ function formatarAtualizacao(iso: string | null): string {
 export default async function FinanceiroPage({
   searchParams,
 }: {
-  searchParams: { rede?: string };
+  searchParams: { rede?: string; empresa?: string };
 }) {
   const apenasRede = searchParams.rede === FILTRO_REDE;
   const todasContas = await coletarFinanceiro();
-  const contas = apenasRede ? todasContas.filter((c) => c.empresaTipo === "franquia") : todasContas;
+  const empresaId = searchParams.empresa;
+  const empresaFiltro = empresaId ? todasContas.find((c) => c.empresaId === empresaId) : undefined;
+  const contas = empresaFiltro
+    ? todasContas.filter((c) => c.empresaId === empresaId)
+    : apenasRede
+      ? todasContas.filter((c) => c.empresaTipo === "franquia")
+      : todasContas;
 
   const totalSaldoDisponivel = contas.reduce((s, c) => s + (c.saldoDisponivelCentavos ?? 0), 0);
   const totalGasto7d = contas.reduce((s, c) => s + c.gasto7diasCentavos, 0);
@@ -55,7 +61,12 @@ export default async function FinanceiroPage({
 
   return (
     <>
-      <Cabecalho ativo="/financeiro" rede={apenasRede} geralHref="/financeiro" />
+      <Cabecalho
+        ativo="/financeiro"
+        rede={apenasRede}
+        geralHref="/financeiro"
+        empresa={empresaFiltro && empresaId ? { id: empresaId, nome: empresaFiltro.empresaNome } : undefined}
+      />
       <main className="mx-auto max-w-6xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
         {apenasRede && (
           <Link href="/estrategias" className="text-xs text-neutral-500 hover:text-neutral-300">
@@ -67,7 +78,7 @@ export default async function FinanceiroPage({
             <Wallet size={16} weight="fill" />
           </div>
           <div>
-            <h1 className="font-display text-2xl font-bold">{apenasRede ? "Financeiro da rede" : "Financeiro"}</h1>
+            <h1 className="font-display text-2xl font-bold">{empresaFiltro ? `Financeiro · ${empresaFiltro.empresaNome}` : apenasRede ? "Financeiro da rede" : "Financeiro"}</h1>
             <p className="mt-0.5 text-sm text-neutral-400">
               {apenasRede
                 ? "Só as unidades de franquia — pra ver tudo, inclusive empresas individuais, use Financeiro no menu."
@@ -79,13 +90,10 @@ export default async function FinanceiroPage({
         <div className="cartao-vidro mt-4 flex items-start gap-2.5 border border-white/10 px-4 py-3 text-xs text-neutral-400">
           <Info size={15} className="mt-0.5 shrink-0 text-neutral-500" />
           <p>
-            A Meta não deixa nenhum app externo ver o "Fundos" disponível de uma conta em nenhum
-            campo — nem a fórmula que outras ferramentas usam pra contas pré-pagas funcionou pra
-            vocês, e o histórico de cobranças/recargas só fica disponível uns 6 dias pra trás, sem
-            dar pra reconstruir o saldo inteiro do zero. Por isso o SmartAds mantém um saldo
-            próprio: você digita o valor real (visto no Gerenciador) uma vez, e a cada dia o cron
-            ajusta sozinho somando só o que entrou/saiu desde então. Se algo sair do previsto
-            (reembolso, cupom), é só corrigir na mão de novo.
+            O saldo vem da forma de pagamento da conta na Meta — o mesmo texto que o Gerenciador mostra
+            (ex.: "Saldo disponível (R$ 115,81)"), atualizado 1x por dia. Conta com cartão não tem
+            saldo pra ler: nela vale o valor que você digitar, que o cron ajusta sozinho com o que
+            entrar e sair desde então.
           </p>
         </div>
 

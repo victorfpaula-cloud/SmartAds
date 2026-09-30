@@ -1,10 +1,9 @@
-import Link from "next/link";
 import { Crown, Gauge, Stack, Broadcast, Megaphone, Wallet } from "@phosphor-icons/react/dist/ssr";
-import type { Icon } from "@phosphor-icons/react";
+import AtalhosCentral, { type AtalhoCentral } from "@/components/AtalhosCentral";
 import { obterResumoRedePorUnidade } from "@/lib/campanhasRede";
 import PanoramaCampanhasRede from "@/components/PanoramaCampanhasRede";
 
-const ATALHOS: { href: string; nome: string; descricao: string; Icone: Icon }[] = [
+const ATALHOS: AtalhoCentral[] = [
   {
     href: "/campanhas?rede=franquia",
     nome: "Campanhas da rede",
@@ -56,25 +55,9 @@ export default async function PainelEstrategias() {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        {ATALHOS.map(({ href, nome: nomeAtalho, descricao: descricaoAtalho, Icone }) => (
-          <Link
-            key={href}
-            href={href}
-            className="cartao-vidro flex flex-col gap-2.5 p-4 transition hover:border-accent/40"
-          >
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/[0.06] text-neutral-300">
-              <Icone size={18} weight="regular" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-neutral-100">{nomeAtalho}</p>
-              <p className="mt-0.5 text-xs leading-relaxed text-neutral-500">{descricaoAtalho}</p>
-            </div>
-          </Link>
-        ))}
-      </div>
+      <AtalhosCentral atalhos={ATALHOS} />
 
-      <PanoramaCampanhasRede unidades={unidades} atualizadoEm={atualizadoEm} />
+      <PanoramaCampanhasRede unidades={unidades} atualizadoEm={atualizadoEm} comBoost />
     </div>
   );
 }

@@ -1,7 +1,7 @@
-import Link from "next/link";
 import { Buildings, Storefront } from "@phosphor-icons/react/dist/ssr";
 import type { UnidadeRedeResumo } from "@/lib/campanhasRede";
 import BotaoAtualizarRede from "@/components/BotaoAtualizarRede";
+import LinhaUnidadeRede from "@/components/LinhaUnidadeRede";
 
 const formatoReal = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const reais = (centavos: number) => formatoReal.format(centavos / 100);
@@ -23,51 +23,6 @@ function totais(unidades: UnidadeRedeResumo[]) {
     gastoMes: unidades.reduce((soma, u) => soma + (u.gastoMesCentavos ?? 0), 0),
     algumGasto: unidades.some((u) => u.gastoMesCentavos !== null),
   };
-}
-
-function LinhaUnidade({ unidade, nomeMes }: { unidade: UnidadeRedeResumo; nomeMes: string }) {
-  const semDados = unidade.campanhasAtivas === null;
-  const ativa = (unidade.campanhasAtivas ?? 0) > 0;
-  return (
-    <li>
-      <Link
-        href={`/campanhas/conta/${unidade.contaId}`}
-        className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 px-5 py-3 transition hover:bg-white/[0.03] sm:grid-cols-[minmax(0,1.4fr)_auto_minmax(0,7rem)]"
-      >
-        <div className="flex min-w-0 items-center gap-2.5">
-          <span
-            className={`h-2 w-2 shrink-0 rounded-full ${ativa ? "bg-ok" : "bg-neutral-700"}`}
-            title={semDados ? "Ainda não calculada" : ativa ? "Com campanha no ar" : "Sem campanha no ar"}
-          />
-          <div className="min-w-0">
-            <p className={`truncate text-sm font-semibold ${ativa ? "text-neutral-100" : "text-neutral-500"}`}>
-              {unidade.clienteNome}
-            </p>
-            <p className="truncate text-[10.5px] text-neutral-600">{unidade.contaNome}</p>
-          </div>
-        </div>
-
-        <span
-          className={`justify-self-end rounded-full px-2.5 py-1 text-xs font-semibold ${
-            ativa ? "bg-ok/15 text-ok" : "bg-white/[0.05] text-neutral-500"
-          }`}
-        >
-          {semDados
-            ? "Aguardando dados"
-            : ativa
-              ? `${unidade.campanhasAtivas} campanha${unidade.campanhasAtivas !== 1 ? "s" : ""}`
-              : "Nenhuma no ar"}
-        </span>
-
-        <div className="col-span-2 flex items-baseline justify-between gap-2 sm:col-span-1 sm:block sm:text-right">
-          <p className="text-[10.5px] text-neutral-500 sm:hidden">Gasto em {nomeMes}</p>
-          <p className="text-sm font-semibold text-neutral-100">
-            {unidade.gastoMesCentavos !== null ? reais(unidade.gastoMesCentavos) : "—"}
-          </p>
-        </div>
-      </Link>
-    </li>
-  );
 }
 
 function Indicadores({ unidades, nomeMes }: { unidades: UnidadeRedeResumo[]; nomeMes: string }) {
@@ -96,11 +51,14 @@ export default function PanoramaCampanhasRede({
   atualizadoEm,
   agruparPorEmpresa = false,
   titulo = "Campanhas ativas na rede",
+  comBoost = false,
 }: {
   unidades: UnidadeRedeResumo[];
   atualizadoEm: string | null;
   agruparPorEmpresa?: boolean;
   titulo?: string;
+  /** Na Central: coluna com o controle do boost automático de cada unidade. */
+  comBoost?: boolean;
 }) {
   const nomeMes = new Intl.DateTimeFormat("pt-BR", { month: "long", timeZone: "America/Sao_Paulo" }).format(new Date());
   const t = totais(unidades);
@@ -143,7 +101,7 @@ export default function PanoramaCampanhasRede({
         <div className="border-b border-white/10">{cabecalhoGeral}</div>
         <ul className="divide-y divide-white/5">
           {unidades.map((unidade) => (
-            <LinhaUnidade key={unidade.contaId} unidade={unidade} nomeMes={nomeMes} />
+            <LinhaUnidadeRede key={unidade.contaId} unidade={unidade} nomeMes={nomeMes} comBoost={comBoost} />
           ))}
         </ul>
       </section>
@@ -188,7 +146,7 @@ export default function PanoramaCampanhasRede({
             </div>
             <ul className="divide-y divide-white/5">
               {lista.map((unidade) => (
-                <LinhaUnidade key={unidade.contaId} unidade={unidade} nomeMes={nomeMes} />
+                <LinhaUnidadeRede key={unidade.contaId} unidade={unidade} nomeMes={nomeMes} comBoost={comBoost} />
               ))}
             </ul>
           </section>
