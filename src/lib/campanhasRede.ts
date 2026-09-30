@@ -1,5 +1,6 @@
 import { criarClienteAdmin } from "@/lib/supabase/admin";
-import { listarCampanhas, campanhaAtivaAgora } from "@/lib/meta/api";
+import { listarCampanhas, campanhaAtivaAgora, obterInsightsConta } from "@/lib/meta/api";
+import { mesAtualEmSaoPaulo } from "@/lib/tempoSaoPaulo";
 import { mapearEmLotes } from "@/lib/lotes";
 
 export const ROTULO_OBJETIVO: Record<string, string> = {
@@ -61,9 +62,8 @@ export async function recalcularCampanhasRede(): Promise<{ contasVerificadas: nu
   try {
     const { data: clientes, error: erroClientes } = await supabase
       .from("smartads_clientes")
-      .select("id, smartads_empresas!inner(tipo), smartads_contas_meta(*)")
-      .eq("ativo", true)
-      .eq("smartads_empresas.tipo", "franquia");
+      .select("id, smartads_contas_meta(*)")
+      .eq("ativo", true);
 
     if (erroClientes) throw new Error(`Falha ao buscar clientes: ${erroClientes.message}`);
 
@@ -138,6 +138,33 @@ export async function recalcularCampanhasRede(): Promise<{ contasVerificadas: nu
           vitalicio: !campanha.daily_budget && !!campanha.lifetime_budget,
         });
         linhasPorConta.set(conta.id, linhas);
+      }
+
+      // Gasto do mês corrente (Meta "this_month", em reais) por conta local, com a mesma divisão por
+      // sigla das campanhas. Soma TODAS as campanhas do mês, ativas ou já encerradas — é o que a
+      // conta gastou de verdade. Se a Meta falhar aqui, não grava nada (mantém o valor anterior em
+      // vez de zerar por engano).
+      const insightsMes = await obterInsightsConta(contasDoGrupo[0].meta_ad_account_id, {
+        nivel: "campaign",
+        datePreset: "this_month",
+        porDia: false,
+      }).catch(() => null);
+      if (insightsMes) {
+        const gastoMesPorConta = new Map<string, number>(contasDoGrupo.map((c) => [c.id, 0]));
+        for (const linha of insightsMes) {
+          const conta = contaDaCampanha(linha.campaign_name ?? "");
+          if (!conta) continue;
+          gastoMesPorConta.set(conta.id, (gastoMesPorConta.get(conta.id) ?? 0) + Math.round(Number(linha.spend ?? 0) * 100));
+        }
+        await supabase.from("smartads_gasto_mes_cache").upsert(
+          [...gastoMesPorConta.entries()].map(([contaId, gasto]) => ({
+            conta_id: contaId,
+            mes: mesAtualEmSaoPaulo(),
+            gasto_mes_centavos: gasto,
+            atualizado_em: agora,
+          })),
+          { onConflict: "conta_id" }
+        );
       }
 
       // Troca o snapshot de CADA conta local do grupo (não a tabela inteira) — uma campanha
@@ -246,4 +273,64 @@ export async function obterCampanhasAtivasRede(): Promise<{
   const atualizadoEm = cache && cache.length > 0 ? cache[0].atualizado_em : null;
 
   return { campanhas, atualizadoEm };
+}
+
+
+export interface UnidadeRedeResumo {
+  contaId: string;
+  clienteNome: string;
+  contaNome: string;
+  campanhasAtivas: number;
+  /** Gasto do mês corrente, em centavos; null = ainda não calculado neste mês. */
+  gastoMesCentavos: number | null;
+  tetoMensalCentavos: number;
+}
+
+/** Uma linha por unidade de franquia: quantas campanhas ativas e quanto já gastou no mês. Tudo do
+ * cache (campanhas ativas + gasto do mês, atualizados juntos pelo cron 2x/dia) — a tela nunca bate
+ * na Meta. Unidade sem campanha ativa também entra, com 0. */
+export async function obterResumoRedePorUnidade(): Promise<{
+  unidades: UnidadeRedeResumo[];
+  atualizadoEm: string | null;
+}> {
+  const supabase = criarClienteAdmin();
+  const [{ data: cacheCampanhas }, { data: cacheGasto }, { data: clientes }] = await Promise.all([
+    supabase.from("smartads_campanhas_rede_cache").select("conta_id, atualizado_em"),
+    supabase.from("smartads_gasto_mes_cache").select("conta_id, mes, gasto_mes_centavos, atualizado_em"),
+    supabase
+      .from("smartads_clientes")
+      .select("id, nome, smartads_empresas!inner(tipo), smartads_contas_meta(*)")
+      .eq("ativo", true)
+      .eq("smartads_empresas.tipo", "franquia"),
+  ]);
+
+  const ativasPorConta = new Map<string, number>();
+  for (const linha of cacheCampanhas ?? []) {
+    ativasPorConta.set(linha.conta_id, (ativasPorConta.get(linha.conta_id) ?? 0) + 1);
+  }
+  const mesAtual = mesAtualEmSaoPaulo();
+  const gastoPorConta = new Map(
+    (cacheGasto ?? []).filter((g) => g.mes === mesAtual).map((g) => [g.conta_id, g.gasto_mes_centavos as number])
+  );
+
+  const unidades: UnidadeRedeResumo[] = [];
+  for (const cliente of (clientes ?? []) as any[]) {
+    for (const conta of (cliente.smartads_contas_meta as any[]).filter((c) => c.ativo)) {
+      unidades.push({
+        contaId: conta.id,
+        clienteNome: cliente.nome,
+        contaNome: conta.nome_exibicao || conta.meta_ad_account_nome || conta.meta_ad_account_id,
+        campanhasAtivas: ativasPorConta.get(conta.id) ?? 0,
+        gastoMesCentavos: gastoPorConta.has(conta.id) ? gastoPorConta.get(conta.id)! : null,
+        tetoMensalCentavos: conta.orcamento_mensal_centavos ?? 50000,
+      });
+    }
+  }
+  unidades.sort((a, b) => b.campanhasAtivas - a.campanhasAtivas || a.clienteNome.localeCompare(b.clienteNome));
+
+  // Todas as linhas de cada tabela nascem na mesma rodada do cron: o mais recente serve pro conjunto.
+  const datas = [...(cacheCampanhas ?? []).map((c) => c.atualizado_em), ...(cacheGasto ?? []).map((g) => g.atualizado_em)]
+    .filter(Boolean)
+    .sort();
+  return { unidades, atualizadoEm: datas.length > 0 ? datas[datas.length - 1] : null };
 }

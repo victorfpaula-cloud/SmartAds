@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { listarCampanhas, obterInsightsConta } from "@/lib/meta/api";
+import { listarCampanhas, obterInsightsConta, listarConjuntosDaConta, campanhaAtivaAgora } from "@/lib/meta/api";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { ErroMetaNaoConectado } from "@/lib/meta/token";
 import { ErroGraphAPIException } from "@/lib/meta/erros";
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const [{ campanhas, proximoCursor }, insights, { data: cache }] = await Promise.all([
+    const [{ campanhas, proximoCursor }, insights, { data: cache }, conjuntos] = await Promise.all([
       // limit 50 (não o padrão de 10 de listarCampanhas) — com 10 por página, uma conta com mais
       // de 10 campanhas cadastradas podia ter uma campanha ATIVA fora da primeira página, escondida
       // até alguém clicar em "Carregar mais campanhas" (ninguém clica achando que só tem histórico
@@ -44,16 +44,44 @@ export async function GET(request: NextRequest) {
         .from("smartads_campanhas_criadas")
         .select("id, meta_campaign_id, meta_adset_id, tipo_modelo, meta_ad_ids")
         .eq("conta_id", contaId),
+      // Orçamento fica no conjunto de anúncios, não na campanha — sem isso a coluna vinha vazia.
+      // Falha aqui não derruba a tela: cai no orçamento da campanha (que existe em campanhas CBO).
+      listarConjuntosDaConta(conta.meta_ad_account_id).catch(() => null),
     ]);
 
     const gastoPorCampanha = new Map(insights.map((i) => [i.campaign_id, i.spend]));
     const cachePorCampanha = new Map((cache ?? []).map((c) => [c.meta_campaign_id, c]));
 
-    const linhas = campanhas.map((campanha) => ({
-      ...campanha,
-      spendTotal: gastoPorCampanha.get(campanha.id) ?? "0",
-      local: cachePorCampanha.get(campanha.id) ?? null,
-    }));
+    // Orçamento da campanha = soma dos conjuntos dela: só os ativos quando a campanha está ativa (um
+    // conjunto pausado não gasta), todos os demais casos somam tudo que não foi arquivado/excluído.
+    const conjuntosPorCampanha = new Map<string, NonNullable<typeof conjuntos>>();
+    for (const conjunto of conjuntos ?? []) {
+      const lista = conjuntosPorCampanha.get(conjunto.campaign_id) ?? [];
+      lista.push(conjunto);
+      conjuntosPorCampanha.set(conjunto.campaign_id, lista);
+    }
+
+    const linhas = campanhas.map((campanha) => {
+      const doConjunto = (conjuntosPorCampanha.get(campanha.id) ?? []).filter(
+        (c) => c.effective_status !== "ARCHIVED" && c.effective_status !== "DELETED"
+      );
+      const consideradas = campanhaAtivaAgora(campanha)
+        ? doConjunto.filter((c) => c.effective_status === "ACTIVE")
+        : doConjunto;
+      const somar = (campo: "daily_budget" | "lifetime_budget") =>
+        consideradas.reduce((total, c) => total + (c[campo] ? Number(c[campo]) : 0), 0);
+      const diarioConjuntos = somar("daily_budget");
+      const vitalicioConjuntos = somar("lifetime_budget");
+
+      return {
+        ...campanha,
+        spendTotal: gastoPorCampanha.get(campanha.id) ?? "0",
+        local: cachePorCampanha.get(campanha.id) ?? null,
+        orcamentoDiarioCentavos: diarioConjuntos || (campanha.daily_budget ? Number(campanha.daily_budget) : null),
+        orcamentoVitalicioCentavos:
+          vitalicioConjuntos || (campanha.lifetime_budget ? Number(campanha.lifetime_budget) : null),
+      };
+    });
 
     return NextResponse.json({ campanhas: linhas, proximoCursor });
   } catch (erro) {

@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { Crown, Gauge, Stack, Broadcast, Megaphone, Wallet } from "@phosphor-icons/react/dist/ssr";
 import type { Icon } from "@phosphor-icons/react";
-import { obterCampanhasAtivasRede, ROTULO_OBJETIVO, type CampanhaRedeResumo } from "@/lib/campanhasRede";
+import { obterResumoRedePorUnidade } from "@/lib/campanhasRede";
+import PanoramaCampanhasRede from "@/components/PanoramaCampanhasRede";
 
 const ATALHOS: { href: string; nome: string; descricao: string; Icone: Icon }[] = [
   {
@@ -42,42 +43,6 @@ const ATALHOS: { href: string; nome: string; descricao: string; Icone: Icon }[] 
   },
 ];
 
-const formatoReal = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
-
-interface GrupoUnidade {
-  contaId: string;
-  clienteNome: string;
-  contaNome: string;
-  campanhas: CampanhaRedeResumo[];
-}
-
-// Agrupa por conta — cada card do cache já é uma campanha ATIVA (recalcularCampanhasRede só grava
-// isso), então a bolinha verde é fixa aqui: uma unidade só aparece nessa lista se tiver pelo menos
-// uma campanha no ar agora.
-function agruparPorUnidade(campanhas: CampanhaRedeResumo[]): GrupoUnidade[] {
-  const porConta = new Map<string, GrupoUnidade>();
-  for (const campanha of campanhas) {
-    const grupo = porConta.get(campanha.contaId) ?? {
-      contaId: campanha.contaId,
-      clienteNome: campanha.clienteNome,
-      contaNome: campanha.contaNome,
-      campanhas: [],
-    };
-    grupo.campanhas.push(campanha);
-    porConta.set(campanha.contaId, grupo);
-  }
-  return [...porConta.values()].sort((a, b) => a.clienteNome.localeCompare(b.clienteNome));
-}
-
-function formatarAtualizacao(iso: string | null): string {
-  if (!iso) return "Ainda sem dados — aguardando a primeira atualização automática";
-  const horas = Math.floor((Date.now() - new Date(iso).getTime()) / 3_600_000);
-  if (horas < 1) return "Atualizado há menos de 1h";
-  if (horas < 24) return `Atualizado há ${horas}h`;
-  const dias = Math.floor(horas / 24);
-  return `Atualizado há ${dias} dia${dias !== 1 ? "s" : ""}`;
-}
-
 /** Hub da Central da rede — grid de atalhos pras funções que padronizam/comparam entre unidades, e
  * logo abaixo o panorama de campanhas ativas da rede inteira (mesmo cache 2x/dia usado em
  * /campanhas, ver src/lib/campanhasRede.ts). Antes desse lugar mostrava o construtor/lista de
@@ -87,8 +52,7 @@ function formatarAtualizacao(iso: string | null): string {
  * ativas resumidos em texto corrido) saiu por pedido explícito — sem dado real de verdade ainda no
  * cache, ele só mostrava texto genérico de espera, sem nenhuma utilidade. */
 export default async function PainelEstrategias() {
-  const { campanhas: campanhasRede, atualizadoEm } = await obterCampanhasAtivasRede();
-  const gruposUnidade = agruparPorUnidade(campanhasRede);
+  const { unidades, atualizadoEm } = await obterResumoRedePorUnidade();
 
   return (
     <div className="flex flex-col gap-5">
@@ -110,54 +74,7 @@ export default async function PainelEstrategias() {
         ))}
       </div>
 
-      <section className="cartao-vidro overflow-hidden">
-        <div className="border-b border-white/10 px-5 py-3.5">
-          <h2 className="text-sm font-semibold text-neutral-200">Campanhas ativas na rede</h2>
-          <p className="mt-0.5 text-[11px] text-neutral-500">
-            {campanhasRede.length} campanha{campanhasRede.length !== 1 ? "s" : ""} ativa
-            {campanhasRede.length !== 1 ? "s" : ""} agora · {formatarAtualizacao(atualizadoEm)}
-          </p>
-        </div>
-
-        {gruposUnidade.length === 0 ? (
-          <p className="px-5 py-8 text-center text-sm text-neutral-500">Nenhuma campanha ativa na rede agora.</p>
-        ) : (
-          <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 xl:grid-cols-3">
-            {gruposUnidade.map((grupo) => (
-              <div key={grupo.contaId} className="overflow-hidden rounded-lg border border-white/10 bg-white/[0.02]">
-                <div className="flex items-center gap-2 border-b border-white/10 px-3.5 py-2.5">
-                  <span className="h-2 w-2 shrink-0 rounded-full bg-ok" title="Com campanha ativa" />
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-neutral-100">{grupo.clienteNome}</p>
-                    <p className="truncate text-[10.5px] text-neutral-600">{grupo.contaNome}</p>
-                  </div>
-                  <span className="ml-auto shrink-0 text-[10.5px] font-medium text-neutral-500">
-                    {grupo.campanhas.length} campanha{grupo.campanhas.length !== 1 ? "s" : ""}
-                  </span>
-                </div>
-                <div className="divide-y divide-white/5">
-                  {grupo.campanhas.map((campanha, indice) => (
-                    <div key={indice} className="flex flex-col gap-0.5 px-3.5 py-2.5">
-                      <p className="truncate text-xs font-medium text-neutral-200">{campanha.nome}</p>
-                      <p className="text-[10.5px] text-neutral-500">
-                        {campanha.objetivo ? ROTULO_OBJETIVO[campanha.objetivo] ?? campanha.objetivo : "-"}
-                        {campanha.orcamentoDiarioCentavos != null ? (
-                          <span className="text-neutral-400">
-                            {" "}
-                            · {formatoReal.format(campanha.orcamentoDiarioCentavos / 100)}/dia
-                          </span>
-                        ) : (
-                          campanha.vitalicio && <span className="text-neutral-400"> · Vitalício</span>
-                        )}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
+      <PanoramaCampanhasRede unidades={unidades} atualizadoEm={atualizadoEm} />
     </div>
   );
 }
