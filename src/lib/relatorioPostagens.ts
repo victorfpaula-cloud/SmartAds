@@ -339,10 +339,11 @@ export function formatarMediaStories(mediaDia: number): string {
   return `~${texto}`;
 }
 
-/** "42 stories em 30 dias" — ou "em N dias de coleta" enquanto a coleta não cobre a janela toda. */
+/** "42 em 30 dias" — ou "em N dias de coleta" enquanto a coleta não cobre a janela toda. Sem o
+ * substantivo: quem chama já escreve o rótulo "Stories" antes. */
 export function descricaoTotalStories(total: number, diasDeColeta: number): string {
   const periodo = diasDeColeta >= DIAS_JANELA || diasDeColeta === 0 ? "em 30 dias" : `em ${diasDeColeta} dias de coleta`;
-  return `${total} ${total === 1 ? "story" : "stories"} ${periodo}`;
+  return `${total} ${periodo}`;
 }
 
 export const ROTULO_COMPARATIVO: Record<ComparativoRede, string> = {
@@ -398,32 +399,36 @@ function montarSecaoUnidade(unidade: UnidadeRelatorioPostagens, mediaRede: numbe
   const selo = (estilo: { rotulo: string; cor: string; fundo: string }) =>
     `<span style="display:inline-block;padding:3px 10px;border-radius:99px;background:${estilo.fundo};color:${estilo.cor};font-size:10.5px;font-weight:700">${estilo.rotulo}</span>`;
   const textoStories = stats
-    ? `${descricaoTotalStories(stats.total, estatisticas.diasDeColeta)}${stats.mediaDia !== null ? `<span style="margin:0 6px;color:#e4e4e7">·</span>média ${formatarMediaStories(stats.mediaDia)}/dia` : ""}`
+    ? `${descricaoTotalStories(stats.total, estatisticas.diasDeColeta)}${stats.mediaDia !== null ? `<span style="margin:0 6px;color:#d4d4d8">·</span>média ${formatarMediaStories(stats.mediaDia)}/dia` : ""}`
     : "";
+  const textoFeed = `${unidade.totalPostagens} ${unidade.totalPostagens === 1 ? "postagem" : "postagens"} em 30 dias`;
+  // Uma linha do subcard: selo de saúde na coluna da esquerda (largura fixa, pra os textos das duas
+  // linhas alinharem mesmo com selos de tamanhos diferentes) e "mídia · números" na frente.
+  const linhaSubcard = (estilo: { rotulo: string; cor: string; fundo: string }, midia: string, texto: string, topo: number) =>
+    `<tr>
+        <td style="width:168px;vertical-align:middle;padding:${topo}px 0 0">${selo(estilo)}</td>
+        <td style="vertical-align:middle;padding:${topo}px 0 0;font-size:11.5px;color:#71717a"><b style="color:#3f3f46">${midia}</b><span style="margin:0 6px;color:#d4d4d8">·</span>${texto}</td>
+      </tr>`;
 
-  // Cabeçalho em três linhas (nome / postagens + selo / stories + selo) — cada métrica tem o
-  // próprio selo de comparativo com a rede, alinhado à linha dela.
+  // Cabeçalho: avatar + nome (com o @ em cinza logo depois) e, embaixo, um subcard discreto que
+  // separa feed/Reels de stories — cada um com o próprio selo de comparativo com a rede.
   return `<div style="margin-bottom:14px;border:1px solid #ececef;border-radius:14px;padding:18px">
     <table style="width:100%;border-collapse:collapse;margin-bottom:14px">
       <tr>
-        <td rowspan="3" style="width:44px;vertical-align:top">${avatar}</td>
-        <td colspan="2" style="vertical-align:top">
-          <p style="margin:0;font-size:14.5px;font-weight:700;color:#18181b">${unidade.clienteNome}</p>
+        <td rowspan="2" style="width:44px;vertical-align:top">${avatar}</td>
+        <td style="vertical-align:middle;height:34px">
+          <span style="font-size:14.5px;font-weight:700;color:#18181b">${unidade.clienteNome}</span>${unidade.instagramUsername ? `<span style="margin-left:8px;font-size:11.5px;font-weight:400;color:#a1a1aa">@${unidade.instagramUsername}</span>` : ""}
         </td>
       </tr>
       <tr>
-        <td style="vertical-align:middle;padding-top:5px">
-          <p style="margin:0;font-size:11.5px;color:#a1a1aa">
-            ${unidade.instagramUsername ? `@${unidade.instagramUsername}<span style="margin:0 6px;color:#e4e4e7">·</span>` : ""}${unidade.totalPostagens} ${unidade.totalPostagens === 1 ? "postagem" : "postagens"} em 30 dias
-          </p>
+        <td style="vertical-align:top;padding-top:8px">
+          <div style="background:#fafafa;border:1px solid #f1f1f3;border-radius:10px;padding:2px 12px 10px">
+            <table style="width:100%;border-collapse:collapse">
+              ${linhaSubcard(comparativo, "Feed / Reels", textoFeed, 8)}
+              ${linhaSubcard(comparativoStories, "Stories", textoStories, 6)}
+            </table>
+          </div>
         </td>
-        <td style="width:1%;white-space:nowrap;vertical-align:middle;text-align:right;padding-top:5px">${selo(comparativo)}</td>
-      </tr>
-      <tr>
-        <td style="vertical-align:middle;padding-top:6px">
-          <p style="margin:0;font-size:11.5px;color:#a1a1aa">${textoStories}</p>
-        </td>
-        <td style="width:1%;white-space:nowrap;vertical-align:middle;text-align:right;padding-top:6px">${selo(comparativoStories)}</td>
       </tr>
     </table>
     <table style="width:100%;border-collapse:collapse"><tr>

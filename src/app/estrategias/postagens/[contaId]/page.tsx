@@ -52,31 +52,32 @@ export default async function DetalhePostagensPage({ params }: { params: Promise
         </Link>
 
         <div className="mt-1">
-          <h1 className="font-display text-2xl font-bold">{unidade.clienteNome}</h1>
-          <div className="mt-2 space-y-1.5">
-            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-              <p className="text-sm text-neutral-400">
-                {unidade.instagramUsername && <>@{unidade.instagramUsername} · </>}
-                {unidade.totalPostagens} {unidade.totalPostagens === 1 ? "postagem" : "postagens"} nos últimos 30 dias
-              </p>
-              {unidade.instagramVinculado && (
-                <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${CLASSE_COMPARATIVO[comparativo]}`}>
-                  {ROTULO_COMPARATIVO[comparativo]}
-                </span>
-              )}
-            </div>
-            {unidade.instagramVinculado && (
-              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                <p className="text-sm text-neutral-400">
-                  {descricaoTotalStories(stats?.total ?? 0, statsStories.diasDeColeta)}
-                  {stats?.mediaDia != null && <> · média {formatarMediaStories(stats.mediaDia)}/dia</>}
-                </p>
-                <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${CLASSE_COMPARATIVO[stats?.comparativo ?? "sem_base"]}`}>
-                  {ROTULO_COMPARATIVO[stats?.comparativo ?? "sem_base"]}
-                </span>
-              </div>
+          <h1 className="font-display text-2xl font-bold">
+            {unidade.clienteNome}
+            {unidade.instagramUsername && (
+              <span className="ml-2 align-middle text-sm font-normal text-neutral-500">@{unidade.instagramUsername}</span>
             )}
-          </div>
+          </h1>
+          {unidade.instagramVinculado && (
+            // Subcard discreto: selo de saúde à esquerda (coluna fixa, pros textos alinharem) e
+            // "mídia · números" na frente — feed/Reels numa linha, stories na outra.
+            <div className="mt-3 space-y-2 rounded-xl border border-white/5 bg-white/[0.03] px-3 py-2.5">
+              <LinhaSaude
+                classe={CLASSE_COMPARATIVO[comparativo]}
+                rotulo={ROTULO_COMPARATIVO[comparativo]}
+                midia="Feed / Reels"
+                texto={`${unidade.totalPostagens} ${unidade.totalPostagens === 1 ? "postagem" : "postagens"} em 30 dias`}
+              />
+              <LinhaSaude
+                classe={CLASSE_COMPARATIVO[stats?.comparativo ?? "sem_base"]}
+                rotulo={ROTULO_COMPARATIVO[stats?.comparativo ?? "sem_base"]}
+                midia="Stories"
+                texto={`${descricaoTotalStories(stats?.total ?? 0, statsStories.diasDeColeta)}${
+                  stats?.mediaDia != null ? ` · média ${formatarMediaStories(stats.mediaDia)}/dia` : ""
+                }`}
+              />
+            </div>
+          )}
         </div>
 
         {!unidade.instagramVinculado ? (
@@ -99,6 +100,17 @@ export default async function DetalhePostagensPage({ params }: { params: Promise
         )}
       </main>
     </>
+  );
+}
+
+function LinhaSaude({ classe, rotulo, midia, texto }: { classe: string; rotulo: string; midia: string; texto: string }) {
+  return (
+    <div className="grid grid-cols-1 items-center gap-1 sm:grid-cols-[12.5rem_1fr] sm:gap-3">
+      <span className={`w-fit whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold ${classe}`}>{rotulo}</span>
+      <p className="text-sm text-neutral-400">
+        <span className="font-semibold text-neutral-200">{midia}</span> · {texto}
+      </p>
+    </div>
   );
 }
 
