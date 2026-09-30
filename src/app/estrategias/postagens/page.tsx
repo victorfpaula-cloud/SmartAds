@@ -7,7 +7,7 @@ import {
   type ComparativoRede,
 } from "@/lib/relatorioPostagens";
 import { diasEntreEmSaoPaulo } from "@/lib/tempoSaoPaulo";
-import { WarningCircle, InstagramLogo, DownloadSimple, GridFour, CircleDashed, ChartBar } from "@phosphor-icons/react/dist/ssr";
+import { WarningCircle, InstagramLogo, DownloadSimple, GridFour, CircleDashed, FilmStrip } from "@phosphor-icons/react/dist/ssr";
 import BotaoEnviarRelatorio from "./BotaoEnviarRelatorio";
 
 export const dynamic = "force-dynamic";
@@ -265,14 +265,18 @@ function CardUnidade({ unidade }: { unidade: CardData }) {
   // agora o rótulo quase nunca quebra, então uma reserva de 2 linhas (como era antes) deixava um
   // vão vazio grande demais entre o rótulo e a contagem embaixo. Uma reserva pequena ainda evita o
   // desalinhamento entre os dois adesivos lado a lado no raro caso de um rótulo quebrar mesmo assim.
+  //
+  // Ordem: [posts] [stories — média e mês] na primeira linha, e "Stories hoje" sozinho ocupando a
+  // linha de baixo inteira. Os dois de cima ficam lado a lado (mesma altura pela grade) e cada um
+  // abre com o nome da mídia ("Posts" / "Stories") pra não confundir um com o outro.
   const adesivos: React.ReactNode[] = [];
-  if (unidade.comparativo && unidade.comparativo !== "sem_base") {
+  const comPosts = !!unidade.comparativo && unidade.comparativo !== "sem_base";
+  if (comPosts && unidade.comparativo) {
     adesivos.push(
       <div key="posts" className="rounded-lg bg-white/[0.04] px-2 py-1.5">
-        <p
-          className={`min-h-[11px] leading-tight text-[8.5px] font-bold uppercase tracking-wide ${CLASSE_COMPARATIVO_CURTO[unidade.comparativo]}`}
-        >
-          {ROTULO_COMPARATIVO_CURTO[unidade.comparativo]}
+        <p className="min-h-[11px] leading-tight text-[8.5px] font-bold uppercase tracking-wide">
+          <span className="text-neutral-400">Posts · </span>
+          <span className={CLASSE_COMPARATIVO_CURTO[unidade.comparativo]}>{ROTULO_COMPARATIVO_CURTO[unidade.comparativo]}</span>
         </p>
         <p className="mt-0.5 flex items-center gap-1 text-[10.5px] font-semibold text-neutral-300">
           <GridFour size={11} weight="bold" className="shrink-0 text-neutral-500" />
@@ -281,25 +285,10 @@ function CardUnidade({ unidade }: { unidade: CardData }) {
       </div>
     );
   }
-  if (unidade.instagramVinculado) {
-    adesivos.push(
-      <div key="stories" className="rounded-lg bg-white/[0.04] px-2 py-1.5">
-        <p
-          className={`min-h-[11px] leading-tight text-[8.5px] font-bold uppercase tracking-wide ${unidade.storiesHoje > 0 ? "text-sky-300" : "text-neutral-600"}`}
-        >
-          Stories hoje
-        </p>
-        <p className={`mt-0.5 flex items-center gap-1 text-[10.5px] font-semibold ${unidade.storiesHoje > 0 ? "text-neutral-200" : "text-neutral-500"}`}>
-          <CircleDashed size={11} weight="bold" className="shrink-0" />
-          {unidade.storiesHoje} {unidade.storiesHoje === 1 ? "story" : "stories"}
-        </p>
-      </div>
-    );
-  }
 
   if (unidade.instagramVinculado && unidade.storiesMediaDia !== null) {
-    // Mesmo desenho do adesivo de posts: status colorido em cima, contagem embaixo. O status vem da
-    // média de stories por dia contra a da rede (mostrada só no tooltip, pra não poluir o card).
+    // Mesmo desenho do adesivo de posts: mídia + status colorido em cima, dados embaixo. O status vem
+    // da média de stories por dia contra a da rede.
     const comparativo = unidade.storiesComparativo;
     const semBase = !comparativo || comparativo === "sem_base";
     // Média por dia arredondada ("~5"); abaixo de 1 mantém uma casa pra não virar "~0".
@@ -310,19 +299,39 @@ function CardUnidade({ unidade }: { unidade: CardData }) {
     adesivos.push(
       <div
         key="stories-mes"
-        className="col-span-2 rounded-lg bg-white/[0.04] px-2 py-1.5"
+        className={`rounded-lg bg-white/[0.04] px-2 py-1.5 ${comPosts ? "" : "col-span-2"}`}
         title={`Média de ${unidade.storiesMediaDia.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} stories por dia e ${unidade.storiesMes} no total, contando só os dias em que já há coleta`}
       >
-        <p
-          className={`min-h-[11px] leading-tight text-[8.5px] font-bold uppercase tracking-wide ${
-            semBase ? "text-neutral-600" : CLASSE_COMPARATIVO_CURTO[comparativo]
-          }`}
-        >
-          {semBase ? "Stories do mês" : ROTULO_COMPARATIVO_CURTO[comparativo]}
+        <p className="min-h-[11px] leading-tight text-[8.5px] font-bold uppercase tracking-wide">
+          <span className="text-neutral-400">Stories</span>
+          {!semBase && (
+            <>
+              <span className="text-neutral-400"> · </span>
+              <span className={CLASSE_COMPARATIVO_CURTO[comparativo]}>{ROTULO_COMPARATIVO_CURTO[comparativo]}</span>
+            </>
+          )}
         </p>
-        <p className="mt-0.5 flex items-center gap-1 text-[10.5px] font-semibold text-neutral-300">
-          <ChartBar size={11} weight="bold" className="shrink-0 text-neutral-500" />
-          ~{mediaArredondada}/dia · {unidade.storiesMes} no mês
+        <p className="mt-0.5 flex items-start gap-1 text-[10.5px] font-semibold leading-tight text-neutral-300">
+          <FilmStrip size={11} weight="bold" className="mt-px shrink-0 text-neutral-500" />
+          <span>
+            média ~{mediaArredondada}/dia · {unidade.storiesMes} no mês
+          </span>
+        </p>
+      </div>
+    );
+  }
+
+  if (unidade.instagramVinculado) {
+    adesivos.push(
+      <div key="stories" className="col-span-2 rounded-lg bg-white/[0.04] px-2 py-1.5">
+        <p
+          className={`min-h-[11px] leading-tight text-[8.5px] font-bold uppercase tracking-wide ${unidade.storiesHoje > 0 ? "text-sky-300" : "text-neutral-600"}`}
+        >
+          Stories hoje
+        </p>
+        <p className={`mt-0.5 flex items-center gap-1 text-[10.5px] font-semibold ${unidade.storiesHoje > 0 ? "text-neutral-200" : "text-neutral-500"}`}>
+          <CircleDashed size={11} weight="bold" className="shrink-0" />
+          {unidade.storiesHoje} {unidade.storiesHoje === 1 ? "story" : "stories"}
         </p>
       </div>
     );
