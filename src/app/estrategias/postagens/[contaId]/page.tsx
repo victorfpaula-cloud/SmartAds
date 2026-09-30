@@ -4,6 +4,9 @@ import { notFound } from "next/navigation";
 import {
   obterRelatorioPostagens,
   classificarComparativoRede,
+  calcularEstatisticasStories,
+  descricaoTotalStories,
+  formatarMediaStories,
   ROTULO_COMPARATIVO,
   type DiaRelatorioPostagem,
   type ComparativoRede,
@@ -34,6 +37,8 @@ export default async function DetalhePostagensPage({ params }: { params: Promise
   const mediaRede =
     vinculadas.length > 0 ? vinculadas.reduce((soma, u) => soma + u.totalPostagens, 0) / vinculadas.length : 0;
   const comparativo = classificarComparativoRede(unidade.totalPostagens, mediaRede);
+  const statsStories = calcularEstatisticasStories(unidades);
+  const stats = statsStories.porConta.get(unidade.contaId);
 
   const metade = Math.ceil(unidade.dias.length / 2);
   const colunas = [unidade.dias.slice(0, metade), unidade.dias.slice(metade)];
@@ -46,21 +51,32 @@ export default async function DetalhePostagensPage({ params }: { params: Promise
           ← Radar de posts
         </Link>
 
-        <div className="mt-1 flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="font-display text-2xl font-bold">{unidade.clienteNome}</h1>
-            <p className="mt-1 text-sm text-neutral-400">
-              {unidade.instagramUsername && <>@{unidade.instagramUsername} · </>}
-              {unidade.totalPostagens} {unidade.totalPostagens === 1 ? "postagem" : "postagens"} nos últimos 30 dias
-            </p>
+        <div className="mt-1">
+          <h1 className="font-display text-2xl font-bold">{unidade.clienteNome}</h1>
+          <div className="mt-2 space-y-1.5">
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+              <p className="text-sm text-neutral-400">
+                {unidade.instagramUsername && <>@{unidade.instagramUsername} · </>}
+                {unidade.totalPostagens} {unidade.totalPostagens === 1 ? "postagem" : "postagens"} nos últimos 30 dias
+              </p>
+              {unidade.instagramVinculado && (
+                <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${CLASSE_COMPARATIVO[comparativo]}`}>
+                  {ROTULO_COMPARATIVO[comparativo]}
+                </span>
+              )}
+            </div>
+            {unidade.instagramVinculado && (
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                <p className="text-sm text-neutral-400">
+                  {descricaoTotalStories(stats?.total ?? 0, statsStories.diasDeColeta)}
+                  {stats?.mediaDia != null && <> · média {formatarMediaStories(stats.mediaDia)}/dia</>}
+                </p>
+                <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${CLASSE_COMPARATIVO[stats?.comparativo ?? "sem_base"]}`}>
+                  {ROTULO_COMPARATIVO[stats?.comparativo ?? "sem_base"]}
+                </span>
+              </div>
+            )}
           </div>
-          {unidade.instagramVinculado && (
-            <span
-              className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold ${CLASSE_COMPARATIVO[comparativo]}`}
-            >
-              {ROTULO_COMPARATIVO[comparativo]}
-            </span>
-          )}
         </div>
 
         {!unidade.instagramVinculado ? (
@@ -111,7 +127,7 @@ function LinhaDia({ dia }: { dia: DiaRelatorioPostagem }) {
               </span>
             ))}
           </div>
-          <ContadorStories quantidade={dia.storiesPostados} ehHoje={dia.ehHoje} />
+          <ContadorStories quantidade={dia.storiesPostados} temRegistro={dia.temRegistroStories} />
         </div>
       </div>
     );
@@ -122,17 +138,16 @@ function LinhaDia({ dia }: { dia: DiaRelatorioPostagem }) {
       <span className="text-xs text-neutral-600">{dia.diaExibicao}</span>
       <div className="flex items-center gap-4">
         <span className="text-xs text-neutral-700">—</span>
-        <ContadorStories quantidade={dia.storiesPostados} ehHoje={dia.ehHoje} />
+        <ContadorStories quantidade={dia.storiesPostados} temRegistro={dia.temRegistroStories} />
       </div>
     </div>
   );
 }
 
 // Só informativo — stories não participam de aviso nem têm cor de destaque, por isso fica sempre
-// no mesmo cinza neutro dos dias sem post. Zero só é escrito de propósito em HOJE (ehHoje) — nos
-// outros dias, "—" continua sendo o certo, porque zero ali pode só significar que o cron de
-// stories ainda não tinha rodado naquele dia, não que confirmadamente não teve story nenhum.
-function ContadorStories({ quantidade, ehHoje }: { quantidade: number; ehHoje: boolean }) {
-  const texto = quantidade > 0 ? `${quantidade} ${quantidade === 1 ? "story" : "stories"}` : ehHoje ? "0 stories" : "—";
+// no mesmo cinza neutro dos dias sem post. "—" só aparece antes da coleta de stories começar
+// (temRegistro falso); a partir daí, dia sem story é "0 stories" de verdade.
+function ContadorStories({ quantidade, temRegistro }: { quantidade: number; temRegistro: boolean }) {
+  const texto = quantidade > 0 ? `${quantidade} ${quantidade === 1 ? "story" : "stories"}` : temRegistro ? "0 stories" : "—";
   return <span className="w-16 shrink-0 pt-0.5 text-right text-[11px] text-neutral-600">{texto}</span>;
 }

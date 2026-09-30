@@ -17,12 +17,11 @@ export interface DiaRelatorioPostagem {
    * (últimas 24h), sem histórico, então o contador só existe a partir de quando o cron passou a
    * rodar. Não participa de nenhum aviso/sinalização — é só informativo. */
   storiesPostados: number;
-  /** Só true no último dia da janela (hoje em SP) — usado pra mostrar "0" de propósito em vez de
-   * "—" quando storiesPostados é zero: pra hoje, zero é um dado real (o cron já rodou pelo menos
-   * uma vez, ao meio-dia, e roda de novo perto da meia-noite pra confirmar o número final do dia).
-   * Pros outros 29 dias, "—" continua sendo o certo — zero ali pode só significar que o cron não
-   * tinha rodado ainda naquele dia, não que realmente não teve story nenhum. */
-  ehHoje: boolean;
+  /** True a partir do primeiro dia em que a coleta de stories tem registro (em qualquer unidade da
+   * rede) e sempre em hoje. Nesses dias, storiesPostados zero é um dado real — "0 stories" — porque
+   * o cron já estava rodando. Antes desse marco, "—" continua sendo o certo: zero ali só
+   * significaria que ainda não havia coleta, não que a unidade não postou. */
+  temRegistroStories: boolean;
 }
 
 export interface UnidadeRelatorioPostagens {
@@ -91,7 +90,9 @@ export async function obterRelatorioPostagens(): Promise<UnidadeRelatorioPostage
       : { data: [] as Array<{ conta_id: string; dia: string }> };
 
   const storiesPorConta = new Map<string, Map<string, number>>();
+  let primeiroDiaComRegistro: string | null = null;
   for (const linha of storiesLinhas ?? []) {
+    if (primeiroDiaComRegistro === null || linha.dia < primeiroDiaComRegistro) primeiroDiaComRegistro = linha.dia;
     const porDia = storiesPorConta.get(linha.conta_id) ?? new Map<string, number>();
     porDia.set(linha.dia, (porDia.get(linha.dia) ?? 0) + 1);
     storiesPorConta.set(linha.conta_id, porDia);
@@ -197,7 +198,7 @@ export async function obterRelatorioPostagens(): Promise<UnidadeRelatorioPostage
         horasPost: d.horasPost,
         diasSemPostarDestaque: d.diasSemPostarDestaque,
         storiesPostados: storiesPorDia.get(d.dia) ?? 0,
-        ehHoje: d.dia === hojeSP,
+        temRegistroStories: d.dia === hojeSP || (primeiroDiaComRegistro !== null && d.dia >= primeiroDiaComRegistro),
       }));
 
       return { ...base, instagramVinculado: true, totalPostagens, ultimoPostEm, dias };
@@ -216,10 +217,8 @@ const BORDA_LINHA = "border-bottom:1px solid #f1f1f1";
 // Coluna de stories: só informativa, não participa do aviso de "dias sem postar" nem tem cor de
 // alerta própria — por isso fica fora do `if` do destaque acima e sempre em cinza neutro.
 function celulaStories(dia: DiaRelatorioPostagem): string {
-  // Zero só é escrito de propósito em HOJE (ver ehHoje) — nos outros dias, "—" continua sendo o
-  // certo, porque zero ali pode só significar que o cron de stories ainda não tinha rodado naquele
-  // dia, não que confirmadamente não teve story nenhum.
-  const texto = dia.storiesPostados > 0 ? dia.storiesPostados : dia.ehHoje ? "0" : "—";
+  // "—" só antes da coleta de stories começar (ver temRegistroStories); depois disso, zero é zero.
+  const texto = dia.storiesPostados > 0 ? dia.storiesPostados : dia.temRegistroStories ? "0" : "—";
   return `<td style="padding:6px 10px;font-size:11px;color:#a1a1aa;text-align:right;vertical-align:top;${BORDA_LINHA}">${texto}</td>`;
 }
 
@@ -283,6 +282,69 @@ export function classificarStoriesRede(mediaDia: number, mediaRede: number): Com
   return "na_media";
 }
 
+export interface EstatisticasStoriesUnidade {
+  /** Total de stories desde que a coleta começou (dentro da janela de 30 dias). */
+  total: number;
+  /** Média por dia nesse mesmo período; null se ainda não há coleta nenhuma. */
+  mediaDia: number | null;
+  /** Comparativo da média com a da rede; null sem Instagram vinculado ou com menos de 3 dias de coleta. */
+  comparativo: ComparativoRede | null;
+}
+
+export interface EstatisticasStoriesRede {
+  porConta: Map<string, EstatisticasStoriesUnidade>;
+  /** Dias da janela em que já existe coleta (0 a 30). */
+  diasDeColeta: number;
+}
+
+const DIAS_MINIMOS_COMPARAR_STORIES = 3;
+
+/** Stories não têm histórico na Meta: só existe contagem a partir de quando a coleta começou. O
+ * primeiro dia da janela em que QUALQUER unidade tem story marca esse começo, e todas são medidas
+ * desde ele — senão quem tem 30 dias de janela "vazia" ficaria injustamente abaixo da média. A soma
+ * e a média usam só os dias com coleta, sem extrapolar. Fonte única pro card do Radar, a página de
+ * detalhe e o relatório (download e e-mail). */
+export function calcularEstatisticasStories(unidades: UnidadeRelatorioPostagens[]): EstatisticasStoriesRede {
+  const vinculadas = unidades.filter((u) => u.instagramVinculado);
+  let inicio = -1;
+  for (let i = 0; i < DIAS_JANELA && inicio === -1; i++) {
+    if (vinculadas.some((u) => (u.dias[i]?.storiesPostados ?? 0) > 0)) inicio = i;
+  }
+  const diasDeColeta = inicio === -1 ? 0 : DIAS_JANELA - inicio;
+  const totalDe = (u: UnidadeRelatorioPostagens) =>
+    inicio === -1 ? 0 : u.dias.slice(inicio).reduce((soma, d) => soma + d.storiesPostados, 0);
+  const mediaDe = (u: UnidadeRelatorioPostagens): number | null => (diasDeColeta > 0 ? totalDe(u) / diasDeColeta : null);
+
+  const medias = vinculadas.map(mediaDe).filter((m): m is number => m !== null);
+  const mediaRede = medias.length > 0 ? medias.reduce((a, b) => a + b, 0) / medias.length : 0;
+
+  const porConta = new Map<string, EstatisticasStoriesUnidade>();
+  for (const u of unidades) {
+    const mediaDia = u.instagramVinculado ? mediaDe(u) : null;
+    porConta.set(u.contaId, {
+      total: totalDe(u),
+      mediaDia,
+      comparativo:
+        u.instagramVinculado && diasDeColeta >= DIAS_MINIMOS_COMPARAR_STORIES
+          ? classificarStoriesRede(mediaDia ?? 0, mediaRede)
+          : null,
+    });
+  }
+  return { porConta, diasDeColeta };
+}
+
+/** "~5" (inteiro); abaixo de 1 mantém uma casa ("~0,8") pra não virar "~0". */
+export function formatarMediaStories(mediaDia: number): string {
+  const texto = mediaDia >= 1 ? Math.round(mediaDia).toString() : mediaDia.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+  return `~${texto}`;
+}
+
+/** "42 stories em 30 dias" — ou "em N dias de coleta" enquanto a coleta não cobre a janela toda. */
+export function descricaoTotalStories(total: number, diasDeColeta: number): string {
+  const periodo = diasDeColeta >= DIAS_JANELA || diasDeColeta === 0 ? "em 30 dias" : `em ${diasDeColeta} dias de coleta`;
+  return `${total} ${total === 1 ? "story" : "stories"} ${periodo}`;
+}
+
 export const ROTULO_COMPARATIVO: Record<ComparativoRede, string> = {
   acima: "Acima da média da rede",
   na_media: "Na média da rede",
@@ -291,8 +353,7 @@ export const ROTULO_COMPARATIVO: Record<ComparativoRede, string> = {
   sem_base: "Sem base de comparação ainda",
 };
 
-function compararComMedia(totalPostagens: number, media: number): { rotulo: string; cor: string; fundo: string } {
-  const classificacao = classificarComparativoRede(totalPostagens, media);
+function estiloComparativo(classificacao: ComparativoRede): { rotulo: string; cor: string; fundo: string } {
   const cores: Record<ComparativoRede, { cor: string; fundo: string }> = {
     acima: { cor: "#15803d", fundo: "#dcfce7" },
     na_media: { cor: "#52525b", fundo: "#f4f4f5" },
@@ -311,7 +372,7 @@ function iniciais(nome: string): string {
   return (palavras[0]?.[0] ?? "").toUpperCase() + (palavras.length > 1 ? (palavras[1]?.[0] ?? "").toUpperCase() : "");
 }
 
-function montarSecaoUnidade(unidade: UnidadeRelatorioPostagens, mediaRede: number): string {
+function montarSecaoUnidade(unidade: UnidadeRelatorioPostagens, mediaRede: number, estatisticas: EstatisticasStoriesRede): string {
   const avatar = `<div style="width:34px;height:34px;border-radius:50%;background:#f4f4f5;color:#71717a;font-size:12.5px;font-weight:700;text-align:center;line-height:34px">${iniciais(unidade.clienteNome)}</div>`;
 
   if (!unidade.instagramVinculado) {
@@ -331,21 +392,40 @@ function montarSecaoUnidade(unidade: UnidadeRelatorioPostagens, mediaRede: numbe
   const tabela = (dias: DiaRelatorioPostagem[]) =>
     `<table style="width:100%;border-collapse:collapse">${CABECALHO_COLUNA}${dias.map(celulaDia).join("")}</table>`;
 
-  const comparativo = compararComMedia(unidade.totalPostagens, mediaRede);
+  const comparativo = estiloComparativo(classificarComparativoRede(unidade.totalPostagens, mediaRede));
+  const stats = estatisticas.porConta.get(unidade.contaId);
+  const comparativoStories = estiloComparativo(stats?.comparativo ?? "sem_base");
+  const selo = (estilo: { rotulo: string; cor: string; fundo: string }) =>
+    `<span style="display:inline-block;padding:3px 10px;border-radius:99px;background:${estilo.fundo};color:${estilo.cor};font-size:10.5px;font-weight:700">${estilo.rotulo}</span>`;
+  const textoStories = stats
+    ? `${descricaoTotalStories(stats.total, estatisticas.diasDeColeta)}${stats.mediaDia !== null ? `<span style="margin:0 6px;color:#e4e4e7">·</span>média ${formatarMediaStories(stats.mediaDia)}/dia` : ""}`
+    : "";
 
+  // Cabeçalho em três linhas (nome / postagens + selo / stories + selo) — cada métrica tem o
+  // próprio selo de comparativo com a rede, alinhado à linha dela.
   return `<div style="margin-bottom:14px;border:1px solid #ececef;border-radius:14px;padding:18px">
-    <table style="width:100%;border-collapse:collapse;margin-bottom:14px"><tr>
-      <td style="width:44px;vertical-align:top">${avatar}</td>
-      <td style="vertical-align:top">
-        <p style="margin:0;font-size:14.5px;font-weight:700;color:#18181b">${unidade.clienteNome}</p>
-        <p style="margin:3px 0 0;font-size:11.5px;color:#a1a1aa">
-          ${unidade.instagramUsername ? `@${unidade.instagramUsername}<span style="margin:0 6px;color:#e4e4e7">·</span>` : ""}${unidade.totalPostagens} ${unidade.totalPostagens === 1 ? "postagem" : "postagens"} em 30 dias
-        </p>
-      </td>
-      <td style="width:1%;white-space:nowrap;vertical-align:top;text-align:right">
-        <span style="display:inline-block;padding:3px 10px;border-radius:99px;background:${comparativo.fundo};color:${comparativo.cor};font-size:10.5px;font-weight:700">${comparativo.rotulo}</span>
-      </td>
-    </tr></table>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:14px">
+      <tr>
+        <td rowspan="3" style="width:44px;vertical-align:top">${avatar}</td>
+        <td colspan="2" style="vertical-align:top">
+          <p style="margin:0;font-size:14.5px;font-weight:700;color:#18181b">${unidade.clienteNome}</p>
+        </td>
+      </tr>
+      <tr>
+        <td style="vertical-align:middle;padding-top:5px">
+          <p style="margin:0;font-size:11.5px;color:#a1a1aa">
+            ${unidade.instagramUsername ? `@${unidade.instagramUsername}<span style="margin:0 6px;color:#e4e4e7">·</span>` : ""}${unidade.totalPostagens} ${unidade.totalPostagens === 1 ? "postagem" : "postagens"} em 30 dias
+          </p>
+        </td>
+        <td style="width:1%;white-space:nowrap;vertical-align:middle;text-align:right;padding-top:5px">${selo(comparativo)}</td>
+      </tr>
+      <tr>
+        <td style="vertical-align:middle;padding-top:6px">
+          <p style="margin:0;font-size:11.5px;color:#a1a1aa">${textoStories}</p>
+        </td>
+        <td style="width:1%;white-space:nowrap;vertical-align:middle;text-align:right;padding-top:6px">${selo(comparativoStories)}</td>
+      </tr>
+    </table>
     <table style="width:100%;border-collapse:collapse"><tr>
       <td style="width:50%;vertical-align:top;padding-right:14px">${tabela(colunas[0])}</td>
       <td style="width:50%;vertical-align:top;padding-left:14px;border-left:1px solid #ececef">${tabela(colunas[1])}</td>
@@ -370,9 +450,10 @@ export function montarHtmlRelatorioPostagens(unidades: UnidadeRelatorioPostagens
   const mediaRede =
     vinculadas.length > 0 ? vinculadas.reduce((soma, u) => soma + u.totalPostagens, 0) / vinculadas.length : 0;
 
+  const estatisticas = calcularEstatisticasStories(unidades);
   const corpo =
     unidades.length > 0
-      ? unidades.map((u) => montarSecaoUnidade(u, mediaRede)).join("")
+      ? unidades.map((u) => montarSecaoUnidade(u, mediaRede, estatisticas)).join("")
       : `<p style="font-size:13px;color:#a1a1aa">Nenhuma unidade de franquia ativa ainda.</p>`;
 
   return `<!DOCTYPE html>
