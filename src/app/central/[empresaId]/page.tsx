@@ -50,7 +50,7 @@ export default async function CentralDaEmpresaPage({ params }: { params: Promise
   return (
     <>
       <Cabecalho ativo="/central" empresa={{ id: empresa.id, nome: empresa.nome }} />
-      <main className="mx-auto max-w-3xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
+      <main className="mx-auto max-w-5xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
         <div className="flex items-center gap-2.5">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/[0.06] text-neutral-300">
             <Buildings size={18} weight="fill" />

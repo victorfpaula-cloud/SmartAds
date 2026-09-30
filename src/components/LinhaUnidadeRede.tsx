@@ -6,6 +6,33 @@ import { Lightning, WarningCircle } from "@phosphor-icons/react";
 import ModalBoostAutomatico, { type AlteracoesBoost } from "@/components/ModalBoostAutomatico";
 import type { UnidadeRedeResumo } from "@/lib/campanhasRede";
 
+// Colunas de largura FIXA (só a da unidade estica): com `auto` cada linha calculava a própria
+// largura e o boost/gasto saíam desalinhados de uma linha pra outra e do cabeçalho.
+function classeColunas(comBoost: boolean): string {
+  return comBoost
+    ? "sm:grid-cols-[minmax(0,1fr)_8.5rem_7rem_11rem]"
+    : "sm:grid-cols-[minmax(0,1fr)_8.5rem_7rem]";
+}
+
+/** Legenda das colunas da tabela de unidades — mesma grade das linhas, só aparece a partir de sm. */
+export function CabecalhoColunasUnidades({ comBoost, nomeMes }: { comBoost: boolean; nomeMes: string }) {
+  return (
+    <div
+      className={`hidden gap-x-4 border-b border-white/10 px-5 py-2 text-[10.5px] font-medium uppercase tracking-wide text-neutral-500 sm:grid ${classeColunas(comBoost)}`}
+    >
+      <span>Unidade</span>
+      <span>Campanhas no ar</span>
+      <span
+        className="text-right"
+        title={`Soma do que todas as campanhas da conta gastaram de 1º de ${nomeMes} até agora, direto da Meta`}
+      >
+        Gasto em {nomeMes}
+      </span>
+      {comBoost && <span>Boost automático</span>}
+    </div>
+  );
+}
+
 const formatoReal = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const reais = (centavos: number) => formatoReal.format(centavos / 100);
 
@@ -68,9 +95,7 @@ export default function LinhaUnidadeRede({
     if (resposta.ok) setBoostConfig({ ...boostConfig, boost_automatico_ativo: novoAtivo });
   }
 
-  const colunas = comBoost
-    ? "sm:grid-cols-[minmax(0,1.4fr)_auto_minmax(0,6rem)_auto]"
-    : "sm:grid-cols-[minmax(0,1.4fr)_auto_minmax(0,7rem)]";
+  const colunas = classeColunas(comBoost);
 
   return (
     <li className="transition hover:bg-white/[0.03]">
@@ -90,7 +115,7 @@ export default function LinhaUnidadeRede({
 
         <Link
           href={href}
-          className={`justify-self-end rounded-full px-2.5 py-1 text-xs font-semibold ${
+          className={`justify-self-end whitespace-nowrap rounded-full px-2.5 py-1 text-center text-xs font-semibold sm:justify-self-start ${
             ativa ? "bg-ok/15 text-ok" : "bg-white/[0.05] text-neutral-500"
           }`}
         >
@@ -112,20 +137,20 @@ export default function LinhaUnidadeRede({
         </Link>
 
         {comBoost && (
-          <div className="col-span-2 flex items-center justify-between gap-2 border-t border-white/5 pt-2 sm:col-span-1 sm:justify-end sm:border-0 sm:pt-0">
+          <div className="col-span-2 border-t border-white/5 pt-2 sm:col-span-1 sm:border-0 sm:pt-0">
             {unidade.boost.temInstagram ? (
-              <>
+              <div className="grid grid-cols-[1fr_1rem_auto] items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setModalAberto(true)}
-                  className="flex items-center gap-1.5 text-[11px] font-semibold text-neutral-300 hover:text-neutral-100"
+                  className="flex items-center gap-1.5 justify-self-start text-[11px] font-semibold text-neutral-300 hover:text-neutral-100"
                 >
                   <Lightning
                     size={12}
                     weight={boostLigado ? "fill" : "regular"}
                     className={boostLigado ? "text-ok" : "text-neutral-500"}
                   />
-                  Boost
+                  {boostLigado ? "Ligado" : "Desligado"}
                   {boostLigado && unidade.boost.noAr > 0 && (
                     <span
                       title={`${unidade.boost.noAr} campanha${unidade.boost.noAr > 1 ? "s" : ""} de boost automático no ar`}
@@ -135,16 +160,19 @@ export default function LinhaUnidadeRede({
                     </span>
                   )}
                 </button>
-                {boostLigado && unidade.boost.falha && (
-                  <button
-                    type="button"
-                    onClick={() => setMostrarErro((atual) => !atual)}
-                    aria-label="Boost automático precisa de atenção — ver erro"
-                    className="text-danger transition hover:text-danger/80"
-                  >
-                    <WarningCircle size={14} weight="fill" />
-                  </button>
-                )}
+                {/* Espaço reservado pro aviso de erro: com ou sem ele, o interruptor fica no mesmo lugar. */}
+                <span className="flex justify-center">
+                  {boostLigado && unidade.boost.falha && (
+                    <button
+                      type="button"
+                      onClick={() => setMostrarErro((atual) => !atual)}
+                      aria-label="Boost automático precisa de atenção — ver erro"
+                      className="text-danger transition hover:text-danger/80"
+                    >
+                      <WarningCircle size={14} weight="fill" />
+                    </button>
+                  )}
+                </span>
                 <button
                   type="button"
                   onClick={alternar}
@@ -160,7 +188,7 @@ export default function LinhaUnidadeRede({
                     }`}
                   />
                 </button>
-              </>
+              </div>
             ) : (
               <span className="text-[10.5px] text-neutral-600" title="Sem Instagram vinculado a essa conta">
                 sem Instagram

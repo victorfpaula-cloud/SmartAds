@@ -1,7 +1,7 @@
 import { Buildings, Storefront } from "@phosphor-icons/react/dist/ssr";
 import type { UnidadeRedeResumo } from "@/lib/campanhasRede";
 import BotaoAtualizarRede from "@/components/BotaoAtualizarRede";
-import LinhaUnidadeRede from "@/components/LinhaUnidadeRede";
+import LinhaUnidadeRede, { CabecalhoColunasUnidades } from "@/components/LinhaUnidadeRede";
 
 const formatoReal = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const reais = (centavos: number) => formatoReal.format(centavos / 100);
@@ -70,6 +70,9 @@ export default function PanoramaCampanhasRede({
         <p className="mt-0.5 text-[11px] text-neutral-500">
           {t.comCampanha} de {unidades.length} unidades com campanha no ar · {formatarAtualizacao(atualizadoEm)}
         </p>
+        <p className="mt-0.5 text-[11px] text-neutral-600">
+          Gasto = soma do que todas as campanhas da conta gastaram de 1º de {nomeMes} até agora, direto da Meta.
+        </p>
         {t.semDados > 0 && (
           <p className="mt-1 text-[11px] text-amber-400">
             {t.semDados} {t.semDados === 1 ? "conta ainda sem dados" : "contas ainda sem dados"} — clique em
@@ -99,6 +102,7 @@ export default function PanoramaCampanhasRede({
     return (
       <section className="cartao-vidro overflow-hidden">
         <div className="border-b border-white/10">{cabecalhoGeral}</div>
+        <CabecalhoColunasUnidades comBoost={comBoost} nomeMes={nomeMes} />
         <ul className="divide-y divide-white/5">
           {unidades.map((unidade) => (
             <LinhaUnidadeRede key={unidade.contaId} unidade={unidade} nomeMes={nomeMes} comBoost={comBoost} />
@@ -144,6 +148,7 @@ export default function PanoramaCampanhasRede({
               </div>
               <Indicadores unidades={lista} nomeMes={nomeMes} />
             </div>
+            <CabecalhoColunasUnidades comBoost={comBoost} nomeMes={nomeMes} />
             <ul className="divide-y divide-white/5">
               {lista.map((unidade) => (
                 <LinhaUnidadeRede key={unidade.contaId} unidade={unidade} nomeMes={nomeMes} comBoost={comBoost} />
