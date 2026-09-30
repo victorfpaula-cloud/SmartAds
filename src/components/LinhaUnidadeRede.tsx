@@ -150,7 +150,7 @@ export default function LinhaUnidadeRede({
                     weight={boostLigado ? "fill" : "regular"}
                     className={boostLigado ? "text-ok" : "text-neutral-500"}
                   />
-                  {boostLigado ? "Ligado" : "Desligado"}
+                  Boost
                   {boostLigado && unidade.boost.noAr > 0 && (
                     <span
                       title={`${unidade.boost.noAr} campanha${unidade.boost.noAr > 1 ? "s" : ""} de boost automático no ar`}

@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const [{ campanhas, proximoCursor }, insights, { data: cache }, conjuntos] = await Promise.all([
+    const [{ campanhas, proximoCursor }, insights, { data: cache }, conjuntos, insightsMes] = await Promise.all([
       // limit 50 (não o padrão de 10 de listarCampanhas) — com 10 por página, uma conta com mais
       // de 10 campanhas cadastradas podia ter uma campanha ATIVA fora da primeira página, escondida
       // até alguém clicar em "Carregar mais campanhas" (ninguém clica achando que só tem histórico
@@ -47,7 +47,14 @@ export async function GET(request: NextRequest) {
       // Orçamento fica no conjunto de anúncios, não na campanha — sem isso a coluna vinha vazia.
       // Falha aqui não derruba a tela: cai no orçamento da campanha (que existe em campanhas CBO).
       listarConjuntosDaConta(conta.meta_ad_account_id).catch(() => null),
+      // Gasto do mês corrente por campanha (Meta "this_month", em reais) — a coluna "Gasto no mês" e a
+      // soma do cartão do topo, pra dar pra conferir o total contra o Gerenciador campanha a campanha.
+      obterInsightsConta(conta.meta_ad_account_id, { nivel: "campaign", datePreset: "this_month", porDia: false }).catch(
+        () => null
+      ),
     ]);
+    const gastoMesPorCampanha = new Map((insightsMes ?? []).map((i) => [i.campaign_id, Number(i.spend ?? 0)]));
+    const gastoMesTotalReais = insightsMes ? [...gastoMesPorCampanha.values()].reduce((a, b) => a + b, 0) : null;
 
     const gastoPorCampanha = new Map(insights.map((i) => [i.campaign_id, i.spend]));
     const cachePorCampanha = new Map((cache ?? []).map((c) => [c.meta_campaign_id, c]));
@@ -76,6 +83,7 @@ export async function GET(request: NextRequest) {
       return {
         ...campanha,
         spendTotal: gastoPorCampanha.get(campanha.id) ?? "0",
+        gastoMesReais: gastoMesPorCampanha.get(campanha.id) ?? 0,
         local: cachePorCampanha.get(campanha.id) ?? null,
         orcamentoDiarioCentavos: diarioConjuntos || (campanha.daily_budget ? Number(campanha.daily_budget) : null),
         orcamentoVitalicioCentavos:
@@ -83,7 +91,7 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    return NextResponse.json({ campanhas: linhas, proximoCursor });
+    return NextResponse.json({ campanhas: linhas, proximoCursor, gastoMesTotalReais });
   } catch (erro) {
     if (erro instanceof ErroMetaNaoConectado) {
       return NextResponse.json({ erro: erro.message, naoConectado: true }, { status: 409 });

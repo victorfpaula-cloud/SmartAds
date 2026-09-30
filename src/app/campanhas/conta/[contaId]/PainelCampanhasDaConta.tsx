@@ -15,6 +15,8 @@ interface Campanha {
   /** Gasto total acumulado da campanha (date_preset "maximum" na Meta) — o que a coluna "Gasto"
    * mostra, e também o que decide o que é "relevante" por padrão (ver campanhasRelevantes abaixo). */
   spendTotal: string;
+  /** Gasto do mês corrente (em reais), só desta campanha. */
+  gastoMesReais: number;
   /** Orçamento real da campanha (soma dos conjuntos de anúncios), em centavos — ver /api/campanhas/status. */
   orcamentoDiarioCentavos: number | null;
   orcamentoVitalicioCentavos: number | null;
@@ -135,6 +137,9 @@ export default function PainelCampanhasDaConta({
   gastoMesCentavos: number | null;
 }) {
   const [campanhas, setCampanhas] = useState<Campanha[]>([]);
+  // Soma do gasto do mês de TODAS as campanhas da conta, calculada na hora pela Meta (a do cache só
+  // atualiza 2x/dia); null enquanto não chegou ou se a Meta falhou.
+  const [gastoMesAoVivoReais, setGastoMesAoVivoReais] = useState<number | null>(null);
   const [proximoCursor, setProximoCursor] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [carregandoMais, setCarregandoMais] = useState(false);
@@ -153,6 +158,7 @@ export default function PainelCampanhasDaConta({
         if (!r.ok) throw new Error(corpo.erro || "Falha ao carregar campanhas.");
         setCampanhas(corpo.campanhas ?? []);
         setProximoCursor(corpo.proximoCursor ?? null);
+        setGastoMesAoVivoReais(corpo.gastoMesTotalReais ?? null);
       })
       .catch((e) => setErro(e.message))
       .finally(() => setCarregando(false));
@@ -258,15 +264,21 @@ export default function PainelCampanhasDaConta({
           />
           <ResumoItem
             rotulo="Gasto no mês atual"
-            valor={gastoMesCentavos != null ? formatarCentavos(gastoMesCentavos) : "—"}
-            detalhe={gastoMesCentavos != null ? "todas as campanhas da conta, direto da Meta" : "aguardando a próxima atualização"}
+            valor={
+              gastoMesAoVivoReais != null
+                ? formatoReal.format(gastoMesAoVivoReais)
+                : gastoMesCentavos != null
+                  ? formatarCentavos(gastoMesCentavos)
+                  : "—"
+            }
+            detalhe="soma da coluna “Gasto no mês”, direto da Meta"
           />
         </div>
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-neutral-500">
-          O gasto é o total acumulado de cada campanha desde que ela começou. Clique no status pra
+          “Gasto no mês” é só o mês atual; “Gasto total” é o acumulado desde que a campanha começou. Clique no status pra
           pausar/ativar — os outros estados (análise, problema, encerrada) só mudam direto no
           Gerenciador de Anúncios.
         </p>
@@ -289,13 +301,14 @@ export default function PainelCampanhasDaConta({
           </p>
         ) : (
           <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] text-left text-sm">
+          <table className="w-full min-w-[720px] text-left text-sm">
             <thead>
               <tr className="border-b border-white/10 text-xs uppercase tracking-wide text-neutral-500">
                 <th className="px-4 py-3 font-medium">Campanha</th>
                 <th className="px-4 py-3 font-medium">Tipo</th>
                 <th className="px-4 py-3 font-medium">Status</th>
                 <th className="px-4 py-3 font-medium">Orçamento</th>
+                <th className="px-4 py-3 font-medium">Gasto no mês</th>
                 <th className="px-4 py-3 font-medium">Gasto total</th>
                 <th className="px-4 py-3 font-medium"></th>
               </tr>
@@ -336,7 +349,8 @@ export default function PainelCampanhasDaConta({
                       <p className="text-[10.5px] text-neutral-600">{formatarOrcamento(campanha).tipo}</p>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-neutral-200">{formatarGasto(campanha.spendTotal)}</td>
+                  <td className="px-4 py-3 text-neutral-200">{formatoReal.format(campanha.gastoMesReais)}</td>
+                  <td className="px-4 py-3 text-neutral-400">{formatarGasto(campanha.spendTotal)}</td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex justify-end gap-3">
                       <button
