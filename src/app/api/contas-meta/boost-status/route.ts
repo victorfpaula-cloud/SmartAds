@@ -11,12 +11,12 @@ export async function GET() {
 
   const { data: contasComBoost } = await supabase
     .from("smartads_contas_meta")
-    .select("id")
+    .select("id, boost_automatico_duracao_dias")
     .eq("boost_automatico_ativo", true);
 
   const contaIds = (contasComBoost ?? []).map((c) => c.id);
   if (contaIds.length === 0) {
-    return NextResponse.json({ ultimasFalhas: {} });
+    return NextResponse.json({ ultimasFalhas: {}, noArPorConta: {} });
   }
 
   const { data: logs } = await supabase
@@ -35,5 +35,17 @@ export async function GET() {
     }
   }
 
-  return NextResponse.json({ ultimasFalhas });
+  // Campanhas de boost automático "no ar" por conta: as criadas com sucesso que ainda estão dentro da
+  // duração escolhida (3 ou 7 dias, ver boostAutomatico.ts — a Meta encerra sozinha no fim). Vem do
+  // próprio log, sem bater na Meta; campanha pausada à mão ainda conta até o fim da janela.
+  const duracaoPorConta = new Map((contasComBoost ?? []).map((c) => [c.id, c.boost_automatico_duracao_dias ?? 3]));
+  const noArPorConta: Record<string, number> = {};
+  const agora = Date.now();
+  for (const log of logs ?? []) {
+    if (!log.sucesso) continue;
+    const fimMs = new Date(log.created_at).getTime() + (duracaoPorConta.get(log.conta_id) ?? 3) * 86_400_000;
+    if (fimMs > agora) noArPorConta[log.conta_id] = (noArPorConta[log.conta_id] ?? 0) + 1;
+  }
+
+  return NextResponse.json({ ultimasFalhas, noArPorConta });
 }

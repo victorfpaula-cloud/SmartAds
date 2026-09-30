@@ -43,6 +43,7 @@ export async function atualizarCacheFinanceiroDaConta(
       .eq("conta_id", contaId)
       .maybeSingle();
 
+    let erroFonte: string | null = null;
     const [saldoIncrementalCentavos, saldo, insights, fonte] = await Promise.all([
       calcularSaldoIncremental(
         metaAdAccountId,
@@ -53,7 +54,10 @@ export async function atualizarCacheFinanceiroDaConta(
       obterInsightsConta(metaAdAccountId, { nivel: "account", datePreset: "last_7d", porDia: false }),
       // Saldo que a própria Meta mostra na forma de pagamento da conta (ver FonteDePagamentoMeta).
       // Sem permissão/erro aqui, cai no saldo próprio de sempre em vez de derrubar a conta toda.
-      obterFonteDePagamento(metaAdAccountId).catch(() => null),
+      obterFonteDePagamento(metaAdAccountId).catch((e) => {
+        erroFonte = e instanceof Error ? e.message : String(e);
+        return null;
+      }),
     ]);
     // A Meta manda quando a conta é pré-paga e o texto traz o saldo; senão o saldo próprio
     // (valor digitado + movimentos), que nunca é inventado — fica null sem ponto de partida.
@@ -65,7 +69,13 @@ export async function atualizarCacheFinanceiroDaConta(
     linha = {
       saldoDisponivelCentavos,
       faturaEmAbertoCentavos: saldo.faturaEmAbertoCentavos,
-      fontePagamentoTexto: fonte?.texto ?? null,
+      // Texto da Meta; quando não vem, guarda o motivo (erro ou "sem forma de pagamento") pra
+      // aparecer na tela em vez de um traço mudo.
+      fontePagamentoTexto: fonte
+        ? fonte.texto ?? "Meta não devolveu forma de pagamento pra essa conta"
+        : erroFonte
+          ? `Erro ao ler da Meta: ${erroFonte}`
+          : null,
       gasto7diasCentavos,
       mediaDiariaCentavos,
       projecaoMensalCentavos: mediaDiariaCentavos * 30,

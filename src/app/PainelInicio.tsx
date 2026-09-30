@@ -61,6 +61,9 @@ export default function PainelInicio({ empresas }: { empresas: EmpresaResumo[] }
     Record<string, { erroMensagem: string | null; criadoEm: string }>
   >({});
 
+  // Quantas campanhas de boost automático estão no ar por conta (ver /api/contas-meta/boost-status).
+  const [boostNoArPorConta, setBoostNoArPorConta] = useState<Record<string, number>>({});
+
   useEffect(() => {
     fetch("/api/saude")
       .then((r) => r.json())
@@ -75,7 +78,10 @@ export default function PainelInicio({ empresas }: { empresas: EmpresaResumo[] }
 
     fetch("/api/contas-meta/boost-status")
       .then((r) => r.json())
-      .then((corpo) => setUltimasFalhasBoost(corpo.ultimasFalhas ?? {}))
+      .then((corpo) => {
+        setUltimasFalhasBoost(corpo.ultimasFalhas ?? {});
+        setBoostNoArPorConta(corpo.noArPorConta ?? {});
+      })
       .catch(() => {});
   }, []);
 
@@ -138,6 +144,7 @@ export default function PainelInicio({ empresas }: { empresas: EmpresaResumo[] }
                       conta={contaComOverride(conta)}
                       campanhasAtivas={campanhasAtivasPorConta[conta.id]}
                       falhaBoost={ultimasFalhasBoost[conta.id]}
+                      boostNoAr={boostNoArPorConta[conta.id] ?? 0}
                       onBoostAtualizado={(alteracoes) =>
                         setBoostOverrides((atual) => ({ ...atual, [conta.id]: alteracoes }))
                       }
@@ -158,12 +165,14 @@ function CardConta({
   conta,
   campanhasAtivas,
   falhaBoost,
+  boostNoAr,
   onBoostAtualizado,
 }: {
   cliente: ClienteResumo;
   conta: ContaResumo;
   campanhasAtivas: number | undefined;
   falhaBoost: { erroMensagem: string | null; criadoEm: string } | undefined;
+  boostNoAr: number;
   onBoostAtualizado: (alteracoes: AlteracoesBoost) => void;
 }) {
   const [modalBoostAberto, setModalBoostAberto] = useState(false);
@@ -228,6 +237,14 @@ function CardConta({
                   className={`shrink-0 ${conta.boost_automatico_ativo ? "text-ok" : "text-neutral-500"}`}
                 />
                 Boost automático
+                {conta.boost_automatico_ativo && boostNoAr > 0 && (
+                  <span
+                    title={`${boostNoAr} campanha${boostNoAr > 1 ? "s" : ""} de boost automático no ar`}
+                    className="rounded-full bg-ok/20 px-1.5 py-px text-[10px] font-bold leading-none text-ok"
+                  >
+                    {boostNoAr}
+                  </span>
+                )}
               </button>
               {falhaBoost && (
                 <button
