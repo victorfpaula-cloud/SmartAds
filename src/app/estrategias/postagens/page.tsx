@@ -314,7 +314,7 @@ function CardUnidade({ unidade }: { unidade: CardData }) {
         <p className="mt-0.5 flex items-start gap-1 text-[10.5px] font-semibold leading-tight text-neutral-300">
           <FilmStrip size={11} weight="bold" className="mt-px shrink-0 text-neutral-500" />
           <span>
-            média ~{mediaArredondada}/dia · {unidade.storiesMes} no mês
+            ~{mediaArredondada}/dia · {unidade.storiesMes}/mês
           </span>
         </p>
       </div>
