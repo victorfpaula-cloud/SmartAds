@@ -15,6 +15,9 @@ interface Campanha {
   /** Gasto total acumulado da campanha (date_preset "maximum" na Meta) — o que a coluna "Gasto"
    * mostra, e também o que decide o que é "relevante" por padrão (ver campanhasRelevantes abaixo). */
   spendTotal: string;
+  /** Orçamento real da campanha (soma dos conjuntos de anúncios), em centavos — ver /api/campanhas/status. */
+  orcamentoDiarioCentavos: number | null;
+  orcamentoVitalicioCentavos: number | null;
   start_time?: string;
   stop_time?: string;
   local: {
@@ -24,6 +27,15 @@ interface Campanha {
     meta_ad_ids: string[] | null;
   } | null;
 }
+
+const NOME_OBJETIVO: Record<string, string> = {
+  OUTCOME_ENGAGEMENT: "Engajamento",
+  OUTCOME_AWARENESS: "Alcance",
+  OUTCOME_LEADS: "Cadastros",
+  OUTCOME_TRAFFIC: "Tráfego",
+  OUTCOME_SALES: "Vendas",
+  OUTCOME_APP_PROMOTION: "App",
+};
 
 const NOME_MODELO: Record<string, string> = {
   engajamento: "Engajamento",
@@ -81,9 +93,30 @@ function formatarPeriodo(campanha: Campanha): string {
   return fim ? `${inicio} – ${fim}` : `Desde ${inicio}, sem data de término`;
 }
 
-function formatarReais(centavosTexto?: string): string {
-  if (!centavosTexto) return "-";
-  return `R$ ${(Number(centavosTexto) / 100).toFixed(2).replace(".", ",")}`;
+const formatoReal = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+
+/** O `spend` dos insights da Meta já vem em REAIS ("14.00" = R$ 14,00) — diferente dos orçamentos,
+ * que vêm em centavos. Tratar o gasto como centavos mostrava R$ 0,14 pra uma campanha que gastou
+ * R$ 14 (relatado em 30/09/2026). */
+function formatarGasto(reaisTexto?: string): string {
+  const valor = Number(reaisTexto ?? 0);
+  return formatoReal.format(Number.isFinite(valor) ? valor : 0);
+}
+
+function formatarCentavos(centavos: number): string {
+  return formatoReal.format(centavos / 100);
+}
+
+/** "R$ 30,00/dia" (orçamento diário) ou "R$ 200,00 no total" (vitalício); "—" só quando a Meta não
+ * devolveu orçamento nenhum, nem no conjunto nem na campanha. */
+function formatarOrcamento(campanha: Campanha): { valor: string; tipo: string } {
+  if (campanha.orcamentoDiarioCentavos) {
+    return { valor: formatarCentavos(campanha.orcamentoDiarioCentavos), tipo: "por dia" };
+  }
+  if (campanha.orcamentoVitalicioCentavos) {
+    return { valor: formatarCentavos(campanha.orcamentoVitalicioCentavos), tipo: "no total" };
+  }
+  return { valor: "—", tipo: "" };
 }
 
 /** Campanhas de UMA conta só (a escolha de qual conta acontece antes, em /campanhas) — a coluna
@@ -93,7 +126,16 @@ function formatarReais(centavosTexto?: string): string {
  * chamada à Meta em vez de duas (uma só de 30 dias, outra de vida inteira). O resto (campanhas de
  * verdade zeradas, nunca tiveram gasto nenhum) fica escondido atrás de "Ver todas", pra não
  * competir por atenção com o que importa agora. */
-export default function PainelCampanhasDaConta({ contaId }: { contaId: string }) {
+export default function PainelCampanhasDaConta({
+  contaId,
+  gastoMesCentavos,
+  tetoMensalCentavos,
+}: {
+  contaId: string;
+  /** Gasto do mês corrente da conta (cache atualizado 2x/dia); null = ainda não calculado. */
+  gastoMesCentavos: number | null;
+  tetoMensalCentavos: number;
+}) {
   const [campanhas, setCampanhas] = useState<Campanha[]>([]);
   const [proximoCursor, setProximoCursor] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(false);
@@ -152,6 +194,8 @@ export default function PainelCampanhasDaConta({ contaId }: { contaId: string })
     [campanhas]
   );
   const campanhasExibidas = verTodas ? campanhas : campanhasRelevantes;
+  const ativas = campanhas.filter((c) => statusExibicao(c).rotulo === "Ativa");
+  const orcamentoDiarioAtivoCentavos = ativas.reduce((total, c) => total + (c.orcamentoDiarioCentavos ?? 0), 0);
   const escondidas = campanhas.length - campanhasRelevantes.length;
 
   async function alternarStatus(campanha: Campanha) {
@@ -180,8 +224,8 @@ export default function PainelCampanhasDaConta({ contaId }: { contaId: string })
       alert("Essa campanha não tem conjunto de anúncios rastreado localmente pra editar por aqui.");
       return;
     }
-    const tipo = campanha.daily_budget ? "diario" : "vitalicio";
-    const atual = Number(campanha.daily_budget ?? campanha.lifetime_budget ?? 0) / 100;
+    const tipo = campanha.orcamentoDiarioCentavos ? "diario" : "vitalicio";
+    const atual = (campanha.orcamentoDiarioCentavos ?? campanha.orcamentoVitalicioCentavos ?? 0) / 100;
     const novoValor = prompt(`Novo orçamento ${tipo === "diario" ? "diário" : "total"} (R$):`, String(atual));
     if (!novoValor) return;
 
@@ -207,10 +251,26 @@ export default function PainelCampanhasDaConta({ contaId }: { contaId: string })
         <div className="rounded-lg border border-danger/30 bg-danger/10 px-4 py-2.5 text-sm text-danger">{erro}</div>
       )}
 
+      {!carregando && (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <ResumoItem rotulo="Campanhas ativas" valor={String(ativas.length)} />
+          <ResumoItem
+            rotulo="Orçamento diário (ativas)"
+            valor={orcamentoDiarioAtivoCentavos > 0 ? `${formatarCentavos(orcamentoDiarioAtivoCentavos)}/dia` : "—"}
+          />
+          <ResumoItem
+            rotulo="Gasto no mês"
+            valor={gastoMesCentavos != null ? formatarCentavos(gastoMesCentavos) : "—"}
+            detalhe={gastoMesCentavos != null ? `de ${formatarCentavos(tetoMensalCentavos)} do mês` : "aguardando a próxima atualização"}
+          />
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-neutral-500">
-          Gasto total acumulado de cada campanha. Clique no status pra pausar/ativar — os outros
-          estados (análise, problema, encerrada) só mudam direto no Gerenciador de Anúncios.
+          O gasto é o total acumulado de cada campanha desde que ela começou. Clique no status pra
+          pausar/ativar — os outros estados (análise, problema, encerrada) só mudam direto no
+          Gerenciador de Anúncios.
         </p>
         {escondidas > 0 && (
           <button
@@ -253,7 +313,9 @@ export default function PainelCampanhasDaConta({ contaId }: { contaId: string })
                     {periodo && <p className="mt-0.5 text-[10.5px] text-neutral-600">{periodo}</p>}
                   </td>
                   <td className="px-4 py-3 text-neutral-400">
-                    {campanha.local ? NOME_MODELO[campanha.local.tipo_modelo] : "-"}
+                    {campanha.local
+                      ? NOME_MODELO[campanha.local.tipo_modelo] ?? "-"
+                      : NOME_OBJETIVO[campanha.objective] ?? "-"}
                   </td>
                   <td className="px-4 py-3">
                     {status.clicavel ? (
@@ -270,11 +332,13 @@ export default function PainelCampanhasDaConta({ contaId }: { contaId: string })
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-neutral-300">
-                    {formatarReais(campanha.daily_budget ?? campanha.lifetime_budget)}
-                    <span className="ml-1 text-neutral-600">{campanha.daily_budget ? "/dia" : ""}</span>
+                  <td className="px-4 py-3">
+                    <p className="text-neutral-200">{formatarOrcamento(campanha).valor}</p>
+                    {formatarOrcamento(campanha).tipo && (
+                      <p className="text-[10.5px] text-neutral-600">{formatarOrcamento(campanha).tipo}</p>
+                    )}
                   </td>
-                  <td className="px-4 py-3 text-neutral-300">{formatarReais(campanha.spendTotal)}</td>
+                  <td className="px-4 py-3 text-neutral-200">{formatarGasto(campanha.spendTotal)}</td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex justify-end gap-3">
                       <button
@@ -340,6 +404,16 @@ export default function PainelCampanhasDaConta({ contaId }: { contaId: string })
       {campanhaParaTeste && (
         <ModalTesteAB campanha={campanhaParaTeste} onFechar={() => setCampanhaParaTeste(null)} />
       )}
+    </div>
+  );
+}
+
+function ResumoItem({ rotulo, valor, detalhe }: { rotulo: string; valor: string; detalhe?: string }) {
+  return (
+    <div className="cartao-vidro px-4 py-3">
+      <p className="text-[10.5px] font-medium uppercase tracking-wide text-neutral-500">{rotulo}</p>
+      <p className="mt-0.5 text-lg font-bold text-neutral-100">{valor}</p>
+      {detalhe && <p className="mt-0.5 text-[10.5px] text-neutral-500">{detalhe}</p>}
     </div>
   );
 }

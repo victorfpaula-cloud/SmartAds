@@ -36,3 +36,10 @@ export function diasEntreEmSaoPaulo(isoRecente: string, isoAntigo: string): numb
   const [anoA, mesA, diaA] = diaEmSaoPaulo(isoAntigo).split("-").map(Number);
   return Math.round((Date.UTC(anoR, mesR - 1, diaR) - Date.UTC(anoA, mesA - 1, diaA)) / 86_400_000);
 }
+
+/** "AAAA-MM" do mês corrente no fuso de São Paulo — chave do cache de gasto do mês. */
+export function mesAtualEmSaoPaulo(agora: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit" })
+    .format(agora)
+    .slice(0, 7);
+}

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { notFound } from "next/navigation";
 import PainelCampanhasDaConta from "./PainelCampanhasDaConta";
+import { mesAtualEmSaoPaulo } from "@/lib/tempoSaoPaulo";
 
 export const dynamic = "force-dynamic";
 
@@ -12,11 +13,20 @@ export default async function CampanhasDaContaPage({ params }: { params: Promise
 
   const { data: conta } = await supabase
     .from("smartads_contas_meta")
-    .select("id, nome_exibicao, meta_ad_account_nome, meta_ad_account_id, smartads_clientes(nome)")
+    .select("id, nome_exibicao, meta_ad_account_nome, meta_ad_account_id, orcamento_mensal_centavos, smartads_clientes(nome)")
     .eq("id", contaId)
     .single();
 
   if (!conta) notFound();
+
+  // Gasto do mês corrente da conta (atualizado pelo cron das campanhas da rede); só vale se for do
+  // mês atual — um valor de mês anterior significaria que o cron ainda não rodou neste mês.
+  const { data: gastoMes } = await supabase
+    .from("smartads_gasto_mes_cache")
+    .select("mes, gasto_mes_centavos")
+    .eq("conta_id", contaId)
+    .maybeSingle();
+  const mesAtual = mesAtualEmSaoPaulo();
 
   const nomeConta = conta.nome_exibicao || conta.meta_ad_account_nome || conta.meta_ad_account_id;
   const nomeCliente = (conta as any).smartads_clientes?.nome ?? "";
@@ -32,7 +42,11 @@ export default async function CampanhasDaContaPage({ params }: { params: Promise
         <p className="mt-1 text-sm text-neutral-400">{nomeConta}</p>
 
         <div className="mt-6">
-          <PainelCampanhasDaConta contaId={contaId} />
+          <PainelCampanhasDaConta
+            contaId={contaId}
+            gastoMesCentavos={gastoMes && gastoMes.mes === mesAtual ? gastoMes.gasto_mes_centavos : null}
+            tetoMensalCentavos={(conta as any).orcamento_mensal_centavos ?? 50000}
+          />
         </div>
       </main>
     </>

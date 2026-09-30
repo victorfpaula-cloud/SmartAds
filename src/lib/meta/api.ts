@@ -892,6 +892,34 @@ export async function listarCampanhas(
   };
 }
 
+export interface ConjuntoResumoMeta {
+  id: string;
+  campaign_id: string;
+  effective_status: string;
+  daily_budget?: string;
+  lifetime_budget?: string;
+}
+
+/** Conjuntos de anúncios da conta (id da campanha, status e orçamento). O SmartAds cria as campanhas
+ * com o orçamento no CONJUNTO (ver criarConjuntoDeAnuncios), então `daily_budget` na campanha vem
+ * vazio — o orçamento real de cada campanha é a soma dos conjuntos dela. Até 4 páginas de 100. */
+export async function listarConjuntosDaConta(adAccountId: string): Promise<ConjuntoResumoMeta[]> {
+  const todos: ConjuntoResumoMeta[] = [];
+  let after: string | undefined;
+  for (let pagina = 0; pagina < 4; pagina++) {
+    const dados = await chamar<{
+      data: ConjuntoResumoMeta[];
+      paging?: { cursors?: { after?: string }; next?: string };
+    }>(`${adAccountId}/adsets`, {
+      query: { fields: "id,campaign_id,effective_status,daily_budget,lifetime_budget", limit: 100, after },
+    });
+    todos.push(...dados.data);
+    if (!dados.paging?.next) break;
+    after = dados.paging.cursors?.after;
+  }
+  return todos;
+}
+
 /** "Ativa" de verdade — não só effective_status "ACTIVE" sozinho: uma campanha com stop_time no
  * passado continua voltando como ACTIVE da Meta às vezes (mesmo caso corrigido em
  * PainelCampanhasDaConta/statusExibicao, campanha com fim no passado marcada como "Ativa"), então o
