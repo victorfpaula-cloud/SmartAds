@@ -1,8 +1,13 @@
 import Cabecalho from "@/components/Cabecalho";
 import Link from "next/link";
-import { obterRelatorioPostagens, classificarComparativoRede, type ComparativoRede } from "@/lib/relatorioPostagens";
+import {
+  obterRelatorioPostagens,
+  classificarComparativoRede,
+  classificarStoriesRede,
+  type ComparativoRede,
+} from "@/lib/relatorioPostagens";
 import { diasEntreEmSaoPaulo } from "@/lib/tempoSaoPaulo";
-import { WarningCircle, InstagramLogo, DownloadSimple, GridFour, CircleDashed } from "@phosphor-icons/react/dist/ssr";
+import { WarningCircle, InstagramLogo, DownloadSimple, GridFour, CircleDashed, ChartBar } from "@phosphor-icons/react/dist/ssr";
 import BotaoEnviarRelatorio from "./BotaoEnviarRelatorio";
 
 export const dynamic = "force-dynamic";
@@ -29,6 +34,9 @@ interface CardData {
   comparativo: ComparativoRede | null;
   totalPostagens: number;
   storiesHoje: number;
+  /** Média de stories por dia nos últimos 30 dias (ou desde que a coleta começou); null sem dado. */
+  storiesMediaDia: number | null;
+  storiesComparativo: ComparativoRede | null;
 }
 
 export default async function PostagensPage() {
@@ -48,6 +56,24 @@ export default async function PostagensPage() {
   const mediaRede =
     vinculadas.length > 0 ? vinculadas.reduce((soma, u) => soma + u.totalPostagens, 0) / vinculadas.length : 0;
 
+  // Média de stories por dia na mesma janela de 30 dias dos posts. A Meta não guarda histórico de
+  // stories, então só existe contagem a partir de quando a coleta começou: o primeiro dia da janela
+  // em que QUALQUER unidade tem story marca o começo, e todas as unidades são medidas desde ele —
+  // senão quem tem 30 dias de janela "vazia" ficaria injustamente abaixo da média.
+  const indiceInicioColeta = (() => {
+    for (let i = 0; i < 30; i++) {
+      if (vinculadas.some((u) => (u.dias[i]?.storiesPostados ?? 0) > 0)) return i;
+    }
+    return -1;
+  })();
+  const diasDeColeta = indiceInicioColeta === -1 ? 0 : 30 - indiceInicioColeta;
+  const mediaStoriesDia = (u: (typeof unidadesRelatorio)[number]): number | null =>
+    diasDeColeta > 0
+      ? u.dias.slice(indiceInicioColeta).reduce((soma, d) => soma + d.storiesPostados, 0) / diasDeColeta
+      : null;
+  const mediasStories = vinculadas.map(mediaStoriesDia).filter((m): m is number => m !== null);
+  const mediaStoriesRede = mediasStories.length > 0 ? mediasStories.reduce((a, b) => a + b, 0) / mediasStories.length : 0;
+
   const agoraISO = new Date(agora).toISOString();
   const unidades: CardData[] = unidadesRelatorio.map((u) => {
     // Dias de calendário (SP), não horas corridas / 24 — senão um post de ontem à noite ainda
@@ -64,6 +90,12 @@ export default async function PostagensPage() {
       comparativo: u.instagramVinculado ? classificarComparativoRede(u.totalPostagens, mediaRede) : null,
       totalPostagens: u.totalPostagens,
       storiesHoje: u.dias[u.dias.length - 1]?.storiesPostados ?? 0,
+      storiesMediaDia: u.instagramVinculado ? mediaStoriesDia(u) : null,
+      // Menos de 3 dias de coleta é pouco pra comparar (um dia sem story já derruba a média).
+      storiesComparativo:
+        u.instagramVinculado && diasDeColeta >= 3
+          ? classificarStoriesRede(mediaStoriesDia(u) ?? 0, mediaStoriesRede)
+          : null,
     };
   });
 
@@ -79,7 +111,8 @@ export default async function PostagensPage() {
             <h1 className="mt-1 font-display text-2xl font-bold">Radar de posts</h1>
             <p className="mt-1 text-sm text-neutral-400">
               Post mais recente de cada unidade no Instagram — feed, Reels ou carrossel, vale
-              qualquer formato — mais os stories do dia. 5 dias sem postar acende o alerta. Clique
+              qualquer formato — mais os stories do dia e a média de stories por dia contra a da rede. 5 dias
+              sem postar acende o alerta. Clique
               num card pra ver o histórico completo dos últimos 30 dias.
             </p>
             <p className="mt-1 text-[11px] text-neutral-600">Verificado às {horaVerificacao}</p>
@@ -256,6 +289,27 @@ function CardUnidade({ unidade }: { unidade: CardData }) {
         <p className={`mt-0.5 flex items-center gap-1 text-[10.5px] font-semibold ${unidade.storiesHoje > 0 ? "text-neutral-200" : "text-neutral-500"}`}>
           <CircleDashed size={11} weight="bold" className="shrink-0" />
           {unidade.storiesHoje} {unidade.storiesHoje === 1 ? "story" : "stories"}
+        </p>
+      </div>
+    );
+  }
+
+  if (unidade.instagramVinculado && unidade.storiesMediaDia !== null) {
+    const comparativo = unidade.storiesComparativo;
+    const semBase = !comparativo || comparativo === "sem_base";
+    adesivos.push(
+      <div key="stories-media" className="col-span-2 rounded-lg bg-white/[0.04] px-2 py-1.5">
+        <p
+          className={`min-h-[11px] leading-tight text-[8.5px] font-bold uppercase tracking-wide ${
+            semBase ? "text-neutral-600" : CLASSE_COMPARATIVO_CURTO[comparativo]
+          }`}
+        >
+          {semBase ? "Média de stories" : `Média de stories · ${ROTULO_COMPARATIVO_CURTO[comparativo].toLowerCase()}`}
+        </p>
+        <p className="mt-0.5 flex items-center gap-1 text-[10.5px] font-semibold text-neutral-300">
+          <ChartBar size={11} weight="bold" className="shrink-0 text-neutral-500" />
+          {unidade.storiesMediaDia.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} por dia
+          <span className="font-normal text-neutral-600">· 30d</span>
         </p>
       </div>
     );
