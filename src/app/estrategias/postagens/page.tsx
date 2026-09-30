@@ -36,6 +36,8 @@ interface CardData {
   storiesHoje: number;
   /** Média de stories por dia nos últimos 30 dias (ou desde que a coleta começou); null sem dado. */
   storiesMediaDia: number | null;
+  /** Total de stories na janela de 30 dias (desde que a coleta começou). */
+  storiesMes: number;
   storiesComparativo: ComparativoRede | null;
 }
 
@@ -91,6 +93,7 @@ export default async function PostagensPage() {
       totalPostagens: u.totalPostagens,
       storiesHoje: u.dias[u.dias.length - 1]?.storiesPostados ?? 0,
       storiesMediaDia: u.instagramVinculado ? mediaStoriesDia(u) : null,
+      storiesMes: indiceInicioColeta === -1 ? 0 : u.dias.slice(indiceInicioColeta).reduce((soma, d) => soma + d.storiesPostados, 0),
       // Menos de 3 dias de coleta é pouco pra comparar (um dia sem story já derruba a média).
       storiesComparativo:
         u.instagramVinculado && diasDeColeta >= 3
@@ -111,7 +114,7 @@ export default async function PostagensPage() {
             <h1 className="mt-1 font-display text-2xl font-bold">Radar de posts</h1>
             <p className="mt-1 text-sm text-neutral-400">
               Post mais recente de cada unidade no Instagram — feed, Reels ou carrossel, vale
-              qualquer formato — mais os stories do dia e a média de stories por dia contra a da rede. 5 dias
+              qualquer formato — mais os stories do dia e do mês (com a comparação contra a rede). 5 dias
               sem postar acende o alerta. Clique
               num card pra ver o histórico completo dos últimos 30 dias.
             </p>
@@ -295,21 +298,26 @@ function CardUnidade({ unidade }: { unidade: CardData }) {
   }
 
   if (unidade.instagramVinculado && unidade.storiesMediaDia !== null) {
+    // Mesmo desenho do adesivo de posts: status colorido em cima, contagem embaixo. O status vem da
+    // média de stories por dia contra a da rede (mostrada só no tooltip, pra não poluir o card).
     const comparativo = unidade.storiesComparativo;
     const semBase = !comparativo || comparativo === "sem_base";
     adesivos.push(
-      <div key="stories-media" className="col-span-2 rounded-lg bg-white/[0.04] px-2 py-1.5">
+      <div
+        key="stories-mes"
+        className="col-span-2 rounded-lg bg-white/[0.04] px-2 py-1.5"
+        title={`Média de ${unidade.storiesMediaDia.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} stories por dia nos últimos 30 dias`}
+      >
         <p
           className={`min-h-[11px] leading-tight text-[8.5px] font-bold uppercase tracking-wide ${
             semBase ? "text-neutral-600" : CLASSE_COMPARATIVO_CURTO[comparativo]
           }`}
         >
-          {semBase ? "Média de stories" : `Média de stories · ${ROTULO_COMPARATIVO_CURTO[comparativo].toLowerCase()}`}
+          {semBase ? "Stories do mês" : ROTULO_COMPARATIVO_CURTO[comparativo]}
         </p>
         <p className="mt-0.5 flex items-center gap-1 text-[10.5px] font-semibold text-neutral-300">
           <ChartBar size={11} weight="bold" className="shrink-0 text-neutral-500" />
-          {unidade.storiesMediaDia.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} por dia
-          <span className="font-normal text-neutral-600">· 30d</span>
+          {unidade.storiesMes} {unidade.storiesMes === 1 ? "story" : "stories"} no mês
         </p>
       </div>
     );
