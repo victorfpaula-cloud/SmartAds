@@ -17,15 +17,17 @@ function formatarAtualizacao(iso: string | null): string {
 
 function totais(unidades: UnidadeRedeResumo[]) {
   return {
-    campanhas: unidades.reduce((soma, u) => soma + u.campanhasAtivas, 0),
-    comCampanha: unidades.filter((u) => u.campanhasAtivas > 0).length,
+    campanhas: unidades.reduce((soma, u) => soma + (u.campanhasAtivas ?? 0), 0),
+    comCampanha: unidades.filter((u) => (u.campanhasAtivas ?? 0) > 0).length,
+    semDados: unidades.filter((u) => u.campanhasAtivas === null).length,
     gastoMes: unidades.reduce((soma, u) => soma + (u.gastoMesCentavos ?? 0), 0),
     algumGasto: unidades.some((u) => u.gastoMesCentavos !== null),
   };
 }
 
 function LinhaUnidade({ unidade, nomeMes }: { unidade: UnidadeRedeResumo; nomeMes: string }) {
-  const ativa = unidade.campanhasAtivas > 0;
+  const semDados = unidade.campanhasAtivas === null;
+  const ativa = (unidade.campanhasAtivas ?? 0) > 0;
   return (
     <li>
       <Link
@@ -35,7 +37,7 @@ function LinhaUnidade({ unidade, nomeMes }: { unidade: UnidadeRedeResumo; nomeMe
         <div className="flex min-w-0 items-center gap-2.5">
           <span
             className={`h-2 w-2 shrink-0 rounded-full ${ativa ? "bg-ok" : "bg-neutral-700"}`}
-            title={ativa ? "Com campanha no ar" : "Sem campanha no ar"}
+            title={semDados ? "Ainda não calculada" : ativa ? "Com campanha no ar" : "Sem campanha no ar"}
           />
           <div className="min-w-0">
             <p className={`truncate text-sm font-semibold ${ativa ? "text-neutral-100" : "text-neutral-500"}`}>
@@ -50,7 +52,11 @@ function LinhaUnidade({ unidade, nomeMes }: { unidade: UnidadeRedeResumo; nomeMe
             ativa ? "bg-ok/15 text-ok" : "bg-white/[0.05] text-neutral-500"
           }`}
         >
-          {ativa ? `${unidade.campanhasAtivas} campanha${unidade.campanhasAtivas !== 1 ? "s" : ""}` : "Nenhuma no ar"}
+          {semDados
+            ? "Aguardando dados"
+            : ativa
+              ? `${unidade.campanhasAtivas} campanha${unidade.campanhasAtivas !== 1 ? "s" : ""}`
+              : "Nenhuma no ar"}
         </span>
 
         <div className="col-span-2 flex items-baseline justify-between gap-2 sm:col-span-1 sm:block sm:text-right">
@@ -106,6 +112,12 @@ export default function PanoramaCampanhasRede({
         <p className="mt-0.5 text-[11px] text-neutral-500">
           {t.comCampanha} de {unidades.length} unidades com campanha no ar · {formatarAtualizacao(atualizadoEm)}
         </p>
+        {t.semDados > 0 && (
+          <p className="mt-1 text-[11px] text-amber-400">
+            {t.semDados} {t.semDados === 1 ? "conta ainda sem dados" : "contas ainda sem dados"} — clique em
+            “Atualizar agora” (o cron passa a incluí-las na próxima rodada).
+          </p>
+        )}
       </div>
       <div className="flex items-end gap-6">
         <Indicadores unidades={unidades} nomeMes={nomeMes} />

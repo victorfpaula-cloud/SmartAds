@@ -304,7 +304,9 @@ export interface UnidadeRedeResumo {
   empresaTipo: "individual" | "franquia" | null;
   clienteNome: string;
   contaNome: string;
-  campanhasAtivas: number;
+  /** null = essa conta ainda não foi calculada pelo cron (conta nova, ou o cron ainda não rodou desde
+   * que ela entrou) — diferente de 0, que é "calculada e sem campanha no ar". */
+  campanhasAtivas: number | null;
   /** Gasto do mês corrente, em centavos; null = ainda não calculado neste mês. */
   gastoMesCentavos: number | null;
 }
@@ -354,12 +356,15 @@ export async function obterResumoPorUnidade(opcoes: { apenasFranquia: boolean })
         empresaTipo: empresa?.tipo ?? null,
         clienteNome: cliente.nome,
         contaNome: conta.nome_exibicao || conta.meta_ad_account_nome || conta.meta_ad_account_id,
-        campanhasAtivas: ativasPorConta.get(conta.id) ?? 0,
+        campanhasAtivas:
+          ativasPorConta.has(conta.id) || gastoPorConta.has(conta.id) ? ativasPorConta.get(conta.id) ?? 0 : null,
         gastoMesCentavos: gastoPorConta.has(conta.id) ? gastoPorConta.get(conta.id)! : null,
       });
     }
   }
-  unidades.sort((a, b) => b.campanhasAtivas - a.campanhasAtivas || a.clienteNome.localeCompare(b.clienteNome));
+  unidades.sort(
+    (a, b) => (b.campanhasAtivas ?? 0) - (a.campanhasAtivas ?? 0) || a.clienteNome.localeCompare(b.clienteNome)
+  );
 
   // Todas as linhas de cada tabela nascem na mesma rodada do cron: o mais recente serve pro conjunto.
   const datas = [...(cacheCampanhas ?? []).map((c) => c.atualizado_em), ...(cacheGasto ?? []).map((g) => g.atualizado_em)]
