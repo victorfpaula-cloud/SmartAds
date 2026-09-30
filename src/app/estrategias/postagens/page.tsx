@@ -302,11 +302,16 @@ function CardUnidade({ unidade }: { unidade: CardData }) {
     // média de stories por dia contra a da rede (mostrada só no tooltip, pra não poluir o card).
     const comparativo = unidade.storiesComparativo;
     const semBase = !comparativo || comparativo === "sem_base";
+    // Média por dia arredondada ("~5"); abaixo de 1 mantém uma casa pra não virar "~0".
+    const mediaArredondada =
+      unidade.storiesMediaDia >= 1
+        ? Math.round(unidade.storiesMediaDia).toString()
+        : unidade.storiesMediaDia.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
     adesivos.push(
       <div
         key="stories-mes"
         className="col-span-2 rounded-lg bg-white/[0.04] px-2 py-1.5"
-        title={`Média de ${unidade.storiesMediaDia.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} stories por dia nos últimos 30 dias`}
+        title={`Média de ${unidade.storiesMediaDia.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} stories por dia e ${unidade.storiesMes} no total, contando só os dias em que já há coleta`}
       >
         <p
           className={`min-h-[11px] leading-tight text-[8.5px] font-bold uppercase tracking-wide ${
@@ -317,7 +322,7 @@ function CardUnidade({ unidade }: { unidade: CardData }) {
         </p>
         <p className="mt-0.5 flex items-center gap-1 text-[10.5px] font-semibold text-neutral-300">
           <ChartBar size={11} weight="bold" className="shrink-0 text-neutral-500" />
-          {unidade.storiesMes} {unidade.storiesMes === 1 ? "story" : "stories"} no mês
+          ~{mediaArredondada}/dia · {unidade.storiesMes} no mês
         </p>
       </div>
     );
