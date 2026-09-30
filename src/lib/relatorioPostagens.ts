@@ -271,6 +271,18 @@ export function classificarComparativoRede(totalPostagens: number, media: number
   return "na_media";
 }
 
+/** Mesma régua de classificarComparativoRede, pra média de STORIES POR DIA (número com casa decimal,
+ * não contagem inteira de posts): sem o piso absoluto de "poucos posts", só a razão contra a média
+ * da rede — zerada com a rede postando já cai em "crítico" pela razão. */
+export function classificarStoriesRede(mediaDia: number, mediaRede: number): ComparativoRede {
+  if (mediaRede <= 0) return "sem_base";
+  const razao = mediaDia / mediaRede;
+  if (razao <= RAZAO_CRITICA) return "critico";
+  if (razao >= 1.15) return "acima";
+  if (razao <= 0.85) return "abaixo";
+  return "na_media";
+}
+
 export const ROTULO_COMPARATIVO: Record<ComparativoRede, string> = {
   acima: "Acima da média da rede",
   na_media: "Na média da rede",

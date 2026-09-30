@@ -3,12 +3,13 @@ import { listarStoriesAtivosInstagram } from "@/lib/meta/api";
 import { diaEmSaoPaulo } from "@/lib/tempoSaoPaulo";
 import { mapearEmLotes } from "@/lib/lotes";
 
-/** Roda 2x/dia — meio-dia e perto da meia-noite de SP (ver /api/cron/stories e vercel.json) — a
+/** Roda 6x/dia — de 3 em 3 horas, das 9h às 23h50 de SP (ver /api/cron/stories e vercel.json) — a
  * Meta só expõe stories ATIVOS (postados nas últimas 24h), sem histórico nenhum, então cada rodada
  * grava em smartads_stories_vistos os que ainda estão no ar. A rodada de perto da meia-noite pega
  * praticamente tudo que foi postado no dia (cada story dura exatamente 24h); a do meio-dia existe
  * pra reduzir a janela de um story que foi postado e apagado pela própria unidade ANTES da Meta
- * conseguir contar ele numa única passada por dia. O dia gravado vem do timestamp de CRIAÇÃO do
+ * conseguir contar ele numa única passada por dia; com rodadas de 3 em 3 horas o número de "stories
+ * hoje" também fica no máximo 3h defasado. O dia gravado vem do timestamp de CRIAÇÃO do
  * story (não de quando o cron rodou), e o id como chave primária evita contar o mesmo story duas
  * vezes caso as duas rodadas (ou um reprocessamento) vejam o mesmo story ainda ativo. Escopado só
  * pra unidades de franquia — mesmo recorte de obterRelatorioPostagens. Processa as contas em lotes
