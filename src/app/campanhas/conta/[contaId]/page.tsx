@@ -13,7 +13,7 @@ export default async function CampanhasDaContaPage({ params }: { params: Promise
 
   const { data: conta } = await supabase
     .from("smartads_contas_meta")
-    .select("id, nome_exibicao, meta_ad_account_nome, meta_ad_account_id, orcamento_mensal_centavos, smartads_clientes(nome)")
+    .select("id, nome_exibicao, meta_ad_account_nome, meta_ad_account_id, smartads_clientes(nome)")
     .eq("id", contaId)
     .single();
 
@@ -45,7 +45,6 @@ export default async function CampanhasDaContaPage({ params }: { params: Promise
           <PainelCampanhasDaConta
             contaId={contaId}
             gastoMesCentavos={gastoMes && gastoMes.mes === mesAtual ? gastoMes.gasto_mes_centavos : null}
-            tetoMensalCentavos={(conta as any).orcamento_mensal_centavos ?? 50000}
           />
         </div>
       </main>
