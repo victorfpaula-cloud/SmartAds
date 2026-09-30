@@ -2,6 +2,7 @@ import Cabecalho from "@/components/Cabecalho";
 import Link from "next/link";
 import { coletarFinanceiro, calcularPlanejamento } from "@/lib/financeiro/coletarFinanceiro";
 import { Wallet, Info, ChartLine } from "@phosphor-icons/react/dist/ssr";
+import { calcularPrevisaoSaldo, type NivelPrevisao } from "@/lib/financeiro/previsaoSaldo";
 import EditarSaldo from "./EditarSaldo";
 import EditarOrcamentoMensal from "./EditarOrcamentoMensal";
 
@@ -34,7 +35,11 @@ export default async function FinanceiroPage({
 
   const totalSaldoDisponivel = contas.reduce((s, c) => s + (c.saldoDisponivelCentavos ?? 0), 0);
   const totalGasto7d = contas.reduce((s, c) => s + c.gasto7diasCentavos, 0);
-  const totalPlanejado = contas.reduce((s, c) => s + c.investimentoPlanejadoCentavos, 0);
+  // Contas cujo saldo acaba em até 7 dias (ou já zerou) no ritmo atual de gasto.
+  const contasSaldoAcabando = contas.filter((c) => {
+    const previsao = calcularPrevisaoSaldo(c.saldoDisponivelCentavos, c.mediaDiariaCentavos);
+    return previsao.dias !== null && previsao.dias <= 7;
+  }).length;
   const semSaldoConfigurado = contas.filter((c) => c.saldoDisponivelCentavos === null && !c.erro).length;
 
   // Planejamento (orçamento mensal x reservado pro boost x sobra pra campanhas extras) só faz
@@ -102,8 +107,10 @@ export default async function FinanceiroPage({
             <p className="mt-1 text-lg font-bold text-neutral-100">{reais(totalGasto7d)}</p>
           </div>
           <div className="cartao-vidro px-4 py-3.5">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-neutral-500">Planejado, ainda não iniciado</p>
-            <p className="mt-1 text-lg font-bold text-neutral-100">{reais(totalPlanejado)}</p>
+            <p className="text-[11px] font-medium uppercase tracking-wide text-neutral-500">Saldo acabando (até 7 dias)</p>
+            <p className={`mt-1 text-lg font-bold ${contasSaldoAcabando > 0 ? "text-danger" : "text-ok"}`}>
+              {contasSaldoAcabando} {contasSaldoAcabando === 1 ? "conta" : "contas"}
+            </p>
           </div>
         </div>
 
@@ -233,9 +240,8 @@ export default async function FinanceiroPage({
                       <Metrica rotulo="Gasto 7 dias" valor={reais(conta.gasto7diasCentavos)} />
                       <Metrica rotulo="Média diária" valor={reais(conta.mediaDiariaCentavos)} />
                       <Metrica rotulo="Projeção mensal" valor={reais(conta.projecaoMensalCentavos)} />
-                      <Metrica
-                        rotulo="Planejado + sugerido"
-                        valor={reais(conta.investimentoPlanejadoCentavos + conta.ajusteOrcamentoSugeridoCentavos)}
+                      <PrevisaoDoSaldo
+                        previsao={calcularPrevisaoSaldo(conta.saldoDisponivelCentavos, conta.mediaDiariaCentavos)}
                       />
                     </div>
                     <EditarSaldo contaId={conta.contaId} saldoAtualCentavos={conta.saldoDisponivelCentavos} />
@@ -247,6 +253,23 @@ export default async function FinanceiroPage({
         )}
       </main>
     </>
+  );
+}
+
+const TOM_PREVISAO: Record<NivelPrevisao, string> = {
+  critico: "text-danger",
+  atencao: "text-amber-400",
+  ok: "text-ok",
+  neutro: "text-neutral-200",
+};
+
+function PrevisaoDoSaldo({ previsao }: { previsao: ReturnType<typeof calcularPrevisaoSaldo> }) {
+  return (
+    <div>
+      <p className="text-[10.5px] font-medium uppercase tracking-wide text-neutral-500">Saldo acaba em</p>
+      <p className={`mt-0.5 text-sm font-semibold ${TOM_PREVISAO[previsao.nivel]}`}>{previsao.texto}</p>
+      {previsao.detalhe && <p className="mt-0.5 text-[10px] text-neutral-500">{previsao.detalhe}</p>}
+    </div>
   );
 }
 
