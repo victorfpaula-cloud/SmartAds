@@ -299,6 +299,9 @@ export async function obterCampanhasAtivasRede(): Promise<{
 
 export interface UnidadeRedeResumo {
   contaId: string;
+  empresaId: string | null;
+  empresaNome: string;
+  empresaTipo: "individual" | "franquia" | null;
   clienteNome: string;
   contaNome: string;
   campanhasAtivas: number;
@@ -306,22 +309,29 @@ export interface UnidadeRedeResumo {
   gastoMesCentavos: number | null;
 }
 
-/** Uma linha por unidade de franquia: quantas campanhas ativas e quanto já gastou no mês. Tudo do
- * cache (campanhas ativas + gasto do mês, atualizados juntos pelo cron 2x/dia) — a tela nunca bate
- * na Meta. Unidade sem campanha ativa também entra, com 0. */
-export async function obterResumoRedePorUnidade(): Promise<{
+/** Uma linha por unidade: quantas campanhas ativas e quanto já gastou no mês. Tudo do cache
+ * (campanhas ativas + gasto do mês, atualizados juntos pelo cron 2x/dia) — a tela nunca bate na
+ * Meta. Unidade sem campanha ativa também entra, com 0. `apenasFranquia` limita às unidades de rede
+ * (Central da rede); sem isso vêm todas as contas, de qualquer empresa (menu Campanhas). */
+export async function obterResumoPorUnidade(opcoes: { apenasFranquia: boolean }): Promise<{
   unidades: UnidadeRedeResumo[];
   atualizadoEm: string | null;
 }> {
   const supabase = criarClienteAdmin();
+  let consultaClientes = supabase
+    .from("smartads_clientes")
+    .select(
+      opcoes.apenasFranquia
+        ? "id, nome, smartads_empresas!inner(id, nome, tipo), smartads_contas_meta(*)"
+        : "id, nome, smartads_empresas(id, nome, tipo), smartads_contas_meta(*)"
+    )
+    .eq("ativo", true);
+  if (opcoes.apenasFranquia) consultaClientes = consultaClientes.eq("smartads_empresas.tipo", "franquia");
+
   const [{ data: cacheCampanhas }, { data: cacheGasto }, { data: clientes }] = await Promise.all([
     supabase.from("smartads_campanhas_rede_cache").select("conta_id, atualizado_em"),
     supabase.from("smartads_gasto_mes_cache").select("conta_id, mes, gasto_mes_centavos, atualizado_em"),
-    supabase
-      .from("smartads_clientes")
-      .select("id, nome, smartads_empresas!inner(tipo), smartads_contas_meta(*)")
-      .eq("ativo", true)
-      .eq("smartads_empresas.tipo", "franquia"),
+    consultaClientes,
   ]);
 
   const ativasPorConta = new Map<string, number>();
@@ -335,9 +345,13 @@ export async function obterResumoRedePorUnidade(): Promise<{
 
   const unidades: UnidadeRedeResumo[] = [];
   for (const cliente of (clientes ?? []) as any[]) {
+    const empresa = cliente.smartads_empresas;
     for (const conta of (cliente.smartads_contas_meta as any[]).filter((c) => c.ativo)) {
       unidades.push({
         contaId: conta.id,
+        empresaId: empresa?.id ?? null,
+        empresaNome: empresa?.nome ?? "Sem empresa",
+        empresaTipo: empresa?.tipo ?? null,
         clienteNome: cliente.nome,
         contaNome: conta.nome_exibicao || conta.meta_ad_account_nome || conta.meta_ad_account_id,
         campanhasAtivas: ativasPorConta.get(conta.id) ?? 0,
@@ -352,4 +366,9 @@ export async function obterResumoRedePorUnidade(): Promise<{
     .filter(Boolean)
     .sort();
   return { unidades, atualizadoEm: datas.length > 0 ? datas[datas.length - 1] : null };
+}
+
+/** Central da rede: só as unidades de franquia. */
+export function obterResumoRedePorUnidade() {
+  return obterResumoPorUnidade({ apenasFranquia: true });
 }
