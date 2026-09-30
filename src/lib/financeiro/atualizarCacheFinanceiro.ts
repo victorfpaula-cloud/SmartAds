@@ -1,9 +1,15 @@
 import { criarClienteAdmin } from "@/lib/supabase/admin";
-import { obterSaldoConta, obterInsightsConta, calcularSaldoIncremental } from "@/lib/meta/api";
+import {
+  obterSaldoConta,
+  obterInsightsConta,
+  calcularSaldoIncremental,
+  obterFonteDePagamento,
+} from "@/lib/meta/api";
 
 export interface FinanceiroCacheLinha {
   saldoDisponivelCentavos: number | null;
   faturaEmAbertoCentavos: number | null;
+  fontePagamentoTexto: string | null;
   gasto7diasCentavos: number;
   mediaDiariaCentavos: number;
   projecaoMensalCentavos: number;
@@ -37,7 +43,7 @@ export async function atualizarCacheFinanceiroDaConta(
       .eq("conta_id", contaId)
       .maybeSingle();
 
-    const [saldoDisponivelCentavos, saldo, insights] = await Promise.all([
+    const [saldoIncrementalCentavos, saldo, insights, fonte] = await Promise.all([
       calcularSaldoIncremental(
         metaAdAccountId,
         cacheAnterior?.saldo_disponivel_centavos ?? null,
@@ -45,7 +51,13 @@ export async function atualizarCacheFinanceiroDaConta(
       ),
       obterSaldoConta(metaAdAccountId),
       obterInsightsConta(metaAdAccountId, { nivel: "account", datePreset: "last_7d", porDia: false }),
+      // Saldo que a própria Meta mostra na forma de pagamento da conta (ver FonteDePagamentoMeta).
+      // Sem permissão/erro aqui, cai no saldo próprio de sempre em vez de derrubar a conta toda.
+      obterFonteDePagamento(metaAdAccountId).catch(() => null),
     ]);
+    // A Meta manda quando a conta é pré-paga e o texto traz o saldo; senão o saldo próprio
+    // (valor digitado + movimentos), que nunca é inventado — fica null sem ponto de partida.
+    const saldoDisponivelCentavos = fonte?.saldoDisponivelCentavos ?? saldoIncrementalCentavos;
     const spend7dReais = Number(insights[0]?.spend ?? 0);
     const gasto7diasCentavos = Math.round(spend7dReais * 100);
     const mediaDiariaCentavos = Math.round(gasto7diasCentavos / 7);
@@ -53,6 +65,7 @@ export async function atualizarCacheFinanceiroDaConta(
     linha = {
       saldoDisponivelCentavos,
       faturaEmAbertoCentavos: saldo.faturaEmAbertoCentavos,
+      fontePagamentoTexto: fonte?.texto ?? null,
       gasto7diasCentavos,
       mediaDiariaCentavos,
       projecaoMensalCentavos: mediaDiariaCentavos * 30,
@@ -63,6 +76,7 @@ export async function atualizarCacheFinanceiroDaConta(
     linha = {
       saldoDisponivelCentavos: null,
       faturaEmAbertoCentavos: null,
+      fontePagamentoTexto: null,
       gasto7diasCentavos: 0,
       mediaDiariaCentavos: 0,
       projecaoMensalCentavos: 0,
@@ -75,6 +89,7 @@ export async function atualizarCacheFinanceiroDaConta(
     conta_id: contaId,
     saldo_disponivel_centavos: linha.saldoDisponivelCentavos,
     fatura_em_aberto_centavos: linha.faturaEmAbertoCentavos,
+    fonte_pagamento_texto: linha.fontePagamentoTexto,
     gasto_7d_centavos: linha.gasto7diasCentavos,
     media_diaria_centavos: linha.mediaDiariaCentavos,
     projecao_mensal_centavos: linha.projecaoMensalCentavos,
