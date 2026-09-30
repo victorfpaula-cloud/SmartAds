@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { UnidadeRedeResumo } from "@/lib/campanhasRede";
+import BotaoAtualizarRede from "@/components/BotaoAtualizarRede";
 
 const formatoReal = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const reais = (centavos: number) => formatoReal.format(centavos / 100);
@@ -27,6 +28,7 @@ export default function PanoramaCampanhasRede({
   const unidadesComCampanha = unidades.filter((u) => u.campanhasAtivas > 0).length;
   const totalGastoMes = unidades.reduce((soma, u) => soma + (u.gastoMesCentavos ?? 0), 0);
   const algumGasto = unidades.some((u) => u.gastoMesCentavos !== null);
+  const nomeMes = new Intl.DateTimeFormat("pt-BR", { month: "long", timeZone: "America/Sao_Paulo" }).format(new Date());
 
   return (
     <section className="cartao-vidro overflow-hidden">
@@ -37,15 +39,16 @@ export default function PanoramaCampanhasRede({
             {unidadesComCampanha} de {unidades.length} unidades com campanha no ar · {formatarAtualizacao(atualizadoEm)}
           </p>
         </div>
-        <div className="flex gap-6">
+        <div className="flex items-end gap-6">
           <div>
             <p className="text-[10.5px] font-medium uppercase tracking-wide text-neutral-500">No ar</p>
             <p className="text-lg font-bold leading-tight text-neutral-100">{totalCampanhas}</p>
           </div>
           <div>
-            <p className="text-[10.5px] font-medium uppercase tracking-wide text-neutral-500">Gasto no mês</p>
+            <p className="text-[10.5px] font-medium uppercase tracking-wide text-neutral-500">Gasto em {nomeMes}</p>
             <p className="text-lg font-bold leading-tight text-neutral-100">{algumGasto ? reais(totalGastoMes) : "—"}</p>
           </div>
+          <BotaoAtualizarRede />
         </div>
       </div>
 
@@ -55,17 +58,11 @@ export default function PanoramaCampanhasRede({
         <ul className="divide-y divide-white/5">
           {unidades.map((unidade) => {
             const ativa = unidade.campanhasAtivas > 0;
-            const percentual =
-              unidade.gastoMesCentavos !== null && unidade.tetoMensalCentavos > 0
-                ? Math.min(100, Math.round((unidade.gastoMesCentavos / unidade.tetoMensalCentavos) * 100))
-                : 0;
-            const estourou =
-              unidade.gastoMesCentavos !== null && unidade.gastoMesCentavos > unidade.tetoMensalCentavos;
             return (
               <li key={unidade.contaId}>
                 <Link
                   href={`/campanhas/conta/${unidade.contaId}`}
-                  className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 px-5 py-3 transition hover:bg-white/[0.03] sm:grid-cols-[minmax(0,1.2fr)_auto_minmax(0,1fr)]"
+                  className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 px-5 py-3 transition hover:bg-white/[0.03] sm:grid-cols-[minmax(0,1.4fr)_auto_minmax(0,7rem)]"
                 >
                   <div className="flex min-w-0 items-center gap-2.5">
                     <span
@@ -90,19 +87,11 @@ export default function PanoramaCampanhasRede({
                       : "Nenhuma no ar"}
                   </span>
 
-                  <div className="col-span-2 sm:col-span-1">
-                    <div className="flex items-baseline justify-between gap-2">
-                      <p className="text-sm font-semibold text-neutral-200">
-                        {unidade.gastoMesCentavos !== null ? reais(unidade.gastoMesCentavos) : "—"}
-                      </p>
-                      <p className="text-[10.5px] text-neutral-500">de {reais(unidade.tetoMensalCentavos)} no mês</p>
-                    </div>
-                    <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-white/[0.07]">
-                      <div
-                        className={`h-full rounded-full ${estourou ? "bg-danger" : "bg-accent"}`}
-                        style={{ width: `${percentual}%` }}
-                      />
-                    </div>
+                  <div className="col-span-2 flex items-baseline justify-between gap-2 sm:col-span-1 sm:block sm:text-right">
+                    <p className="text-[10.5px] text-neutral-500 sm:hidden">Gasto em {nomeMes}</p>
+                    <p className="text-sm font-semibold text-neutral-100">
+                      {unidade.gastoMesCentavos !== null ? reais(unidade.gastoMesCentavos) : "—"}
+                    </p>
                   </div>
                 </Link>
               </li>

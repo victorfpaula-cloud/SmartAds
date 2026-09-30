@@ -140,22 +140,43 @@ export async function recalcularCampanhasRede(): Promise<{ contasVerificadas: nu
         linhasPorConta.set(conta.id, linhas);
       }
 
-      // Gasto do mês corrente (Meta "this_month", em reais) por conta local, com a mesma divisão por
-      // sigla das campanhas. Soma TODAS as campanhas do mês, ativas ou já encerradas — é o que a
-      // conta gastou de verdade. Se a Meta falhar aqui, não grava nada (mantém o valor anterior em
-      // vez de zerar por engano).
-      const insightsMes = await obterInsightsConta(contasDoGrupo[0].meta_ad_account_id, {
-        nivel: "campaign",
-        datePreset: "this_month",
-        porDia: false,
-      }).catch(() => null);
-      if (insightsMes) {
-        const gastoMesPorConta = new Map<string, number>(contasDoGrupo.map((c) => [c.id, 0]));
-        for (const linha of insightsMes) {
-          const conta = contaDaCampanha(linha.campaign_name ?? "");
-          if (!conta) continue;
-          gastoMesPorConta.set(conta.id, (gastoMesPorConta.get(conta.id) ?? 0) + Math.round(Number(linha.spend ?? 0) * 100));
+      // Gasto do mês corrente (Meta "this_month", em reais). Conta de anúncio de uma unidade só: o
+      // total da própria conta (nível "account") — é o número exato que o Gerenciador mostra, inclui
+      // campanha já excluída ou encerrada. Conta compartilhada por mais de uma unidade: soma campanha
+      // a campanha, dividindo por sigla como nas campanhas. Se a Meta falhar aqui, não grava nada
+      // (mantém o valor anterior em vez de zerar por engano).
+      const gastoMesPorConta = new Map<string, number>(contasDoGrupo.map((c) => [c.id, 0]));
+      let gastoMesOk = false;
+      if (contasDoGrupo.length === 1) {
+        const linhas = await obterInsightsConta(contasDoGrupo[0].meta_ad_account_id, {
+          nivel: "account",
+          datePreset: "this_month",
+          porDia: false,
+        }).catch(() => null);
+        if (linhas) {
+          const totalReais = linhas.reduce((soma, l) => soma + Number(l.spend ?? 0), 0);
+          gastoMesPorConta.set(contasDoGrupo[0].id, Math.round(totalReais * 100));
+          gastoMesOk = true;
         }
+      } else {
+        const linhas = await obterInsightsConta(contasDoGrupo[0].meta_ad_account_id, {
+          nivel: "campaign",
+          datePreset: "this_month",
+          porDia: false,
+        }).catch(() => null);
+        if (linhas) {
+          for (const linha of linhas) {
+            const conta = contaDaCampanha(linha.campaign_name ?? "");
+            if (!conta) continue;
+            gastoMesPorConta.set(
+              conta.id,
+              (gastoMesPorConta.get(conta.id) ?? 0) + Math.round(Number(linha.spend ?? 0) * 100)
+            );
+          }
+          gastoMesOk = true;
+        }
+      }
+      if (gastoMesOk) {
         await supabase.from("smartads_gasto_mes_cache").upsert(
           [...gastoMesPorConta.entries()].map(([contaId, gasto]) => ({
             conta_id: contaId,
@@ -283,7 +304,6 @@ export interface UnidadeRedeResumo {
   campanhasAtivas: number;
   /** Gasto do mês corrente, em centavos; null = ainda não calculado neste mês. */
   gastoMesCentavos: number | null;
-  tetoMensalCentavos: number;
 }
 
 /** Uma linha por unidade de franquia: quantas campanhas ativas e quanto já gastou no mês. Tudo do
@@ -322,7 +342,6 @@ export async function obterResumoRedePorUnidade(): Promise<{
         contaNome: conta.nome_exibicao || conta.meta_ad_account_nome || conta.meta_ad_account_id,
         campanhasAtivas: ativasPorConta.get(conta.id) ?? 0,
         gastoMesCentavos: gastoPorConta.has(conta.id) ? gastoPorConta.get(conta.id)! : null,
-        tetoMensalCentavos: conta.orcamento_mensal_centavos ?? 50000,
       });
     }
   }

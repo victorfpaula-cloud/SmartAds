@@ -129,12 +129,10 @@ function formatarOrcamento(campanha: Campanha): { valor: string; tipo: string } 
 export default function PainelCampanhasDaConta({
   contaId,
   gastoMesCentavos,
-  tetoMensalCentavos,
 }: {
   contaId: string;
   /** Gasto do mês corrente da conta (cache atualizado 2x/dia); null = ainda não calculado. */
   gastoMesCentavos: number | null;
-  tetoMensalCentavos: number;
 }) {
   const [campanhas, setCampanhas] = useState<Campanha[]>([]);
   const [proximoCursor, setProximoCursor] = useState<string | null>(null);
@@ -259,9 +257,9 @@ export default function PainelCampanhasDaConta({
             valor={orcamentoDiarioAtivoCentavos > 0 ? `${formatarCentavos(orcamentoDiarioAtivoCentavos)}/dia` : "—"}
           />
           <ResumoItem
-            rotulo="Gasto no mês"
+            rotulo="Gasto no mês atual"
             valor={gastoMesCentavos != null ? formatarCentavos(gastoMesCentavos) : "—"}
-            detalhe={gastoMesCentavos != null ? `de ${formatarCentavos(tetoMensalCentavos)} do mês` : "aguardando a próxima atualização"}
+            detalhe={gastoMesCentavos != null ? "todas as campanhas da conta, direto da Meta" : "aguardando a próxima atualização"}
           />
         </div>
       )}
