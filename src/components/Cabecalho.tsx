@@ -6,6 +6,7 @@ import {
   Wallet,
   DotsThreeCircle,
   SignOut,
+  ArrowLeft,
 } from "@phosphor-icons/react/dist/ssr";
 
 // Só as 5 coisas que se abrem quase todo dia ficam fixas aqui — era o padrão original do app, antes
@@ -29,8 +30,21 @@ const PAGINAS_DENTRO_DE_MAIS = ["/publicos", "/automacao", "/relatorios", "/mais
 /** Navegação principal — vira barra de abas fixa embaixo no celular (padrão de app, mais fácil de
  * alcançar com o polegar) e barra no topo no desktop. Um só componente, dois layouts via classes
  * responsivas, pra nunca desalinhar qual aba está ativa entre as duas versões. */
-export default function Cabecalho({ ativo }: { ativo: string }) {
-  const ativoNaBarra = PAGINAS_DENTRO_DE_MAIS.includes(ativo) ? "/mais" : ativo;
+export default function Cabecalho({
+  ativo,
+  rede = false,
+  geralHref = "/campanhas",
+}: {
+  ativo: string;
+  /** Página da Central da rede (só unidades de franquia). As abas do topo são a visão GERAL de todas
+   * as contas; dentro da rede nenhuma delas acende e uma faixa avisa onde a pessoa está. Páginas de
+   * /estrategias já contam como rede sem precisar passar isso. */
+  rede?: boolean;
+  /** Pra onde vai o "Ver todas as contas" da faixa da rede: a versão geral da mesma tela. */
+  geralHref?: string;
+}) {
+  const modoRede = rede || ativo === "/estrategias";
+  const ativoNaBarra = modoRede ? "" : PAGINAS_DENTRO_DE_MAIS.includes(ativo) ? "/mais" : ativo;
 
   return (
     <>
@@ -73,6 +87,28 @@ export default function Cabecalho({ ativo }: { ativo: string }) {
             </button>
           </form>
         </div>
+
+        {modoRede && (
+          <div className="border-t border-accent/25 bg-accent/10">
+            <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-2 sm:px-6">
+              <p className="flex items-center gap-2 text-xs font-semibold text-accent-strong">
+                <Buildings size={14} weight="fill" />
+                Central da rede
+                <span className="hidden font-normal text-neutral-400 sm:inline">
+                  — só as unidades de franquia. As abas acima são de todas as contas.
+                </span>
+              </p>
+              <div className="flex items-center gap-4 text-xs font-medium">
+                <Link href="/estrategias" className="flex items-center gap-1 text-neutral-300 hover:text-neutral-100">
+                  <ArrowLeft size={12} /> Hub da rede
+                </Link>
+                <Link href={geralHref} className="text-neutral-400 hover:text-neutral-200">
+                  Ver todas as contas →
+                </Link>
+              </div>
+            </div>
+          </div>
+        )}
       </header>
 
       {/* Barra de abas no celular — fixa embaixo, mesmo tratamento glass do resto do app. Some a

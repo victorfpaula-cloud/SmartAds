@@ -55,7 +55,7 @@ export default async function FinanceiroPage({
 
   return (
     <>
-      <Cabecalho ativo="/financeiro" />
+      <Cabecalho ativo="/financeiro" rede={apenasRede} geralHref="/financeiro" />
       <main className="mx-auto max-w-6xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
         {apenasRede && (
           <Link href="/estrategias" className="text-xs text-neutral-500 hover:text-neutral-300">
