@@ -226,6 +226,9 @@ export default async function FinanceiroPage({
                         <p className="mt-0.5 text-sm font-semibold text-accent-strong">
                           {conta.saldoDisponivelCentavos !== null ? reais(conta.saldoDisponivelCentavos) : "—"}
                         </p>
+                        {conta.fontePagamentoTexto && (
+                          <p className="mt-0.5 text-[10px] text-neutral-500">Meta: {conta.fontePagamentoTexto}</p>
+                        )}
                       </div>
                       <Metrica rotulo="Gasto 7 dias" valor={reais(conta.gasto7diasCentavos)} />
                       <Metrica rotulo="Média diária" valor={reais(conta.mediaDiariaCentavos)} />

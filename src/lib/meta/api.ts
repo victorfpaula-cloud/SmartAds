@@ -115,6 +115,48 @@ export async function obterSaldoConta(adAccountId: string): Promise<SaldoContaMe
   };
 }
 
+/** Forma de pagamento da conta como a Meta descreve. Numa conta pré-paga (Pix/boleto, "Fundos") o
+ * texto traz o saldo, ex.: "Saldo disponível (R$ 263,55)" — é o MESMO texto que aparece no
+ * Gerenciador de Anúncios, e é o único lugar da API pública onde esse número existe. Conta com
+ * cartão devolve algo como "Visa ·· 1234" (sem saldo). Falha aqui nunca derruba o Financeiro. */
+export interface FonteDePagamentoMeta {
+  texto: string | null;
+  tipo: number | null;
+  prePaga: boolean | null;
+  /** Saldo já em centavos quando o texto é de saldo/fundos e tem um valor; senão null. */
+  saldoDisponivelCentavos: number | null;
+}
+
+/** Converte "R$ 1.234,56", "R$263,55", "BRL 1,234.56" ou "US$23.00" em centavos. O separador
+ * decimal é o último "," ou "." seguido de 1-2 dígitos no fim do número; os demais são milhar. */
+export function valorEmCentavosDoTexto(texto: string): number | null {
+  const achado = texto.match(/-?\d[\d.,\s]*/);
+  if (!achado) return null;
+  const bruto = achado[0].trim().replace(/\s/g, "");
+  const negativo = bruto.startsWith("-");
+  const decimal = bruto.match(/[.,](\d{1,2})$/);
+  const parteInteira = (decimal ? bruto.slice(0, bruto.length - decimal[0].length) : bruto).replace(/[^\d]/g, "");
+  if (!parteInteira) return null;
+  const centavos = Number(parteInteira) * 100 + (decimal ? Number(decimal[1].padEnd(2, "0")) : 0);
+  return negativo ? -centavos : centavos;
+}
+
+export async function obterFonteDePagamento(adAccountId: string): Promise<FonteDePagamentoMeta> {
+  const dados = await chamar<{
+    is_prepay_account?: boolean;
+    funding_source_details?: { display_string?: string; type?: number };
+  }>(adAccountId, { query: { fields: "is_prepay_account,funding_source_details" } });
+
+  const texto = dados.funding_source_details?.display_string ?? null;
+  const ehSaldo = texto !== null && /saldo|fundos|balance|available/i.test(texto);
+  return {
+    texto,
+    tipo: dados.funding_source_details?.type ?? null,
+    prePaga: dados.is_prepay_account ?? null,
+    saldoDisponivelCentavos: ehSaldo && texto ? valorEmCentavosDoTexto(texto) : null,
+  };
+}
+
 export interface PaginaMeta {
   id: string;
   name: string;

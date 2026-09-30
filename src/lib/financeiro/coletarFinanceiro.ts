@@ -11,6 +11,7 @@ export interface ContaFinanceiro {
   metaAdAccountId: string;
   saldoDisponivelCentavos: number | null;
   faturaEmAbertoCentavos: number | null;
+  fontePagamentoTexto: string | null;
   gasto7diasCentavos: number;
   mediaDiariaCentavos: number;
   projecaoMensalCentavos: number;
@@ -74,7 +75,7 @@ export async function coletarFinanceiro(): Promise<ContaFinanceiro[]> {
     supabase
       .from("smartads_financeiro_cache")
       .select(
-        "conta_id, saldo_disponivel_centavos, fatura_em_aberto_centavos, gasto_7d_centavos, media_diaria_centavos, projecao_mensal_centavos, erro, calculado_em"
+        "conta_id, saldo_disponivel_centavos, fatura_em_aberto_centavos, fonte_pagamento_texto, gasto_7d_centavos, media_diaria_centavos, projecao_mensal_centavos, erro, calculado_em"
       ),
   ]);
 
@@ -133,6 +134,7 @@ export async function coletarFinanceiro(): Promise<ContaFinanceiro[]> {
           conta_id: conta.id,
           saldo_disponivel_centavos: resultado.saldoDisponivelCentavos,
           fatura_em_aberto_centavos: resultado.faturaEmAbertoCentavos,
+          fonte_pagamento_texto: resultado.fontePagamentoTexto,
           gasto_7d_centavos: resultado.gasto7diasCentavos,
           media_diaria_centavos: resultado.mediaDiariaCentavos,
           projecao_mensal_centavos: resultado.projecaoMensalCentavos,
@@ -151,6 +153,7 @@ export async function coletarFinanceiro(): Promise<ContaFinanceiro[]> {
         metaAdAccountId: conta.meta_ad_account_id,
         saldoDisponivelCentavos: linhaCache.saldo_disponivel_centavos ?? null,
         faturaEmAbertoCentavos: linhaCache.fatura_em_aberto_centavos ?? null,
+        fontePagamentoTexto: linhaCache.fonte_pagamento_texto ?? null,
         gasto7diasCentavos: linhaCache.gasto_7d_centavos ?? 0,
         mediaDiariaCentavos: linhaCache.media_diaria_centavos ?? 0,
         projecaoMensalCentavos: linhaCache.projecao_mensal_centavos ?? 0,

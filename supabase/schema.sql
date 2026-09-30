@@ -617,6 +617,9 @@ create table if not exists smartads_financeiro_cache (
   calculado_em timestamptz not null default now()
 );
 
+-- Texto da forma de pagamento como a Meta mostra (ex.: "Saldo disponível (R$ 263,55)"), de onde sai o saldo.
+alter table smartads_financeiro_cache add column if not exists fonte_pagamento_texto text;
+
 alter table smartads_financeiro_cache enable row level security;
 
 -- ============================================================================
