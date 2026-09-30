@@ -1,6 +1,7 @@
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { listarCampanhas, campanhaAtivaAgora, obterInsightsConta } from "@/lib/meta/api";
 import { mesAtualEmSaoPaulo } from "@/lib/tempoSaoPaulo";
+import { obterResumoBoostPorConta, type ResumoBoostConta } from "@/lib/boostResumo";
 import { mapearEmLotes } from "@/lib/lotes";
 
 export const ROTULO_OBJETIVO: Record<string, string> = {
@@ -297,6 +298,21 @@ export async function obterCampanhasAtivasRede(): Promise<{
 }
 
 
+export interface BoostDaUnidade {
+  clienteId: string;
+  /** Sem Instagram vinculado não há de onde tirar o post — o boost nem se aplica. */
+  temInstagram: boolean;
+  ativo: boolean;
+  publicoId: string | null;
+  orcamentoCentavos: number | null;
+  duracaoDias: number;
+  noAr: number;
+  falha: ResumoBoostConta["falha"];
+  nomeExibicao: string | null;
+  metaAdAccountNome: string | null;
+  metaAdAccountId: string;
+}
+
 export interface UnidadeRedeResumo {
   contaId: string;
   empresaId: string | null;
@@ -309,13 +325,14 @@ export interface UnidadeRedeResumo {
   campanhasAtivas: number | null;
   /** Gasto do mês corrente, em centavos; null = ainda não calculado neste mês. */
   gastoMesCentavos: number | null;
+  boost: BoostDaUnidade;
 }
 
 /** Uma linha por unidade: quantas campanhas ativas e quanto já gastou no mês. Tudo do cache
  * (campanhas ativas + gasto do mês, atualizados juntos pelo cron 2x/dia) — a tela nunca bate na
  * Meta. Unidade sem campanha ativa também entra, com 0. `apenasFranquia` limita às unidades de rede
  * (Central da rede); sem isso vêm todas as contas, de qualquer empresa (menu Campanhas). */
-export async function obterResumoPorUnidade(opcoes: { apenasFranquia: boolean }): Promise<{
+export async function obterResumoPorUnidade(opcoes: { apenasFranquia: boolean; empresaId?: string }): Promise<{
   unidades: UnidadeRedeResumo[];
   atualizadoEm: string | null;
 }> {
@@ -329,6 +346,7 @@ export async function obterResumoPorUnidade(opcoes: { apenasFranquia: boolean })
     )
     .eq("ativo", true);
   if (opcoes.apenasFranquia) consultaClientes = consultaClientes.eq("smartads_empresas.tipo", "franquia");
+  if (opcoes.empresaId) consultaClientes = consultaClientes.eq("empresa_id", opcoes.empresaId);
 
   const [{ data: cacheCampanhas }, { data: cacheGasto }, { data: clientes }] = await Promise.all([
     supabase.from("smartads_campanhas_rede_cache").select("conta_id, atualizado_em"),
@@ -345,6 +363,11 @@ export async function obterResumoPorUnidade(opcoes: { apenasFranquia: boolean })
     (cacheGasto ?? []).filter((g) => g.mes === mesAtual).map((g) => [g.conta_id, g.gasto_mes_centavos as number])
   );
 
+  const contasAtivas = ((clientes ?? []) as any[]).flatMap((cliente) =>
+    (cliente.smartads_contas_meta as any[]).filter((c) => c.ativo)
+  );
+  const resumoBoost = await obterResumoBoostPorConta(contasAtivas);
+
   const unidades: UnidadeRedeResumo[] = [];
   for (const cliente of (clientes ?? []) as any[]) {
     const empresa = cliente.smartads_empresas;
@@ -359,6 +382,19 @@ export async function obterResumoPorUnidade(opcoes: { apenasFranquia: boolean })
         campanhasAtivas:
           ativasPorConta.has(conta.id) || gastoPorConta.has(conta.id) ? ativasPorConta.get(conta.id) ?? 0 : null,
         gastoMesCentavos: gastoPorConta.has(conta.id) ? gastoPorConta.get(conta.id)! : null,
+        boost: {
+          clienteId: cliente.id,
+          temInstagram: Boolean(conta.instagram_business_id),
+          ativo: Boolean(conta.boost_automatico_ativo),
+          publicoId: conta.boost_automatico_publico_id ?? null,
+          orcamentoCentavos: conta.boost_automatico_orcamento_centavos ?? null,
+          duracaoDias: conta.boost_automatico_duracao_dias ?? 3,
+          noAr: resumoBoost.get(conta.id)?.noAr ?? 0,
+          falha: resumoBoost.get(conta.id)?.falha ?? null,
+          nomeExibicao: conta.nome_exibicao ?? null,
+          metaAdAccountNome: conta.meta_ad_account_nome ?? null,
+          metaAdAccountId: conta.meta_ad_account_id,
+        },
       });
     }
   }
