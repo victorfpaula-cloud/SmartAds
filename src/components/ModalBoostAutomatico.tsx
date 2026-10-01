@@ -29,7 +29,7 @@ interface PublicoSalvo {
 }
 
 /** Liga/desliga o boost automático de uma conta — todo dia, depois da janela de postagem, o cron
- * confere o post mais recente do Instagram e, se for de hoje, dispara sozinho uma campanha de
+ * confere o primeiro post de hoje do Instagram e, se ainda não foi turbinado, dispara uma campanha de
  * engajamento nele (ver src/lib/automacao/boostAutomatico.ts). Só aceita público salvo "nativo" do
  * SmartAds (origem smartads) — um público reaproveitado direto da Meta usa outro caminho de
  * montagem que essa automação ainda não cobre. Compartilhado entre Contas (cadastro) e Início
@@ -128,10 +128,11 @@ export default function ModalBoostAutomatico({
 
         <form onSubmit={salvar} className="flex flex-col gap-4 p-5">
           <p className="text-xs leading-relaxed text-neutral-400">
-            Todo dia, depois da janela de postagem (por volta das 15h), o SmartAds confere o post
-            mais recente do Instagram dessa conta. Se for de hoje e ainda não tiver sido turbinado,
-            dispara sozinho uma campanha de engajamento nele, sempre com o público, o orçamento
-            diário e a duração configurados abaixo.
+            Todo dia, depois da janela de postagem (por volta das 15h), o SmartAds confere os posts
+            do dia no Instagram dessa conta. O primeiro post de hoje, se ainda não tiver sido
+            turbinado, ganha sozinho uma campanha de engajamento, sempre com o público, o orçamento
+            diário e a duração configurados abaixo. No máximo 1 boost automático por dia — os
+            outros posts do mesmo dia ficam de fora (dá pra turbinar à mão).
           </p>
 
           <label className="flex items-center gap-2.5">
