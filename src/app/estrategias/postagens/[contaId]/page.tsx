@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 
 const CLASSE_COMPARATIVO: Record<ComparativoRede, string> = {
   acima: "bg-ok/15 text-ok",
-  na_media: "bg-sky-400/15 text-sky-300",
+  na_media: "bg-indigo-500/15 text-indigo-300",
   abaixo: "bg-amber-500/15 text-amber-400",
   critico: "bg-danger/15 text-danger",
   sem_base: "bg-white/[0.06] text-neutral-400",

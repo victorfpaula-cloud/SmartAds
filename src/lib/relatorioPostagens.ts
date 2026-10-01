@@ -357,7 +357,7 @@ export const ROTULO_COMPARATIVO: Record<ComparativoRede, string> = {
 function estiloComparativo(classificacao: ComparativoRede): { rotulo: string; cor: string; fundo: string } {
   const cores: Record<ComparativoRede, { cor: string; fundo: string }> = {
     acima: { cor: "#15803d", fundo: "#dcfce7" },
-    na_media: { cor: "#0369a1", fundo: "#e0f2fe" },
+    na_media: { cor: "#4338ca", fundo: "#e0e7ff" },
     abaixo: { cor: "#b45309", fundo: "#fef3c7" },
     critico: { cor: "#b91c1c", fundo: "#fee2e2" },
     sem_base: { cor: "#71717a", fundo: "#f4f4f5" },
