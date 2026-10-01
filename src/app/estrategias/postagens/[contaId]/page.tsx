@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 
 const CLASSE_COMPARATIVO: Record<ComparativoRede, string> = {
   acima: "bg-ok/15 text-ok",
-  na_media: "bg-white/[0.06] text-neutral-400",
+  na_media: "bg-sky-400/15 text-sky-300",
   abaixo: "bg-amber-500/15 text-amber-400",
   critico: "bg-danger/15 text-danger",
   sem_base: "bg-white/[0.06] text-neutral-400",
@@ -104,12 +104,13 @@ export default async function DetalhePostagensPage({ params }: { params: Promise
 }
 
 function LinhaSaude({ classe, rotulo, midia, texto }: { classe: string; rotulo: string; midia: string; texto: string }) {
+  // Três colunas fixas (selo, mídia, números): selos de mesma largura e o primeiro número de cada
+  // linha alinhado na vertical, não importa o tamanho do rótulo.
   return (
-    <div className="grid grid-cols-1 items-center gap-1 sm:grid-cols-[12.5rem_1fr] sm:gap-3">
-      <span className={`w-fit whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold ${classe}`}>{rotulo}</span>
-      <p className="text-sm text-neutral-400">
-        <span className="font-semibold text-neutral-200">{midia}</span> · {texto}
-      </p>
+    <div className="grid grid-cols-1 items-center gap-1 sm:grid-cols-[12.5rem_6rem_1fr] sm:gap-3">
+      <span className={`w-fit whitespace-nowrap rounded-full px-3 py-1 text-center text-xs font-semibold sm:w-full ${classe}`}>{rotulo}</span>
+      <span className="text-sm font-semibold text-neutral-200">{midia}</span>
+      <p className="text-sm text-neutral-400">{texto}</p>
     </div>
   );
 }
