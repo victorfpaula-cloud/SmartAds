@@ -357,7 +357,7 @@ export const ROTULO_COMPARATIVO: Record<ComparativoRede, string> = {
 function estiloComparativo(classificacao: ComparativoRede): { rotulo: string; cor: string; fundo: string } {
   const cores: Record<ComparativoRede, { cor: string; fundo: string }> = {
     acima: { cor: "#15803d", fundo: "#dcfce7" },
-    na_media: { cor: "#52525b", fundo: "#f4f4f5" },
+    na_media: { cor: "#0369a1", fundo: "#e0f2fe" },
     abaixo: { cor: "#b45309", fundo: "#fef3c7" },
     critico: { cor: "#b91c1c", fundo: "#fee2e2" },
     sem_base: { cor: "#71717a", fundo: "#f4f4f5" },
@@ -396,18 +396,21 @@ function montarSecaoUnidade(unidade: UnidadeRelatorioPostagens, mediaRede: numbe
   const comparativo = estiloComparativo(classificarComparativoRede(unidade.totalPostagens, mediaRede));
   const stats = estatisticas.porConta.get(unidade.contaId);
   const comparativoStories = estiloComparativo(stats?.comparativo ?? "sem_base");
+  // Selo de largura fixa e texto centralizado: "Na média da rede" e "Acima da média da rede" ocupam o
+  // mesmo espaço e ficam alinhados um embaixo do outro.
   const selo = (estilo: { rotulo: string; cor: string; fundo: string }) =>
-    `<span style="display:inline-block;padding:3px 10px;border-radius:99px;background:${estilo.fundo};color:${estilo.cor};font-size:10.5px;font-weight:700">${estilo.rotulo}</span>`;
+    `<span style="display:block;width:158px;padding:3px 0;border-radius:99px;background:${estilo.fundo};color:${estilo.cor};font-size:10.5px;font-weight:700;text-align:center">${estilo.rotulo}</span>`;
   const textoStories = stats
     ? `${descricaoTotalStories(stats.total, estatisticas.diasDeColeta)}${stats.mediaDia !== null ? `<span style="margin:0 6px;color:#d4d4d8">·</span>média ${formatarMediaStories(stats.mediaDia)}/dia` : ""}`
     : "";
   const textoFeed = `${unidade.totalPostagens} ${unidade.totalPostagens === 1 ? "postagem" : "postagens"} em 30 dias`;
-  // Uma linha do subcard: selo de saúde na coluna da esquerda (largura fixa, pra os textos das duas
-  // linhas alinharem mesmo com selos de tamanhos diferentes) e "mídia · números" na frente.
+  // Uma linha do subcard em três colunas de largura fixa — selo de saúde, mídia e números — pra o
+  // selo e o primeiro número (18, 26...) de cada linha ficarem alinhados na vertical.
   const linhaSubcard = (estilo: { rotulo: string; cor: string; fundo: string }, midia: string, texto: string, topo: number) =>
     `<tr>
-        <td style="width:168px;vertical-align:middle;padding:${topo}px 0 0">${selo(estilo)}</td>
-        <td style="vertical-align:middle;padding:${topo}px 0 0;font-size:11.5px;color:#71717a"><b style="color:#3f3f46">${midia}</b><span style="margin:0 6px;color:#d4d4d8">·</span>${texto}</td>
+        <td style="width:170px;vertical-align:middle;padding:${topo}px 0 0">${selo(estilo)}</td>
+        <td style="width:84px;vertical-align:middle;padding:${topo}px 0 0;font-size:11.5px;font-weight:700;color:#3f3f46;white-space:nowrap">${midia}</td>
+        <td style="vertical-align:middle;padding:${topo}px 0 0;font-size:11.5px;color:#71717a">${texto}</td>
       </tr>`;
 
   // Cabeçalho: avatar + nome (com o @ em cinza logo depois) e, embaixo, um subcard discreto que
