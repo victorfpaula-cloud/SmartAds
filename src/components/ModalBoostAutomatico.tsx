@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Lightning, X } from "@phosphor-icons/react";
 
 export interface ContaBoost {
@@ -55,6 +56,20 @@ export default function ModalBoostAutomatico({
   const [publicos, setPublicos] = useState<PublicoSalvo[] | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [montado, setMontado] = useState(false);
+
+  // O modal é aberto de dentro de cards com blur (.cartao-vidro): um ancestral com backdrop-filter
+  // vira o "bloco de contenção" do position:fixed, então o modal ficava preso e cortado dentro do
+  // card (botão Salvar fora da tela). Renderizar direto no <body> (portal) escapa disso.
+  useEffect(() => {
+    setMontado(true);
+    // Trava o scroll da página por baixo enquanto o modal está aberto.
+    const overflowAnterior = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = overflowAnterior;
+    };
+  }, []);
 
   useEffect(() => {
     fetch(`/api/publicos?clienteId=${clienteId}`)
@@ -94,7 +109,9 @@ export default function ModalBoostAutomatico({
     });
   }
 
-  return (
+  if (!montado) return null;
+
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6 backdrop-blur-sm">
       <div className="flex max-h-[90dvh] w-full max-w-md flex-col overflow-y-auto rounded-2xl border border-white/10 bg-ink-900 shadow-2xl">
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-ink-900 px-5 py-3.5">
@@ -133,7 +150,11 @@ export default function ModalBoostAutomatico({
               <p className="mt-1 text-xs text-neutral-500">Carregando públicos salvos…</p>
             ) : publicos.length === 0 ? (
               <p className="mt-1 text-xs text-neutral-500">
-                Nenhum público salvo nesse cliente ainda — cadastre um em Públicos antes de ligar.
+                Nenhum público salvo nesse cliente ainda —{" "}
+                <a href="/publicos" className="font-semibold text-accent underline underline-offset-2">
+                  cadastre um em Públicos
+                </a>{" "}
+                antes de ligar.
               </p>
             ) : (
               <select
@@ -190,6 +211,7 @@ export default function ModalBoostAutomatico({
           </button>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
