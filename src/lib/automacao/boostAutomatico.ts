@@ -21,8 +21,8 @@ function ehPostDeHoje(timestampPost: string): boolean {
 
 /** Chamado 1x/dia pelo cron (ver /api/cron/boost-automatico e vercel.json), depois da janela de
  * postagem do dia (a pessoa liga a função e diz o horário na tela — ver PainelContas). Pra cada
- * conta com boost_automatico_ativo: pega o post mais recente do Instagram, confere se é de hoje e
- * se ainda não foi turbinado (smartads_boost_automatico_log), e se sim dispara uma campanha de
+ * conta com boost_automatico_ativo: pega o PRIMEIRO post de hoje do Instagram (no máximo 1 boost por
+ * dia por conta) e confere se ainda não foi turbinado (smartads_boost_automatico_log), e se sim dispara uma campanha de
  * engajamento nele — mesmo caminho de "turbinar publicação existente" que já existe manualmente em
  * /campanhas/nova, só que automático. Uma conta com erro (Instagram sem post, público apagado,
  * falha na Meta) não impede as outras — fica registrada no log pra investigar depois. Processa as
@@ -47,9 +47,24 @@ export async function avaliarBoostAutomatico(): Promise<{
         return false; // Ligado mas sem configurar público/orçamento ainda — nada a fazer.
       }
 
+      // No máximo 1 boost automático por conta por dia, sempre do PRIMEIRO post publicado no dia —
+      // um perfil que posta sem parar não pode empilhar uma campanha nova a cada rodada do cron
+      // (até 3 por dia, cada uma rodando por 3 a 7 dias). Posts seguintes do mesmo dia ficam de
+      // fora do automático (continuam podendo ser turbinados à mão).
+      const inicioDoDia = new Date(`${dataEmSaoPaulo(new Date().toISOString())}T00:00:00-03:00`).toISOString();
+      const { data: sucessosHoje } = await supabase
+        .from("smartads_boost_automatico_log")
+        .select("id")
+        .eq("conta_id", conta.id)
+        .eq("sucesso", true)
+        .gte("created_at", inicioDoDia)
+        .limit(1);
+      if ((sucessosHoje ?? []).length > 0) return false;
+
       const posts = await listarPostsInstagram(conta.instagram_business_id);
-      const maisRecente = posts[0];
-      if (!maisRecente || !ehPostDeHoje(maisRecente.timestamp)) return false;
+      const postsDeHoje = posts.filter((p) => ehPostDeHoje(p.timestamp));
+      if (postsDeHoje.length === 0) return false;
+      const primeiroDoDia = postsDeHoje.reduce((primeiro, p) => (p.timestamp < primeiro.timestamp ? p : primeiro));
 
       // Só sucesso conta como "já turbinado". Falha anterior é retentada (até MAX_TENTATIVAS_POR_POST):
       // antes qualquer linha no log, inclusive de falha, travava o post pra sempre — um erro
@@ -58,7 +73,7 @@ export async function avaliarBoostAutomatico(): Promise<{
         .from("smartads_boost_automatico_log")
         .select("sucesso, tentativas")
         .eq("conta_id", conta.id)
-        .eq("instagram_media_id", maisRecente.id)
+        .eq("instagram_media_id", primeiroDoDia.id)
         .maybeSingle();
       if (registro?.sucesso) return false;
       const tentativasAnteriores = registro?.tentativas ?? 0;
@@ -72,7 +87,7 @@ export async function avaliarBoostAutomatico(): Promise<{
         await supabase.from("smartads_boost_automatico_log").upsert(
           {
             conta_id: conta.id,
-            instagram_media_id: maisRecente.id,
+            instagram_media_id: primeiroDoDia.id,
             tentativas: tentativasAnteriores + 1,
             created_at: new Date().toISOString(),
             campanha_criada_id: null,
@@ -110,7 +125,7 @@ export async function avaliarBoostAutomatico(): Promise<{
           valorCentavos: conta.boost_automatico_orcamento_centavos,
           dataFim: dataFim.toISOString(),
         },
-        criativo: { usarPostExistente: true, postSelecionadoId: maisRecente.id, mensagem: "" },
+        criativo: { usarPostExistente: true, postSelecionadoId: primeiroDoDia.id, mensagem: "" },
       });
 
       await gravarResultado({
