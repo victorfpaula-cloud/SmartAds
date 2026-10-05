@@ -758,7 +758,7 @@ export async function criarCriativoNovo(
 
 export async function criarAnuncio(
   adAccountId: string,
-  params: { name: string; adsetId: string; creativeId: string }
+  params: { name: string; adsetId: string; creativeId: string; status?: "ACTIVE" | "PAUSED" }
 ): Promise<{ id: string }> {
   return chamar(`${adAccountId}/ads`, {
     metodo: "POST",
@@ -766,9 +766,31 @@ export async function criarAnuncio(
       name: params.name,
       adset_id: params.adsetId,
       creative: { creative_id: params.creativeId },
-      status: "ACTIVE",
+      status: params.status ?? "ACTIVE",
     },
   });
+}
+
+/** Retrato da conta de anúncio segundo a própria Meta (status, motivo de bloqueio, tipo de dono,
+ * permissões do usuário, termos aceitos...) — usado só pra diagnóstico quando a Meta recusa criar
+ * anúncio. Cada grupo de campos vai numa chamada separada: se a Meta recusar UM campo (permissão ou
+ * campo que não existe na versão), os outros grupos ainda voltam. */
+export async function diagnosticarContaDeAnuncio(adAccountId: string): Promise<Record<string, unknown>> {
+  const grupos = [
+    "account_status,disable_reason,created_time,age,currency",
+    "is_personal,business,owner,agency_client_declaration",
+    "user_tasks,tos_accepted,user_tos_accepted",
+    "funding_source_details,spend_cap,amount_spent",
+  ];
+  const retrato: Record<string, unknown> = {};
+  for (const campos of grupos) {
+    try {
+      Object.assign(retrato, await chamar<Record<string, unknown>>(adAccountId, { query: { fields: campos } }));
+    } catch (e) {
+      retrato[`erro(${campos})`] = e instanceof Error ? e.message : String(e);
+    }
+  }
+  return retrato;
 }
 
 export async function pausarAnuncio(adId: string) {

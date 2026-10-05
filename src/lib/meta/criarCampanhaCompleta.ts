@@ -12,6 +12,7 @@ import {
   criarCriativoDoPostDaPagina,
   criarCriativoNovo,
   criarAnuncio,
+  diagnosticarContaDeAnuncio,
   subirImagem,
   excluirObjeto,
   type PostInstagram,
@@ -139,6 +140,10 @@ async function criarCampanhaCompletaComConexao(corpo: ParametrosCriarCampanha): 
   // Em qual chamada à Meta a criação do anúncio parou — o rollback apaga tudo, então sem isso o log
   // só diz "falhou" e não dá pra saber se foi o criativo ou o anúncio que a Meta recusou.
   const passosConcluidos: string[] = [];
+  // Criativos que a Meta aceitou — se ela recusar criar o ANÚNCIO, ainda dá pra tentar criá-lo em
+  // pausa com um desses (ver o catch lá embaixo).
+  let criativoInstagramId: string | null = null;
+  let criativoPaginaId: string | null = null;
 
   try {
     // Se for turbinar publicação existente, busca o post ANTES de montar o targeting — precisa
@@ -196,6 +201,7 @@ async function criarCampanhaCompletaComConexao(corpo: ParametrosCriarCampanha): 
           pageId: conta.page_id,
           name: `${corpo.nomeCampanha} - criativo`,
         });
+        criativoInstagramId = criativoInstagram.id;
         passosConcluidos.push("criativo do post do Instagram criado");
         const anuncioInstagram = await criarAnuncio(adAccountId, {
           name: `${corpo.nomeCampanha} - anúncio`,
@@ -243,6 +249,7 @@ async function criarCampanhaCompletaComConexao(corpo: ParametrosCriarCampanha): 
           objectStoryId: postDaPaginaId,
           name: `${corpo.nomeCampanha} - criativo`,
         });
+        criativoPaginaId = criativoPagina.id;
         passosConcluidos.push(`post da Página encontrado (${postDaPaginaId}) e criativo dele criado`);
         const anuncioPagina = await criarAnuncio(adAccountId, {
           name: `${corpo.nomeCampanha} - anúncio`,
@@ -311,6 +318,58 @@ async function criarCampanhaCompletaComConexao(corpo: ParametrosCriarCampanha): 
 
     return { ok: true, campanhaSalva };
   } catch (erro) {
+    const mensagemBruta = erro instanceof Error ? erro.message : "";
+
+    // A Meta às vezes recusa CRIAR o anúncio com "Autentique sua conta" (code 31) numa conta onde o
+    // Gerenciador de Anúncios funciona normalmente. Antes de desfazer tudo, tenta criar o anúncio em
+    // PAUSA com o criativo que ela já aceitou: se passar, a campanha fica pronta no Gerenciador (só
+    // falta ativar lá) em vez de se perder; se não passar, guarda o retrato da conta segundo a Meta
+    // no log, pra saber exatamente o que está bloqueando. Nunca contorna a verificação: ativar
+    // continua sendo com a pessoa, no Gerenciador.
+    let diagnosticoConta: Record<string, unknown> | undefined;
+    let tentativaEmPausa: { ok: boolean; erro?: string; anuncioId?: string } | undefined;
+    if (campanhaId && adsetId && /autentique sua conta/i.test(mensagemBruta)) {
+      diagnosticoConta = await diagnosticarContaDeAnuncio(adAccountId).catch(() => undefined);
+      const creativeId = criativoPaginaId ?? criativoInstagramId;
+      if (creativeId) {
+        try {
+          const pausado = await criarAnuncio(adAccountId, {
+            name: `${corpo.nomeCampanha} - anúncio`,
+            adsetId,
+            creativeId,
+            status: "PAUSED",
+          });
+          tentativaEmPausa = { ok: true, anuncioId: pausado.id };
+        } catch (erroPausa) {
+          tentativaEmPausa = { ok: false, erro: erroPausa instanceof Error ? erroPausa.message : String(erroPausa) };
+        }
+      }
+    }
+
+    if (tentativaEmPausa?.ok && campanhaId && adsetId) {
+      const mensagemPausa = `Autentique sua conta: a Meta recusou ativar o anúncio pelo SmartAds, mas a campanha "${nomeCampanhaFinal}" ficou criada em pausa no Gerenciador de Anúncios — é só abrir lá e ativar.`;
+      await registrarAcao({
+        contaId: corpo.contaId,
+        acao: "criar_campanha",
+        payload: corpo as unknown as Record<string, unknown>,
+        sucesso: false,
+        erroMensagem: mensagemPausa,
+        resultado: {
+          criadoEmPausa: true,
+          etapaAlcancada: { campanhaId, adsetId, anuncioIds: [tentativaEmPausa.anuncioId] },
+          erroOriginalMeta: erro instanceof ErroGraphAPIException ? erro.original : undefined,
+          diagnosticoConta,
+          passosConcluidos,
+        } as Record<string, unknown>,
+      });
+      return {
+        ok: false,
+        erro: mensagemPausa,
+        status: 409,
+        etapaAlcancada: { campanhaId, adsetId, anuncioIds: [tentativaEmPausa.anuncioId as string] },
+      };
+    }
+
     // Rollback: apaga a campanha (a Meta já cascade-apaga conjunto/anúncio/criativo junto) em vez
     // de deixar objeto pela metade na conta do cliente.
     if (campanhaId) {
@@ -347,6 +406,8 @@ async function criarCampanhaCompletaComConexao(corpo: ParametrosCriarCampanha): 
               etapaAlcancada: { campanhaId, adsetId, anuncioIds },
               ...(erroCriativoInstagram ? { erroCriativoInstagram } : {}),
               passosConcluidos,
+              ...(diagnosticoConta ? { diagnosticoConta } : {}),
+              ...(tentativaEmPausa ? { tentativaEmPausa } : {}),
             }
           : erroCriativoInstagram
             ? { etapaAlcancada: { campanhaId, adsetId, anuncioIds }, erroCriativoInstagram, passosConcluidos }
