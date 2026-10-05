@@ -132,6 +132,10 @@ async function criarCampanhaCompletaComConexao(corpo: ParametrosCriarCampanha): 
   let campanhaId: string | undefined;
   let adsetId: string | undefined;
   const anuncioIds: string[] = [];
+  // Erro da 1ª tentativa de criativo (post do Instagram), guardado no log mesmo quando a 2ª
+  // tentativa (post da Página) é que falha e vira a mensagem final — sem isso não dá pra saber
+  // em qual das duas etapas a Meta recusou.
+  let erroCriativoInstagram = "";
 
   try {
     // Se for turbinar publicação existente, busca o post ANTES de montar o targeting — precisa
@@ -197,6 +201,7 @@ async function criarCampanhaCompletaComConexao(corpo: ParametrosCriarCampanha): 
         anuncioId = anuncioInstagram.id;
       } catch (erroInstagram) {
         erroInstagramTexto = erroInstagram instanceof Error ? erroInstagram.message : String(erroInstagram);
+        erroCriativoInstagram = erroInstagramTexto;
       }
 
       if (!anuncioId) {
@@ -332,8 +337,14 @@ async function criarCampanhaCompletaComConexao(corpo: ParametrosCriarCampanha): 
       // de anúncios ou do criativo, já que os dois passam pelo mesmo catch.
       resultado:
         erro instanceof ErroGraphAPIException
-          ? { erroOriginalMeta: erro.original, etapaAlcancada: { campanhaId, adsetId, anuncioIds } }
-          : undefined,
+          ? {
+              erroOriginalMeta: erro.original,
+              etapaAlcancada: { campanhaId, adsetId, anuncioIds },
+              ...(erroCriativoInstagram ? { erroCriativoInstagram } : {}),
+            }
+          : erroCriativoInstagram
+            ? { etapaAlcancada: { campanhaId, adsetId, anuncioIds }, erroCriativoInstagram }
+            : undefined,
     });
 
     const status = erro instanceof ErroMetaNaoConectado ? 409 : 502;
