@@ -11,6 +11,15 @@ const FUSO_HORARIO = "America/Sao_Paulo";
 // campanha na conta do cliente a cada rodada só chama a atenção do antifraude da Meta.
 const MAX_TENTATIVAS_POR_POST = 3;
 
+// Erros que a Meta devolve quando a PRÓPRIA conta/usuário está bloqueado pra criar anúncio (ex.:
+// "Autentique sua conta", code 31 / subcode 3858385). Repetir não adianta — só depende de alguém
+// resolver lá na Meta — e cada tentativa cria e apaga uma campanha na conta do cliente, o que só
+// reforça o alerta de segurança. Esses erros esgotam as tentativas na hora, em vez de retentar a
+// cada rodada do cron.
+function erroNaoRetentavel(mensagem: string | null | undefined): boolean {
+  return Boolean(mensagem && /autentique sua conta/i.test(mensagem));
+}
+
 function dataEmSaoPaulo(iso: string): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: FUSO_HORARIO }).format(new Date(iso));
 }
@@ -88,7 +97,7 @@ export async function avaliarBoostAutomatico(): Promise<{
           {
             conta_id: conta.id,
             instagram_media_id: primeiroDoDia.id,
-            tentativas: tentativasAnteriores + 1,
+            tentativas: erroNaoRetentavel(dados.erro_mensagem) ? MAX_TENTATIVAS_POR_POST : tentativasAnteriores + 1,
             created_at: new Date().toISOString(),
             campanha_criada_id: null,
             ...dados,
