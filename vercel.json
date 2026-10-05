@@ -23,7 +23,7 @@
     },
     {
       "path": "/api/cron/boost-automatico",
-      "schedule": "0 18 * * *"
+      "schedule": "0 13-23 * * *"
     },
     {
       "path": "/api/cron/stories",
@@ -44,14 +44,6 @@
     {
       "path": "/api/cron/campanhas-rede",
       "schedule": "0 21 * * *"
-    },
-    {
-      "path": "/api/cron/boost-automatico",
-      "schedule": "0 21 * * *"
-    },
-    {
-      "path": "/api/cron/boost-automatico",
-      "schedule": "0 1 * * *"
     },
     {
       "path": "/api/cron/stories",
