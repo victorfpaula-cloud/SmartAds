@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { concluirLogin } from "@/lib/meta/token";
+import { criarClienteAdmin } from "@/lib/supabase/admin";
+import { invalidarMapaDeConexoes } from "@/lib/meta/conexao";
 
 /** Volta da tela de autorização da Meta — troca o código pelo token de longa duração e salva no
  * Supabase (ver concluirLogin). Redireciona pra tela de contas com um aviso de sucesso/erro. */
@@ -44,9 +46,22 @@ export async function GET(request: NextRequest) {
   const redirectUri = `${base}/api/auth/meta/callback`;
 
   const clienteNovaConta = request.cookies.get("smartads_meta_oauth_nova_conta")?.value;
+  const contaReconectar = request.cookies.get("smartads_meta_oauth_reconectar_conta")?.value;
 
   try {
-    if (clienteNovaConta) {
+    if (contaReconectar) {
+      // "Reconectar" uma conta existente: login novo vira uma conexão nova e a conta passa a usá-la
+      // — mantém o histórico, o público e o boost configurados, sem criar conta duplicada.
+      const { conexaoId } = await concluirLogin(code, redirectUri, { novaConexao: true });
+      const supabase = criarClienteAdmin();
+      const { error } = await supabase
+        .from("smartads_contas_meta")
+        .update({ conexao_id: conexaoId })
+        .eq("id", contaReconectar);
+      if (error) throw new Error(error.message);
+      invalidarMapaDeConexoes();
+      destino.searchParams.set("conta_reconectada", contaReconectar);
+    } else if (clienteNovaConta) {
       // Login de "Adicionar conta": cria uma conexão nova e volta pra tela de contas já com o
       // seletor daquele cliente aberto, listando só o que ESSE login enxerga.
       const { conexaoId } = await concluirLogin(code, redirectUri, { novaConexao: true });
@@ -66,5 +81,6 @@ export async function GET(request: NextRequest) {
   const resposta = NextResponse.redirect(destino);
   resposta.cookies.delete("smartads_meta_oauth_state");
   resposta.cookies.delete("smartads_meta_oauth_nova_conta");
+  resposta.cookies.delete("smartads_meta_oauth_reconectar_conta");
   return resposta;
 }

@@ -13,6 +13,9 @@ interface ContaMeta {
   instagram_business_id: string | null;
   nome_exibicao: string | null;
   sigla_campanha: string | null;
+  ativo?: boolean;
+  /** null = usa a conexão principal; preenchido = login próprio (conta individual). */
+  conexao_id?: string | null;
   boost_automatico_ativo: boolean;
   boost_automatico_publico_id: string | null;
   boost_automatico_orcamento_centavos: number | null;
@@ -61,6 +64,7 @@ export default function PainelContas({
   avisoConexao,
   mensagemErro,
   novaConexao,
+  contaReconectadaId,
 }: {
   clientesIniciais: Cliente[];
   empresasIniciais: Empresa[];
@@ -69,6 +73,8 @@ export default function PainelContas({
   mensagemErro?: string;
   /** Volta do login da Meta feito a partir de "Adicionar conta": conexão nova + cliente que a pediu. */
   novaConexao?: { conexaoId: string; clienteId: string } | null;
+  /** Volta do "Reconectar" de uma conta já cadastrada: qual conta trocou de login. */
+  contaReconectadaId?: string | null;
 }) {
   const [clientes, setClientes] = useState(clientesIniciais);
   const [empresas, setEmpresas] = useState(empresasIniciais);
@@ -196,6 +202,12 @@ export default function PainelContas({
           Conexão com a Meta feita com sucesso.
         </div>
       )}
+      {contaReconectadaId && (
+        <div className="rounded-xl border border-ok/30 bg-ok/10 px-4 py-2.5 text-sm text-ok">
+          Login da conta renovado. Ela já usa a conexão nova — o boost automático e o histórico continuam
+          os mesmos.
+        </div>
+      )}
       {avisoConexao === "erro" && (
         <div className="rounded-xl border border-danger/30 bg-danger/10 px-4 py-2.5 text-sm text-danger">
           {mensagemErro || "Falha ao conectar com a Meta."}
@@ -305,9 +317,9 @@ export default function PainelContas({
                   </button>
                 </div>
 
-                {cliente.smartads_contas_meta.length > 0 && (
+                {cliente.smartads_contas_meta.some((c) => c.ativo !== false) && (
                   <div className="mt-3 flex flex-col gap-1.5">
-                    {cliente.smartads_contas_meta.map((conta) => (
+                    {cliente.smartads_contas_meta.filter((c) => c.ativo !== false).map((conta) => (
                       <div key={conta.id} className="selo-vidro px-3 py-2 text-xs text-neutral-400">
                         <div className="flex items-center gap-2">
                           <span className="font-medium text-neutral-200">
@@ -320,6 +332,23 @@ export default function PainelContas({
                               {conta.sigla_campanha}
                             </span>
                           )}
+                          {conta.conexao_id && (
+                            <a
+                              href={`/api/auth/meta/login?conta=${encodeURIComponent(conta.id)}`}
+                              onClick={(e) => {
+                                if (
+                                  !window.confirm(
+                                    "Reconectar o login da Meta dessa conta?\n\nVocê vai passar pela tela de login da Meta de novo. A conta, o boost automático e o histórico continuam os mesmos — só o acesso é renovado."
+                                  )
+                                )
+                                  e.preventDefault();
+                              }}
+                              title="Renova o login da Meta só dessa conta, sem criar outra"
+                              className="ml-auto flex items-center gap-1 rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-semibold text-neutral-400 hover:text-neutral-200"
+                            >
+                              Reconectar
+                            </a>
+                          )}
                           <button
                             onClick={() => setBoostContaSelecionada({ clienteId: cliente.id, conta })}
                             disabled={!conta.instagram_business_id}
@@ -329,7 +358,8 @@ export default function PainelContas({
                                 : "Essa conta não tem Instagram vinculado"
                             }
                             className={
-                              "ml-auto flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold disabled:cursor-not-allowed disabled:opacity-40 " +
+                              (conta.conexao_id ? "" : "ml-auto ") +
+                              "flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold disabled:cursor-not-allowed disabled:opacity-40 " +
                               (conta.boost_automatico_ativo
                                 ? "bg-ok/15 text-ok"
                                 : "bg-white/[0.06] text-neutral-400 hover:text-neutral-200")

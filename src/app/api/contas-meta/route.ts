@@ -26,6 +26,25 @@ export async function POST(request: NextRequest) {
   }
 
   const supabase = criarClienteAdmin();
+
+  // A mesma conta de anúncio não entra duas vezes no mesmo cliente — adicionar de novo (por exemplo
+  // pra trocar o login da Meta) criava uma linha duplicada na tela. Pra isso existe "Reconectar".
+  const { data: existente } = await supabase
+    .from("smartads_contas_meta")
+    .select("id")
+    .eq("cliente_id", clienteId)
+    .eq("meta_ad_account_id", metaAdAccountId)
+    .eq("ativo", true)
+    .limit(1);
+  if (existente && existente.length > 0) {
+    return NextResponse.json(
+      {
+        erro: "Essa conta de anúncio já está cadastrada nesse cliente. Pra trocar o login da Meta dela, use o botão Reconectar na própria conta.",
+      },
+      { status: 409 }
+    );
+  }
+
   const { data, error } = await supabase
     .from("smartads_contas_meta")
     .insert({
