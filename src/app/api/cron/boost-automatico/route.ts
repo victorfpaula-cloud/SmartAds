@@ -4,7 +4,7 @@ import { avaliarBoostAutomatico } from "@/lib/automacao/boostAutomatico";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-/** Chamado de hora em hora, das 10h às 20h (SP), pelo cron da Vercel (ver vercel.json) —
+/** Chamado uma vez por hora cheia, das 10h às 20h (SP), por 11 entradas diárias no vercel.json (o plano Hobby não aceita cron com mais de uma execução por dia numa mesma entrada) —
  * mesma autenticação por CRON_SECRET do resto da automação. */
 export async function GET(request: NextRequest) {
   const segredoEsperado = process.env.CRON_SECRET;
