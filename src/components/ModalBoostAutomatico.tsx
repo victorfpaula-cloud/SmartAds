@@ -128,9 +128,9 @@ export default function ModalBoostAutomatico({
 
         <form onSubmit={salvar} className="flex flex-col gap-4 p-5">
           <p className="text-xs leading-relaxed text-neutral-400">
-            Todo dia, depois da janela de postagem (por volta das 15h), o SmartAds confere os posts
-            do dia no Instagram dessa conta. O primeiro post de hoje, se ainda não tiver sido
-            turbinado, ganha sozinho uma campanha de engajamento, sempre com o público, o orçamento
+            De hora em hora, das 10h às 20h, o SmartAds confere os posts do dia no Instagram dessa
+            conta. O primeiro post de hoje, se ainda não tiver sido turbinado, ganha sozinho uma
+            campanha de engajamento, sempre com o público, o orçamento
             diário e a duração configurados abaixo. No máximo 1 boost automático por dia — os
             outros posts do mesmo dia ficam de fora (dá pra turbinar à mão).
           </p>
