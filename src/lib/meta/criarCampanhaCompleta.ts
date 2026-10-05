@@ -136,6 +136,9 @@ async function criarCampanhaCompletaComConexao(corpo: ParametrosCriarCampanha): 
   // tentativa (post da Página) é que falha e vira a mensagem final — sem isso não dá pra saber
   // em qual das duas etapas a Meta recusou.
   let erroCriativoInstagram = "";
+  // Em qual chamada à Meta a criação do anúncio parou — o rollback apaga tudo, então sem isso o log
+  // só diz "falhou" e não dá pra saber se foi o criativo ou o anúncio que a Meta recusou.
+  const passosConcluidos: string[] = [];
 
   try {
     // Se for turbinar publicação existente, busca o post ANTES de montar o targeting — precisa
@@ -193,6 +196,7 @@ async function criarCampanhaCompletaComConexao(corpo: ParametrosCriarCampanha): 
           pageId: conta.page_id,
           name: `${corpo.nomeCampanha} - criativo`,
         });
+        passosConcluidos.push("criativo do post do Instagram criado");
         const anuncioInstagram = await criarAnuncio(adAccountId, {
           name: `${corpo.nomeCampanha} - anúncio`,
           adsetId: adset.id,
@@ -239,6 +243,7 @@ async function criarCampanhaCompletaComConexao(corpo: ParametrosCriarCampanha): 
           objectStoryId: postDaPaginaId,
           name: `${corpo.nomeCampanha} - criativo`,
         });
+        passosConcluidos.push(`post da Página encontrado (${postDaPaginaId}) e criativo dele criado`);
         const anuncioPagina = await criarAnuncio(adAccountId, {
           name: `${corpo.nomeCampanha} - anúncio`,
           adsetId: adset.id,
@@ -341,9 +346,10 @@ async function criarCampanhaCompletaComConexao(corpo: ParametrosCriarCampanha): 
               erroOriginalMeta: erro.original,
               etapaAlcancada: { campanhaId, adsetId, anuncioIds },
               ...(erroCriativoInstagram ? { erroCriativoInstagram } : {}),
+              passosConcluidos,
             }
           : erroCriativoInstagram
-            ? { etapaAlcancada: { campanhaId, adsetId, anuncioIds }, erroCriativoInstagram }
+            ? { etapaAlcancada: { campanhaId, adsetId, anuncioIds }, erroCriativoInstagram, passosConcluidos }
             : undefined,
     });
 
