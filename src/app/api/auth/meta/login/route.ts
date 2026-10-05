@@ -20,11 +20,14 @@ function urlDeRedirecionamento(request: NextRequest): string {
 export async function GET(request: NextRequest) {
   const appId = process.env.META_APP_ID;
   const clienteId = request.nextUrl.searchParams.get("cliente");
+  // "Reconectar" uma conta que já existe (?conta=): mesmo login de usuário do "Adicionar conta", mas
+  // o callback troca a conexão DESSA conta em vez de abrir o seletor (que criaria uma duplicada).
+  const contaReconectarId = request.nextUrl.searchParams.get("conta");
   // Conta individual (?cliente=) usa a configuração de login com token de USUÁRIO: a da conexão
   // principal é "usuário do sistema", presa ao portfólio, e só oferece ativos que estão dentro dele
   // — o Instagram de um cliente parceiro (ligado à Página, mas fora do portfólio) nunca aparece
   // (visto em 29/09/2026: debug_token da conexão principal = SYSTEM_USER). O ID não é segredo.
-  const configId = clienteId
+  const configId = clienteId || contaReconectarId
     ? process.env.META_LOGIN_CONFIG_ID_USUARIO || CONFIG_TOKEN_DE_USUARIO
     : process.env.META_LOGIN_CONFIG_ID;
   if (!appId) {
@@ -65,6 +68,17 @@ export async function GET(request: NextRequest) {
     });
   } else {
     resposta.cookies.delete("smartads_meta_oauth_nova_conta");
+  }
+  if (contaReconectarId) {
+    resposta.cookies.set("smartads_meta_oauth_reconectar_conta", contaReconectarId, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      maxAge: 1800,
+      path: "/",
+    });
+  } else {
+    resposta.cookies.delete("smartads_meta_oauth_reconectar_conta");
   }
   // 30 minutos — o fluxo "Login do Facebook para Empresas" pode ter várias telas de revisão
   // (Página, conta de anúncios, Instagram, Pix, catálogo...), e os 10 minutos usados antes eram
