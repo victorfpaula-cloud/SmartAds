@@ -127,6 +127,37 @@ export async function baixarPdfRelatorioAds(dados: DadosRelatorioAds): Promise<v
   y += 90;
 
   const kpis = montarKpis(dados);
+
+  if (dados.organico && dados.organico.length > 0) {
+    titulo("Orgânico x tráfego");
+    const porLinha = 4;
+    const gap = 10;
+    const w = (W - gap * (porLinha - 1)) / porLinha;
+    for (let ini = 0; ini < dados.organico.length; ini += porLinha) {
+      garantir(100);
+      dados.organico.slice(ini, ini + porLinha).forEach((i, n) => {
+        const x = M + n * (w + gap);
+        cartao(x, y, w, 90);
+        texto(i.rotulo, x + 12, y + 18, 8.5, COR.suave);
+        texto(inteiro(i.total), x + 12, y + 38, 18, COR.texto, true);
+        if (i.organico !== null && i.trafego !== null && i.total > 0) {
+          const larg = w - 24;
+          doc.setFillColor(...COR.acento);
+          doc.roundedRect(x + 12, y + 47, larg, 4, 2, 2, "F");
+          if (i.organico > 0) {
+            doc.setFillColor(...COR.ok);
+            doc.roundedRect(x + 12, y + 47, Math.max((i.organico / i.total) * larg, 3), 4, 2, 2, "F");
+          }
+          texto(`${inteiro(i.organico)} orgânico`, x + 12, y + 66, 7.5, COR.ok, true);
+          texto(`${inteiro(i.trafego)} tráfego`, x + 12, y + 79, 7.5, COR.acento, true);
+        } else {
+          texto("Total da conta (sem divisão)", x + 12, y + 64, 7.5, COR.fraco);
+        }
+      });
+      y += 102;
+    }
+  }
+
   titulo("Resultado do tráfego");
   linhaKpis(kpis.destaque);
   titulo("Engajamento");
@@ -146,9 +177,9 @@ export async function baixarPdfRelatorioAds(dados: DadosRelatorioAds): Promise<v
 
   // Evolução diária — barras de alcance
   if (dados.serieDiaria.length > 1) {
-    titulo("Alcance por dia");
     const h = 110;
-    garantir(h + 28);
+    garantir(h + 28 + 24);
+    titulo("Alcance por dia");
     cartao(M, y, W, h + 24);
     const serie = dados.serieDiaria;
     const max = Math.max(...serie.map((d) => d.alcance), 1);
@@ -171,6 +202,7 @@ export async function baixarPdfRelatorioAds(dados: DadosRelatorioAds): Promise<v
 
   // Campanhas
   if (dados.campanhas.length > 0) {
+    garantir(100);
     titulo("Campanhas");
     const colunas = [
       { r: "Campanha", x: M + 12, a: "left" as const },
