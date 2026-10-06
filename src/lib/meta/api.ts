@@ -321,44 +321,102 @@ export async function obterInsightsContaInstagram(
 
 const METRICAS_ORGANICAS_INSTAGRAM = ["views", "reach", "likes", "comments", "shares", "saves", "profile_views"];
 
-/** Totais da conta do Instagram (orgânico + pago somados, é o que a Meta devolve) numa janela de
- * até 30 dias. Tenta tudo numa chamada só; se alguma métrica não existir pra essa conta/versão da
- * API, repete uma a uma pra não perder as outras. Métrica que falha fica de fora do resultado. */
-export async function obterMetricasContaInstagram(
+// A Meta recusa janelas de insights do Instagram maiores que 30 dias — fica 1h abaixo pra nunca
+// estourar por arredondamento.
+const JANELA_MAXIMA_MS = 30 * 86_400_000 - 3_600_000;
+
+function descreverErro(e: unknown): string {
+  const original = (e as { original?: { message?: string; code?: number; error_subcode?: number } })?.original;
+  if (original?.message) {
+    return `${original.message}${original.code ? ` (código ${original.code}${original.error_subcode ? `/${original.error_subcode}` : ""})` : ""}`;
+  }
+  return e instanceof Error ? e.message : String(e);
+}
+
+export interface InsightsInstagramRelatorio {
+  /** Totais da conta (orgânico + pago somados) por métrica; métrica que falhou fica de fora. */
+  metricas: Record<string, number>;
+  /** Novos seguidores no período (só os últimos 30 dias — limite da Meta); null se indisponível. */
+  novosSeguidores: number | null;
+  erros: string[];
+}
+
+/** Insights da conta do Instagram numa janela de até 30 dias terminando `terminaDiasAtras` dias
+ * atrás. Usa o token da conexão e, se a Meta recusar, tenta de novo com o token da Página (algumas
+ * contas só leem insights do Instagram assim). Tenta todas as métricas numa chamada; se alguma não
+ * existir pra essa conta, repete uma a uma. Os erros reais da Meta voltam em `erros`. */
+export async function obterInsightsInstagramRelatorio(
   instagramBusinessId: string,
-  diasAtras: number,
-  terminaDiasAtras = 0
-): Promise<Record<string, number>> {
-  const consultar = async (metricas: string[]) => {
-    const dados = await chamar<{ data: LinhaInsightInstagram[] }>(`${instagramBusinessId}/insights`, {
-      query: {
-        metric: metricas.join(","),
-        period: "day",
-        metric_type: "total_value",
-        since: Math.floor((Date.now() - diasAtras * 86_400_000) / 1000),
-        until: Math.floor((Date.now() - terminaDiasAtras * 86_400_000) / 1000),
-      },
-    });
-    const resultado: Record<string, number> = {};
-    for (const linha of dados.data) {
-      const valor = valorDaLinhaInstagram(linha);
-      if (valor !== null) resultado[linha.name] = valor;
-    }
-    return resultado;
-  };
-  try {
-    return await consultar(METRICAS_ORGANICAS_INSTAGRAM);
-  } catch {
-    const resultado: Record<string, number> = {};
-    for (const metrica of METRICAS_ORGANICAS_INSTAGRAM) {
+  pageId: string | null,
+  diasJanela: number,
+  terminaDiasAtras: number,
+  comSeguidores: boolean
+): Promise<InsightsInstagramRelatorio> {
+  const fim = Date.now() - terminaDiasAtras * 86_400_000;
+  const inicio = Math.max(fim - diasJanela * 86_400_000, fim - JANELA_MAXIMA_MS);
+  const since = Math.floor(inicio / 1000);
+  const until = Math.floor(fim / 1000);
+  const erros: string[] = [];
+
+  let tokenPagina: string | null | undefined;
+  const chamarComFallback = async (query: Record<string, unknown>) => {
+    try {
+      return await chamar<{ data: LinhaInsightInstagram[] }>(`${instagramBusinessId}/insights`, { query });
+    } catch (primeiro) {
+      if (!pageId) throw primeiro;
       try {
-        Object.assign(resultado, await consultar([metrica]));
+        if (tokenPagina === undefined) tokenPagina = await obterTokenDePagina(pageId);
+        if (!tokenPagina) throw primeiro;
+        return await chamar<{ data: LinhaInsightInstagram[] }>(`${instagramBusinessId}/insights`, {
+          query,
+          tokenExplicito: tokenPagina,
+        });
       } catch {
-        /* métrica indisponível pra essa conta — fica de fora */
+        throw primeiro;
       }
     }
-    return resultado;
+  };
+
+  const metricas: Record<string, number> = {};
+  const consultar = async (lista: string[]) => {
+    const dados = await chamarComFallback({
+      metric: lista.join(","),
+      period: "day",
+      metric_type: "total_value",
+      since,
+      until,
+    });
+    for (const linha of dados.data) {
+      const valor = valorDaLinhaInstagram(linha);
+      if (valor !== null) metricas[linha.name] = valor;
+    }
+  };
+  try {
+    await consultar(METRICAS_ORGANICAS_INSTAGRAM);
+  } catch (e) {
+    erros.push(descreverErro(e));
+    for (const metrica of METRICAS_ORGANICAS_INSTAGRAM) {
+      try {
+        await consultar([metrica]);
+      } catch (e2) {
+        const msg = `${metrica}: ${descreverErro(e2)}`;
+        if (!erros.includes(msg)) erros.push(msg);
+      }
+    }
   }
+
+  let novosSeguidores: number | null = null;
+  if (comSeguidores) {
+    try {
+      const dados = await chamarComFallback({ metric: "follower_count", period: "day", since, until });
+      const valores = dados.data.find((l) => l.name === "follower_count")?.values;
+      if (valores) novosSeguidores = valores.reduce((soma, v) => soma + (Number(v.value) || 0), 0);
+    } catch (e) {
+      erros.push(`follower_count: ${descreverErro(e)}`);
+    }
+  }
+
+  return { metricas, novosSeguidores, erros };
 }
 
 /** Token de acesso da própria Página — contas que migraram pra "nova experiência de Páginas" da

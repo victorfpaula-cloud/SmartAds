@@ -165,10 +165,10 @@ export async function baixarPdfRelatorioAds(dados: DadosRelatorioAds): Promise<v
   titulo("Investimento e cliques");
   linhaKpis(kpis.custos);
 
-  if (dados.instagram && (dados.instagram.seguidores !== null || dados.instagram.alcance !== null)) {
+  if (dados.instagram && (dados.instagram.novosSeguidores !== null || dados.instagram.alcance !== null || dados.instagram.visitasPerfil !== null)) {
     titulo("Instagram (orgânico + pago)");
     linhaKpis([
-      { rotulo: "Seguidores", valor: dados.instagram.seguidores === null ? "—" : inteiro(dados.instagram.seguidores) },
+      { rotulo: "Novos seguidores", valor: dados.instagram.novosSeguidores === null ? "—" : `${dados.instagram.novosSeguidores > 0 ? "+" : ""}${inteiro(dados.instagram.novosSeguidores)}` },
       { rotulo: "Alcance da conta", valor: dados.instagram.alcance === null ? "—" : inteiro(dados.instagram.alcance) },
       { rotulo: "Visitas ao perfil", valor: dados.instagram.visitasPerfil === null ? "—" : inteiro(dados.instagram.visitasPerfil) },
       { rotulo: "Frequência (anúncios)", valor: decimal(dados.totais.frequencia) },

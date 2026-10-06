@@ -1,9 +1,8 @@
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import {
   obterInsightsRelatorio,
-  obterInsightsContaInstagram,
-  obterMetricasContaInstagram,
-  obterResumoContaInstagram,
+  obterInsightsInstagramRelatorio,
+  type InsightsInstagramRelatorio,
   type LinhaInsightRelatorio,
 } from "@/lib/meta/api";
 import { comContaMeta } from "@/lib/meta/conexao";
@@ -69,7 +68,8 @@ export interface DadosRelatorioAds {
     instagramUsername: string | null;
   };
   totais: TotaisAds;
-  instagram: { seguidores: number | null; alcance: number | null; visitasPerfil: number | null } | null;
+  /** Números da conta do Instagram no período; novosSeguidores é só dos últimos 30 dias (limite da Meta). */
+  instagram: { novosSeguidores: number | null; alcance: number | null; visitasPerfil: number | null } | null;
   /** Só vem quando o relatório é pedido com a chave de orgânico ligada. */
   organico: ItemOrganico[] | null;
   serieDiaria: DiaRelatorioAds[];
@@ -119,28 +119,18 @@ function totaisDe(linha: LinhaInsightRelatorio | undefined): TotaisAds {
 }
 
 /** A Meta limita os insights do Instagram a 30 dias por chamada; períodos maiores somam janelas
- * consecutivas. Visitas ao perfil somam certo; o alcance, em períodos longos, pode contar a mesma
- * pessoa em mais de uma janela (o relatório avisa). */
-async function insightsInstagramEmJanelas(igId: string, dias: number) {
-  let reach = 0;
-  let visitas: number | null = null;
+ * consecutivas. Os totais de curtidas, visualizações etc. somam certo; o alcance, em períodos
+ * longos, pode contar a mesma pessoa em mais de uma janela (o relatório avisa). */
+async function insightsInstagramEmJanelas(igId: string, pageId: string | null, dias: number): Promise<InsightsInstagramRelatorio> {
+  const total: InsightsInstagramRelatorio = { metricas: {}, novosSeguidores: null, erros: [] };
   for (let fim = 0; fim < dias; fim += 30) {
     const janela = Math.min(30, dias - fim);
-    const r = await obterInsightsContaInstagram(igId, fim + janela, fim);
-    reach += r.reach;
-    if (r.profileViews !== null) visitas = (visitas ?? 0) + r.profileViews;
+    const parcial = await obterInsightsInstagramRelatorio(igId, pageId, janela, fim, fim === 0);
+    for (const [k, v] of Object.entries(parcial.metricas)) total.metricas[k] = (total.metricas[k] ?? 0) + v;
+    if (fim === 0) total.novosSeguidores = parcial.novosSeguidores;
+    for (const e of parcial.erros) if (!total.erros.includes(e)) total.erros.push(e);
   }
-  return { reach, profileViews: visitas };
-}
-
-async function metricasInstagramEmJanelas(igId: string, dias: number): Promise<Record<string, number>> {
-  const soma: Record<string, number> = {};
-  for (let fim = 0; fim < dias; fim += 30) {
-    const janela = Math.min(30, dias - fim);
-    const parcial = await obterMetricasContaInstagram(igId, fim + janela, fim);
-    for (const [k, v] of Object.entries(parcial)) soma[k] = (soma[k] ?? 0) + v;
-  }
-  return soma;
+  return total;
 }
 
 /** Separa orgânico de tráfego: o Instagram informa o total da conta; os anúncios informam o que
@@ -177,7 +167,7 @@ export async function gerarRelatorioAds(contaId: string, dias: number, comOrgani
   const { data: conta, error } = await supabase
     .from("smartads_contas_meta")
     .select(
-      "id, meta_ad_account_id, meta_ad_account_nome, nome_exibicao, page_nome, instagram_business_id, instagram_username, smartads_clientes(nome)"
+      "id, meta_ad_account_id, meta_ad_account_nome, nome_exibicao, page_id, page_nome, instagram_business_id, instagram_username, smartads_clientes(nome)"
     )
     .eq("id", contaId)
     .single();
@@ -189,14 +179,12 @@ export async function gerarRelatorioAds(contaId: string, dias: number, comOrgani
   const avisos: string[] = [];
 
   return comContaMeta(contaId, async () => {
-    const [totalAtual, porDia, porCampanha, igInsights, igResumo, igOrganico] = await Promise.allSettled([
+    const [totalAtual, porDia, porCampanha, igInsights] = await Promise.allSettled([
       obterInsightsRelatorio(adAccountId, { nivel: "account", desde, ate: hoje }),
       obterInsightsRelatorio(adAccountId, { nivel: "account", desde, ate: hoje, porDia: true }),
       obterInsightsRelatorio(adAccountId, { nivel: "campaign", desde, ate: hoje }),
-      conta.instagram_business_id ? insightsInstagramEmJanelas(conta.instagram_business_id, dias) : Promise.resolve(null),
-      conta.instagram_business_id ? obterResumoContaInstagram(conta.instagram_business_id) : Promise.resolve(null),
-      comOrganico && conta.instagram_business_id
-        ? metricasInstagramEmJanelas(conta.instagram_business_id, dias)
+      conta.instagram_business_id
+        ? insightsInstagramEmJanelas(conta.instagram_business_id, (conta.page_id as string | null) ?? null, dias)
         : Promise.resolve(null),
     ]);
 
@@ -234,18 +222,22 @@ export async function gerarRelatorioAds(contaId: string, dias: number, comOrgani
             .sort((a, b) => b.alcance - a.alcance)
         : [];
 
+    const ig = igInsights.status === "fulfilled" ? igInsights.value : null;
     let instagram: DadosRelatorioAds["instagram"] = null;
     if (conta.instagram_business_id) {
-      const ig = igInsights.status === "fulfilled" ? igInsights.value : null;
-      const resumo = igResumo.status === "fulfilled" ? igResumo.value : null;
       instagram = {
-        seguidores: resumo?.followers_count ?? null,
-        alcance: ig ? ig.reach : null,
-        visitasPerfil: ig ? ig.profileViews : null,
+        novosSeguidores: ig?.novosSeguidores ?? null,
+        alcance: ig?.metricas.reach ?? null,
+        visitasPerfil: ig?.metricas.profile_views ?? null,
       };
-      if (dias > 30) avisos.push("Alcance do Instagram em períodos longos soma janelas de 30 dias, então pode repetir a mesma pessoa.");
-      if (igInsights.status === "rejected" || (ig && ig.reach === 0 && ig.profileViews === null)) {
-        avisos.push("O Instagram não devolveu os números da conta nesse período.");
+      if (dias > 30) {
+        avisos.push("Alcance do Instagram em períodos longos soma janelas de 30 dias, então pode repetir a mesma pessoa.");
+        if (instagram.novosSeguidores !== null) avisos.push("A Meta só informa novos seguidores dos últimos 30 dias.");
+      }
+      if (igInsights.status === "rejected") {
+        avisos.push("Não deu pra buscar os números do Instagram.");
+      } else if (ig && ig.erros.length > 0) {
+        for (const e of ig.erros.slice(0, 3)) avisos.push(`Instagram (Meta): ${e.length > 220 ? `${e.slice(0, 220)}…` : e}`);
       }
     }
 
@@ -254,14 +246,12 @@ export async function gerarRelatorioAds(contaId: string, dias: number, comOrgani
     if (comOrganico) {
       if (!conta.instagram_business_id) {
         avisos.push("Essa conta não tem Instagram conectado, então não dá pra separar o orgânico.");
-      } else if (igOrganico.status === "fulfilled" && igOrganico.value) {
-        organico = montarOrganico(igOrganico.value, totaisAtuais);
+      } else if (ig) {
+        organico = montarOrganico(ig.metricas, totaisAtuais);
         if (organico.length === 0) avisos.push("O Instagram não devolveu números orgânicos nesse período.");
         if (organico.some((i) => i.trafego === null)) {
           avisos.push("A Meta não informa as visitas ao perfil vindas dos anúncios, então esse número não é dividido.");
         }
-      } else {
-        avisos.push("Não deu pra buscar os números orgânicos do Instagram.");
       }
     }
 
