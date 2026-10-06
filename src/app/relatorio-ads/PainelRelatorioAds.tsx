@@ -178,6 +178,14 @@ function Relatorio({ dados }: { dados: DadosRelatorioAds }) {
         </p>
       </div>
 
+      {dados.avisos.length > 0 && (
+        <ul className="flex flex-col gap-1 rounded-lg border border-warn/30 bg-warn/10 px-4 py-3 text-[12px] text-warn">
+          {dados.avisos.map((a) => (
+            <li key={a}>• {a}</li>
+          ))}
+        </ul>
+      )}
+
       {dados.organico && dados.organico.length > 0 && <BlocoOrganico itens={dados.organico} />}
 
       <Bloco titulo="Resultado do tráfego" kpis={kpis.destaque} />
@@ -188,7 +196,7 @@ function Relatorio({ dados }: { dados: DadosRelatorioAds }) {
         <Bloco
           titulo="Instagram"
           kpis={[
-            { rotulo: "Seguidores", valor: dados.instagram.seguidores === null ? "—" : inteiro(dados.instagram.seguidores) },
+            { rotulo: "Novos seguidores", valor: dados.instagram.novosSeguidores === null ? "—" : `${dados.instagram.novosSeguidores > 0 ? "+" : ""}${inteiro(dados.instagram.novosSeguidores)}` },
             { rotulo: "Alcance da conta", valor: dados.instagram.alcance === null ? "—" : inteiro(dados.instagram.alcance) },
             { rotulo: "Visitas ao perfil", valor: dados.instagram.visitasPerfil === null ? "—" : inteiro(dados.instagram.visitasPerfil) },
           ]}
@@ -250,13 +258,6 @@ function Relatorio({ dados }: { dados: DadosRelatorioAds }) {
         </p>
       )}
 
-      {dados.avisos.length > 0 && (
-        <ul className="text-[11.5px] text-neutral-500">
-          {dados.avisos.map((a) => (
-            <li key={a}>• {a}</li>
-          ))}
-        </ul>
-      )}
     </>
   );
 }
