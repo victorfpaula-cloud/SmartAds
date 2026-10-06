@@ -17,7 +17,9 @@ const MAX_TENTATIVAS_POR_POST = 3;
 // reforça o alerta de segurança. Esses erros esgotam as tentativas na hora, em vez de retentar a
 // cada rodada do cron.
 function erroNaoRetentavel(mensagem: string | null | undefined): boolean {
-  return Boolean(mensagem && /autentique sua conta/i.test(mensagem));
+  // "Autentique sua conta" (code 31) e "Nenhuma forma de pagamento" (code 100 / subcode 1359188):
+  // os dois dependem de alguém resolver na Meta (autenticar, cadastrar pagamento).
+  return Boolean(mensagem && /autentique sua conta|nenhuma forma de pagamento/i.test(mensagem));
 }
 
 function dataEmSaoPaulo(iso: string): string {
