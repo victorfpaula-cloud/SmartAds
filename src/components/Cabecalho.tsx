@@ -4,12 +4,13 @@ import {
   Buildings,
   Megaphone,
   Wallet,
+  FilePdf,
   DotsThreeCircle,
   SignOut,
   ArrowLeft,
 } from "@phosphor-icons/react/dist/ssr";
 
-// Só as 5 coisas que se abrem quase todo dia ficam fixas aqui — era o padrão original do app, antes
+// Só as 6 coisas que se abrem quase todo dia ficam fixas aqui — era o padrão original do app, antes
 // da barra crescer pra 7-8 ícones conforme cada fase nova adicionava a própria aba (achado
 // reportado pelo dono: "não sei nem mexer nele" de tanta coisa espremida). Públicos, Automação e
 // Relatórios (uso mais esporádico — configura uma vez, revisita de vez em quando) foram pra dentro
@@ -20,6 +21,7 @@ const LINKS = [
   { href: "/contas", label: "Contas", Icone: Buildings },
   { href: "/campanhas", label: "Campanhas", Icone: Megaphone },
   { href: "/financeiro", label: "Financeiro", Icone: Wallet },
+  { href: "/relatorio-ads", label: "Relatório Ads", Icone: FilePdf },
   { href: "/mais", label: "Mais", Icone: DotsThreeCircle },
 ];
 
@@ -121,13 +123,13 @@ export default function Cabecalho({
 
       {/* Barra de abas no celular — fixa embaixo, mesmo tratamento glass do resto do app. Some a
           partir do breakpoint sm, onde a navegação do topo já dá conta. `pb-[env(safe-area-inset-
-          bottom)]` evita ficar por baixo da barra de gestos do iPhone. 5 itens (não 7-8) dão pra
+          bottom)]` evita ficar por baixo da barra de gestos do iPhone. 6 itens (não 7-8) dão pra
           cada um respirar e ter uma área de toque de verdade. */}
       <nav
         className="barra-vidro fixed inset-x-0 bottom-0 z-20 border-t sm:hidden"
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 6px)" }}
       >
-        <div className="grid grid-cols-5">
+        <div className="grid grid-cols-6">
           {LINKS.map(({ href, label, Icone }) => (
             <Link
               key={href}

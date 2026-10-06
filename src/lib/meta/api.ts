@@ -873,6 +873,50 @@ export async function obterInsightsConta(
   return dados.data;
 }
 
+export interface AcaoInsight {
+  action_type: string;
+  value: string;
+}
+
+/** Linha de insights com TUDO que o relatório de tráfego usa — alcance, frequência, cliques e a
+ * lista `actions` (engajamento, curtidas, comentários, salvamentos, visitas ao perfil...). Separada
+ * de LinhaInsight/obterInsightsConta pra não mexer nas telas que já dependem daquela. */
+export interface LinhaInsightRelatorio {
+  campaign_id?: string;
+  campaign_name?: string;
+  spend?: string;
+  impressions?: string;
+  reach?: string;
+  frequency?: string;
+  clicks?: string;
+  inline_link_clicks?: string;
+  ctr?: string;
+  cpm?: string;
+  cpc?: string;
+  actions?: AcaoInsight[];
+  date_start?: string;
+  date_stop?: string;
+}
+
+export async function obterInsightsRelatorio(
+  adAccountId: string,
+  opcoes: { nivel: "account" | "campaign"; desde: string; ate: string; porDia?: boolean }
+): Promise<LinhaInsightRelatorio[]> {
+  const campos =
+    "spend,impressions,reach,frequency,clicks,inline_link_clicks,ctr,cpm,cpc,actions" +
+    (opcoes.nivel === "campaign" ? ",campaign_id,campaign_name" : "");
+  const dados = await chamar<{ data: LinhaInsightRelatorio[] }>(`${adAccountId}/insights`, {
+    query: {
+      level: opcoes.nivel,
+      fields: campos,
+      time_range: { since: opcoes.desde, until: opcoes.ate },
+      ...(opcoes.porDia ? { time_increment: 1 } : {}),
+      limit: 500,
+    },
+  });
+  return dados.data;
+}
+
 // ============================================================================
 // Status/detalhe de campanhas (painel "campanhas no ar")
 // ============================================================================
