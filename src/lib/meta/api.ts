@@ -280,8 +280,13 @@ export async function obterResumoContaInstagram(instagramBusinessId: string): Pr
 export interface LinhaInsightInstagram {
   name: string;
   period: string;
-  values: Array<{ value: number; end_time?: string }>;
+  values?: Array<{ value: number; end_time?: string }>;
+  /** Com metric_type=total_value a Meta devolve o total aqui, não em `values`. */
+  total_value?: { value: number };
 }
+
+const valorDaLinhaInstagram = (linha: LinhaInsightInstagram | undefined): number | null =>
+  linha?.total_value?.value ?? linha?.values?.[0]?.value ?? null;
 
 /** Alcance orgânico e visitas ao perfil no período — sinal de quão bem a conta anda performando
  * sem mídia paga nenhuma envolvida, pro Diagnóstico cruzar com o desempenho pago. `reach` é a
@@ -305,12 +310,54 @@ export async function obterInsightsContaInstagram(
         until: Math.floor((Date.now() - terminaDiasAtras * 86_400_000) / 1000),
       },
     });
-    const reach = dados.data.find((linha) => linha.name === "reach")?.values?.[0]?.value ?? 0;
-    const profileViewsLinha = dados.data.find((linha) => linha.name === "profile_views");
-    return { reach, profileViews: profileViewsLinha?.values?.[0]?.value ?? null };
+    const reach = valorDaLinhaInstagram(dados.data.find((linha) => linha.name === "reach")) ?? 0;
+    const profileViews = valorDaLinhaInstagram(dados.data.find((linha) => linha.name === "profile_views"));
+    return { reach, profileViews };
   } catch {
     // Conta sem permissão/histórico suficiente pra insights — Diagnóstico segue só com o que tem.
     return { reach: 0, profileViews: null };
+  }
+}
+
+const METRICAS_ORGANICAS_INSTAGRAM = ["views", "reach", "likes", "comments", "shares", "saves", "profile_views"];
+
+/** Totais da conta do Instagram (orgânico + pago somados, é o que a Meta devolve) numa janela de
+ * até 30 dias. Tenta tudo numa chamada só; se alguma métrica não existir pra essa conta/versão da
+ * API, repete uma a uma pra não perder as outras. Métrica que falha fica de fora do resultado. */
+export async function obterMetricasContaInstagram(
+  instagramBusinessId: string,
+  diasAtras: number,
+  terminaDiasAtras = 0
+): Promise<Record<string, number>> {
+  const consultar = async (metricas: string[]) => {
+    const dados = await chamar<{ data: LinhaInsightInstagram[] }>(`${instagramBusinessId}/insights`, {
+      query: {
+        metric: metricas.join(","),
+        period: "day",
+        metric_type: "total_value",
+        since: Math.floor((Date.now() - diasAtras * 86_400_000) / 1000),
+        until: Math.floor((Date.now() - terminaDiasAtras * 86_400_000) / 1000),
+      },
+    });
+    const resultado: Record<string, number> = {};
+    for (const linha of dados.data) {
+      const valor = valorDaLinhaInstagram(linha);
+      if (valor !== null) resultado[linha.name] = valor;
+    }
+    return resultado;
+  };
+  try {
+    return await consultar(METRICAS_ORGANICAS_INSTAGRAM);
+  } catch {
+    const resultado: Record<string, number> = {};
+    for (const metrica of METRICAS_ORGANICAS_INSTAGRAM) {
+      try {
+        Object.assign(resultado, await consultar([metrica]));
+      } catch {
+        /* métrica indisponível pra essa conta — fica de fora */
+      }
+    }
+    return resultado;
   }
 }
 

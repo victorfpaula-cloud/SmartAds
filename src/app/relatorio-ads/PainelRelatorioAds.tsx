@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { FilePdf } from "@phosphor-icons/react";
-import type { DadosRelatorioAds } from "@/lib/relatorioAds";
+import type { DadosRelatorioAds, ItemOrganico } from "@/lib/relatorioAds";
 import { baixarPdfRelatorioAds, montarKpis, inteiro, reais, type CartaoKpi } from "@/lib/relatorioAdsPdf";
 import { formatarDiaExibicao } from "@/lib/tempoSaoPaulo";
 
@@ -19,6 +19,7 @@ const PERIODOS = [15, 30, 60, 90];
 export default function PainelRelatorioAds({ contas }: { contas: OpcaoConta[] }) {
   const [contaId, setContaId] = useState(contas[0]?.id ?? "");
   const [dias, setDias] = useState(30);
+  const [organico, setOrganico] = useState(false);
   const [dados, setDados] = useState<DadosRelatorioAds | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -29,7 +30,7 @@ export default function PainelRelatorioAds({ contas }: { contas: OpcaoConta[] })
     let cancelado = false;
     setCarregando(true);
     setErro(null);
-    fetch(`/api/relatorio-ads?contaId=${encodeURIComponent(contaId)}&dias=${dias}`)
+    fetch(`/api/relatorio-ads?contaId=${encodeURIComponent(contaId)}&dias=${dias}${organico ? "&organico=1" : ""}`)
       .then(async (r) => {
         const corpo = await r.json();
         if (!r.ok) throw new Error(corpo.erro || "Falha ao gerar o relatório.");
@@ -47,7 +48,7 @@ export default function PainelRelatorioAds({ contas }: { contas: OpcaoConta[] })
     return () => {
       cancelado = true;
     };
-  }, [contaId, dias]);
+  }, [contaId, dias, organico]);
 
   async function baixarPdf() {
     if (!dados) return;
@@ -115,6 +116,34 @@ export default function PainelRelatorioAds({ contas }: { contas: OpcaoConta[] })
         </div>
       </div>
 
+      <label className="cartao-vidro flex cursor-pointer items-center justify-between gap-4 px-4 py-3.5">
+        <span>
+          <span className="block text-sm font-semibold text-neutral-200">Mostrar dados orgânicos</span>
+          <span className="block text-xs text-neutral-500">
+            Separa o que veio sozinho (orgânico) do que veio pelo tráfego pago.
+          </span>
+        </span>
+        <input
+          type="checkbox"
+          role="switch"
+          checked={organico}
+          onChange={(e) => setOrganico(e.target.checked)}
+          className="peer sr-only"
+        />
+        <span
+          aria-hidden
+          className={`relative h-6 w-11 shrink-0 rounded-full border transition ${
+            organico ? "border-accent bg-accent" : "border-white/15 bg-white/10"
+          }`}
+        >
+          <span
+            className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${
+              organico ? "left-[22px]" : "left-0.5"
+            }`}
+          />
+        </span>
+      </label>
+
       {erro && <div className="rounded-lg border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">{erro}</div>}
 
       {carregando && !dados && <p className="text-sm text-neutral-500">Buscando os números na Meta…</p>}
@@ -148,6 +177,8 @@ function Relatorio({ dados }: { dados: DadosRelatorioAds }) {
             .join(" · ")}
         </p>
       </div>
+
+      {dados.organico && dados.organico.length > 0 && <BlocoOrganico itens={dados.organico} />}
 
       <Bloco titulo="Resultado do tráfego" kpis={kpis.destaque} />
       <Bloco titulo="Engajamento" kpis={kpis.engajamento} />
@@ -227,6 +258,45 @@ function Relatorio({ dados }: { dados: DadosRelatorioAds }) {
         </ul>
       )}
     </>
+  );
+}
+
+function BlocoOrganico({ itens }: { itens: ItemOrganico[] }) {
+  return (
+    <section>
+      <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+        Orgânico x tráfego
+      </h3>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {itens.map((i) => {
+          const dividido = i.organico !== null && i.trafego !== null && i.total > 0;
+          const pctOrganico = dividido ? ((i.organico as number) / i.total) * 100 : 0;
+          return (
+            <div key={i.chave} className="selo-vidro px-4 py-3.5">
+              <p className="text-[11.5px] text-neutral-400">{i.rotulo}</p>
+              <p className="mt-1 font-display text-2xl font-bold tabular-nums text-neutral-100">{inteiro(i.total)}</p>
+              {dividido ? (
+                <>
+                  <div className="mt-2.5 flex h-1.5 overflow-hidden rounded-full bg-accent/60">
+                    <div className="bg-ok" style={{ width: `${pctOrganico}%` }} />
+                  </div>
+                  <div className="mt-2 flex items-center justify-between text-[11.5px]">
+                    <span className="text-ok">
+                      <span className="font-semibold tabular-nums">{inteiro(i.organico as number)}</span> orgânico
+                    </span>
+                    <span className="text-accent-strong">
+                      <span className="font-semibold tabular-nums">{inteiro(i.trafego as number)}</span> tráfego
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <p className="mt-2 text-[11.5px] text-neutral-500">Total da conta (sem divisão)</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

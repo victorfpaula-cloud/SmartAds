@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ erro: "Período inválido." }, { status: 400 });
   }
   try {
-    return NextResponse.json({ relatorio: await gerarRelatorioAds(contaId, dias) });
+    return NextResponse.json({ relatorio: await gerarRelatorioAds(contaId, dias, request.nextUrl.searchParams.get("organico") === "1") });
   } catch (erro) {
     return NextResponse.json(
       { erro: erro instanceof Error ? erro.message : "Falha ao gerar o relatório." },
