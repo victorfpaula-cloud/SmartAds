@@ -780,7 +780,8 @@ export async function diagnosticarContaDeAnuncio(adAccountId: string): Promise<R
     "account_status,disable_reason,created_time,age,currency",
     "is_personal,business,owner,agency_client_declaration",
     "user_tasks,tos_accepted,user_tos_accepted",
-    "funding_source_details,spend_cap,amount_spent",
+    "funding_source,funding_source_details,spend_cap,amount_spent,balance",
+    "is_prepay_account,min_campaign_group_spend_cap,capabilities",
   ];
   const retrato: Record<string, unknown> = {};
   for (const campos of grupos) {

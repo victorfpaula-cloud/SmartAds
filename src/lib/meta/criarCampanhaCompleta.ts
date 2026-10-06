@@ -328,7 +328,11 @@ async function criarCampanhaCompletaComConexao(corpo: ParametrosCriarCampanha): 
     // continua sendo com a pessoa, no Gerenciador.
     let diagnosticoConta: Record<string, unknown> | undefined;
     let tentativaEmPausa: { ok: boolean; erro?: string; anuncioId?: string } | undefined;
-    if (campanhaId && adsetId && /autentique sua conta/i.test(mensagemBruta)) {
+    // "Autentique sua conta" (code 31) e "Nenhuma forma de pagamento" (code 100 / subcode 1359188):
+    // a Meta recusa o anúncio ATIVO, mas costuma aceitar criá-lo em pausa — a pessoa ativa depois no
+    // Gerenciador, onde a conta (por exemplo, só com saldo pré-pago) funciona normalmente.
+    const bloqueioDeConta = /autentique sua conta|nenhuma forma de pagamento/i;
+    if (campanhaId && adsetId && bloqueioDeConta.test(mensagemBruta)) {
       diagnosticoConta = await diagnosticarContaDeAnuncio(adAccountId).catch(() => undefined);
       const creativeId = criativoPaginaId ?? criativoInstagramId;
       if (creativeId) {
@@ -347,7 +351,7 @@ async function criarCampanhaCompletaComConexao(corpo: ParametrosCriarCampanha): 
     }
 
     if (tentativaEmPausa?.ok && campanhaId && adsetId) {
-      const mensagemPausa = `Autentique sua conta: a Meta recusou ativar o anúncio pelo SmartAds, mas a campanha "${nomeCampanhaFinal}" ficou criada em pausa no Gerenciador de Anúncios — é só abrir lá e ativar.`;
+      const mensagemPausa = `A Meta recusou ativar o anúncio pelo SmartAds — ${mensagemBruta.slice(0, 140)}… Mas a campanha "${nomeCampanhaFinal}" ficou criada em pausa no Gerenciador de Anúncios: é só abrir lá e ativar.`;
       await registrarAcao({
         contaId: corpo.contaId,
         acao: "criar_campanha",
