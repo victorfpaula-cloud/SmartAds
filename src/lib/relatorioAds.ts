@@ -8,7 +8,7 @@ import {
 import { comContaMeta } from "@/lib/meta/conexao";
 import { adicionarDias, diaEmSaoPaulo } from "@/lib/tempoSaoPaulo";
 
-export const PERIODOS_RELATORIO_ADS = [7, 15, 30] as const;
+export const PERIODOS_RELATORIO_ADS = [15, 30, 60, 90] as const;
 
 export interface TotaisAds {
   gasto: number;
@@ -57,8 +57,6 @@ export interface DadosRelatorioAds {
     instagramUsername: string | null;
   };
   totais: TotaisAds;
-  /** Mesmo período imediatamente anterior, pra mostrar a variação. null se a Meta não devolveu. */
-  anterior: TotaisAds | null;
   instagram: { seguidores: number | null; alcance: number | null; visitasPerfil: number | null } | null;
   serieDiaria: DiaRelatorioAds[];
   campanhas: CampanhaRelatorioAds[];
@@ -106,6 +104,21 @@ function totaisDe(linha: LinhaInsightRelatorio | undefined): TotaisAds {
   };
 }
 
+/** A Meta limita os insights do Instagram a 30 dias por chamada; períodos maiores somam janelas
+ * consecutivas. Visitas ao perfil somam certo; o alcance, em períodos longos, pode contar a mesma
+ * pessoa em mais de uma janela (o relatório avisa). */
+async function insightsInstagramEmJanelas(igId: string, dias: number) {
+  let reach = 0;
+  let visitas: number | null = null;
+  for (let fim = 0; fim < dias; fim += 30) {
+    const janela = Math.min(30, dias - fim);
+    const r = await obterInsightsContaInstagram(igId, fim + janela, fim);
+    reach += r.reach;
+    if (r.profileViews !== null) visitas = (visitas ?? 0) + r.profileViews;
+  }
+  return { reach, profileViews: visitas };
+}
+
 /** Relatório de tráfego (anúncios) de UMA conta no período — só números de resultado: alcance,
  * engajamento, cliques e visitas ao perfil, mais o investimento. Cada bloco que falha na Meta vira
  * um aviso em vez de derrubar o relatório inteiro; só os totais do período são obrigatórios. */
@@ -122,18 +135,15 @@ export async function gerarRelatorioAds(contaId: string, dias: number): Promise<
 
   const hoje = diaEmSaoPaulo(new Date().toISOString());
   const desde = adicionarDias(hoje, -(dias - 1));
-  const ateAnterior = adicionarDias(desde, -1);
-  const desdeAnterior = adicionarDias(ateAnterior, -(dias - 1));
   const adAccountId = conta.meta_ad_account_id as string;
   const avisos: string[] = [];
 
   return comContaMeta(contaId, async () => {
-    const [totalAtual, totalAnterior, porDia, porCampanha, igInsights, igResumo] = await Promise.allSettled([
+    const [totalAtual, porDia, porCampanha, igInsights, igResumo] = await Promise.allSettled([
       obterInsightsRelatorio(adAccountId, { nivel: "account", desde, ate: hoje }),
-      obterInsightsRelatorio(adAccountId, { nivel: "account", desde: desdeAnterior, ate: ateAnterior }),
       obterInsightsRelatorio(adAccountId, { nivel: "account", desde, ate: hoje, porDia: true }),
       obterInsightsRelatorio(adAccountId, { nivel: "campaign", desde, ate: hoje }),
-      conta.instagram_business_id ? obterInsightsContaInstagram(conta.instagram_business_id, dias) : Promise.resolve(null),
+      conta.instagram_business_id ? insightsInstagramEmJanelas(conta.instagram_business_id, dias) : Promise.resolve(null),
       conta.instagram_business_id ? obterResumoContaInstagram(conta.instagram_business_id) : Promise.resolve(null),
     ]);
 
@@ -141,7 +151,6 @@ export async function gerarRelatorioAds(contaId: string, dias: number): Promise<
       throw totalAtual.reason instanceof Error ? totalAtual.reason : new Error("Falha ao buscar os números na Meta.");
     }
 
-    if (totalAnterior.status === "rejected") avisos.push("Não deu pra buscar o período anterior (sem comparação).");
     if (porDia.status === "rejected") avisos.push("Não deu pra buscar a evolução diária.");
     if (porCampanha.status === "rejected") avisos.push("Não deu pra buscar o detalhe por campanha.");
 
@@ -181,6 +190,7 @@ export async function gerarRelatorioAds(contaId: string, dias: number): Promise<
         alcance: ig ? ig.reach : null,
         visitasPerfil: ig ? ig.profileViews : null,
       };
+      if (dias > 30) avisos.push("Alcance do Instagram em períodos longos soma janelas de 30 dias, então pode repetir a mesma pessoa.");
       if (igInsights.status === "rejected" || (ig && ig.reach === 0 && ig.profileViews === null)) {
         avisos.push("O Instagram não devolveu os números da conta nesse período.");
       }
@@ -199,7 +209,6 @@ export async function gerarRelatorioAds(contaId: string, dias: number): Promise<
         instagramUsername: conta.instagram_username ?? null,
       },
       totais: totaisDe(totalAtual.value[0]),
-      anterior: totalAnterior.status === "fulfilled" ? totaisDe(totalAnterior.value[0]) : null,
       instagram,
       serieDiaria,
       campanhas,

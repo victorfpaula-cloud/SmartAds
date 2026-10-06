@@ -24,46 +24,35 @@ export const reais = (n: number) =>
 export const decimal = (n: number, casas = 2) =>
   n.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
 
-/** Variação % entre períodos; null quando não há base de comparação. */
-export function variacao(atual: number, anterior: number | undefined): number | null {
-  if (anterior === undefined || anterior === 0) return null;
-  return ((atual - anterior) / anterior) * 100;
-}
-
 export interface CartaoKpi {
   rotulo: string;
   valor: string;
-  variacao: number | null;
-  /** Em custo, subir é ruim — inverte a cor da variação. */
-  inverso?: boolean;
 }
 
 export function montarKpis(dados: DadosRelatorioAds): { destaque: CartaoKpi[]; engajamento: CartaoKpi[]; custos: CartaoKpi[] } {
   const t: TotaisAds = dados.totais;
-  const a = dados.anterior ?? undefined;
   const perfil = t.visitasPerfilAnuncios ?? dados.instagram?.visitasPerfil ?? null;
   return {
     destaque: [
-      { rotulo: "Alcance", valor: inteiro(t.alcance), variacao: variacao(t.alcance, a?.alcance) },
-      { rotulo: "Impressões", valor: inteiro(t.impressoes), variacao: variacao(t.impressoes, a?.impressoes) },
-      { rotulo: "Engajamentos", valor: inteiro(t.engajamentos), variacao: variacao(t.engajamentos, a?.engajamentos) },
+      { rotulo: "Alcance", valor: inteiro(t.alcance) },
+      { rotulo: "Impressões", valor: inteiro(t.impressoes) },
+      { rotulo: "Engajamentos", valor: inteiro(t.engajamentos) },
       {
         rotulo: "Visitas ao perfil",
         valor: perfil === null ? "—" : inteiro(perfil),
-        variacao: t.visitasPerfilAnuncios !== null ? variacao(t.visitasPerfilAnuncios, a?.visitasPerfilAnuncios ?? undefined) : null,
       },
     ],
     engajamento: [
-      { rotulo: "Curtidas", valor: inteiro(t.curtidas), variacao: variacao(t.curtidas, a?.curtidas) },
-      { rotulo: "Comentários", valor: inteiro(t.comentarios), variacao: variacao(t.comentarios, a?.comentarios) },
-      { rotulo: "Compartilhamentos", valor: inteiro(t.compartilhamentos), variacao: variacao(t.compartilhamentos, a?.compartilhamentos) },
-      { rotulo: "Salvamentos", valor: inteiro(t.salvamentos), variacao: variacao(t.salvamentos, a?.salvamentos) },
+      { rotulo: "Curtidas", valor: inteiro(t.curtidas) },
+      { rotulo: "Comentários", valor: inteiro(t.comentarios) },
+      { rotulo: "Compartilhamentos", valor: inteiro(t.compartilhamentos) },
+      { rotulo: "Salvamentos", valor: inteiro(t.salvamentos) },
     ],
     custos: [
-      { rotulo: "Investido", valor: reais(t.gasto), variacao: variacao(t.gasto, a?.gasto), inverso: true },
-      { rotulo: "Cliques no link", valor: inteiro(t.cliquesNoLink), variacao: variacao(t.cliquesNoLink, a?.cliquesNoLink) },
-      { rotulo: "CTR", valor: `${decimal(t.ctr)}%`, variacao: variacao(t.ctr, a?.ctr) },
-      { rotulo: "CPM", valor: reais(t.cpm), variacao: variacao(t.cpm, a?.cpm), inverso: true },
+      { rotulo: "Investido", valor: reais(t.gasto) },
+      { rotulo: "Cliques no link", valor: inteiro(t.cliquesNoLink) },
+      { rotulo: "CTR", valor: `${decimal(t.ctr)}%` },
+      { rotulo: "CPM", valor: reais(t.cpm) },
     ],
   };
 }
@@ -106,21 +95,16 @@ export async function baixarPdfRelatorioAds(dados: DadosRelatorioAds): Promise<v
     y += 20;
   };
   const linhaKpis = (kpis: CartaoKpi[]) => {
-    garantir(70);
+    garantir(62);
     const gap = 10;
     const w = (W - gap * (kpis.length - 1)) / kpis.length;
     kpis.forEach((k, i) => {
       const x = M + i * (w + gap);
-      cartao(x, y, w, 60);
+      cartao(x, y, w, 52);
       texto(k.rotulo, x + 12, y + 18, 8.5, COR.suave);
-      texto(k.valor, x + 12, y + 40, 16, COR.texto, true);
-      if (k.variacao !== null) {
-        const bom = k.inverso ? k.variacao <= 0 : k.variacao >= 0;
-        const sinal = k.variacao > 0 ? "+" : "";
-        texto(`${sinal}${decimal(k.variacao, 0)}% vs. anterior`, x + 12, y + 53, 7, bom ? COR.ok : COR.ruim);
-      }
+      texto(k.valor, x + 12, y + 38, 16, COR.texto, true);
     });
-    y += 72;
+    y += 64;
   };
 
   fundo();
@@ -153,10 +137,10 @@ export async function baixarPdfRelatorioAds(dados: DadosRelatorioAds): Promise<v
   if (dados.instagram && (dados.instagram.seguidores !== null || dados.instagram.alcance !== null)) {
     titulo("Instagram (orgânico + pago)");
     linhaKpis([
-      { rotulo: "Seguidores", valor: dados.instagram.seguidores === null ? "—" : inteiro(dados.instagram.seguidores), variacao: null },
-      { rotulo: "Alcance da conta", valor: dados.instagram.alcance === null ? "—" : inteiro(dados.instagram.alcance), variacao: null },
-      { rotulo: "Visitas ao perfil", valor: dados.instagram.visitasPerfil === null ? "—" : inteiro(dados.instagram.visitasPerfil), variacao: null },
-      { rotulo: "Frequência (anúncios)", valor: decimal(dados.totais.frequencia), variacao: null },
+      { rotulo: "Seguidores", valor: dados.instagram.seguidores === null ? "—" : inteiro(dados.instagram.seguidores) },
+      { rotulo: "Alcance da conta", valor: dados.instagram.alcance === null ? "—" : inteiro(dados.instagram.alcance) },
+      { rotulo: "Visitas ao perfil", valor: dados.instagram.visitasPerfil === null ? "—" : inteiro(dados.instagram.visitasPerfil) },
+      { rotulo: "Frequência (anúncios)", valor: decimal(dados.totais.frequencia) },
     ]);
   }
 

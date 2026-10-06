@@ -290,7 +290,10 @@ export interface LinhaInsightInstagram {
  * diagnóstico inteiro por causa de uma métrica só). */
 export async function obterInsightsContaInstagram(
   instagramBusinessId: string,
-  diasAtras = 30
+  diasAtras = 30,
+  /** Fim da janela, em dias atrás (0 = agora). A Meta só aceita janelas de até 30 dias por chamada;
+   * quem precisa de mais encadeia janelas deslocadas. */
+  terminaDiasAtras = 0
 ): Promise<{ reach: number; profileViews: number | null }> {
   try {
     const dados = await chamar<{ data: LinhaInsightInstagram[] }>(`${instagramBusinessId}/insights`, {
@@ -299,7 +302,7 @@ export async function obterInsightsContaInstagram(
         period: "day",
         metric_type: "total_value",
         since: Math.floor((Date.now() - diasAtras * 86_400_000) / 1000),
-        until: Math.floor(Date.now() / 1000),
+        until: Math.floor((Date.now() - terminaDiasAtras * 86_400_000) / 1000),
       },
     });
     const reach = dados.data.find((linha) => linha.name === "reach")?.values?.[0]?.value ?? 0;
