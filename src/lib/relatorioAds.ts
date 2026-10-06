@@ -9,7 +9,7 @@ import {
 import { comContaMeta } from "@/lib/meta/conexao";
 import { adicionarDias, diaEmSaoPaulo } from "@/lib/tempoSaoPaulo";
 
-export const PERIODOS_RELATORIO_ADS = [15, 30, 60, 90] as const;
+export const PERIODOS_RELATORIO_ADS = [15, 30, 45, 60, 90] as const;
 
 export interface TotaisAds {
   gasto: number;
