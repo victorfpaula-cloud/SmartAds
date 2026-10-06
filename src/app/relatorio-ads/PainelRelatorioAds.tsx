@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { FilePdf, ArrowUp, ArrowDown } from "@phosphor-icons/react";
+import { FilePdf } from "@phosphor-icons/react";
 import type { DadosRelatorioAds } from "@/lib/relatorioAds";
 import { baixarPdfRelatorioAds, montarKpis, inteiro, reais, type CartaoKpi } from "@/lib/relatorioAdsPdf";
 import { formatarDiaExibicao } from "@/lib/tempoSaoPaulo";
@@ -14,7 +14,7 @@ export interface OpcaoConta {
   instagram: string | null;
 }
 
-const PERIODOS = [7, 15, 30];
+const PERIODOS = [15, 30, 60, 90];
 
 export default function PainelRelatorioAds({ contas }: { contas: OpcaoConta[] }) {
   const [contaId, setContaId] = useState(contas[0]?.id ?? "");
@@ -157,9 +157,9 @@ function Relatorio({ dados }: { dados: DadosRelatorioAds }) {
         <Bloco
           titulo="Instagram"
           kpis={[
-            { rotulo: "Seguidores", valor: dados.instagram.seguidores === null ? "—" : inteiro(dados.instagram.seguidores), variacao: null },
-            { rotulo: "Alcance da conta", valor: dados.instagram.alcance === null ? "—" : inteiro(dados.instagram.alcance), variacao: null },
-            { rotulo: "Visitas ao perfil", valor: dados.instagram.visitasPerfil === null ? "—" : inteiro(dados.instagram.visitasPerfil), variacao: null },
+            { rotulo: "Seguidores", valor: dados.instagram.seguidores === null ? "—" : inteiro(dados.instagram.seguidores) },
+            { rotulo: "Alcance da conta", valor: dados.instagram.alcance === null ? "—" : inteiro(dados.instagram.alcance) },
+            { rotulo: "Visitas ao perfil", valor: dados.instagram.visitasPerfil === null ? "—" : inteiro(dados.instagram.visitasPerfil) },
           ]}
         />
       )}
@@ -239,7 +239,6 @@ function Bloco({ titulo, kpis }: { titulo: string; kpis: CartaoKpi[] }) {
           <div key={k.rotulo} className="selo-vidro px-4 py-3.5">
             <p className="text-[11.5px] text-neutral-400">{k.rotulo}</p>
             <p className="mt-1 font-display text-xl font-bold tabular-nums text-neutral-100">{k.valor}</p>
-            {k.variacao !== null && <Variacao valor={k.variacao} inverso={k.inverso} />}
           </div>
         ))}
       </div>
@@ -247,13 +246,3 @@ function Bloco({ titulo, kpis }: { titulo: string; kpis: CartaoKpi[] }) {
   );
 }
 
-function Variacao({ valor, inverso }: { valor: number; inverso?: boolean }) {
-  const bom = inverso ? valor <= 0 : valor >= 0;
-  const Seta = valor >= 0 ? ArrowUp : ArrowDown;
-  return (
-    <p className={`mt-0.5 flex items-center gap-0.5 text-[11px] font-medium ${bom ? "text-ok" : "text-danger"}`}>
-      <Seta size={10} weight="bold" />
-      {Math.abs(Math.round(valor))}% <span className="font-normal text-neutral-500">vs. período anterior</span>
-    </p>
-  );
-}
