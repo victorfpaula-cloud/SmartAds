@@ -14,7 +14,7 @@ export interface OpcaoConta {
   instagram: string | null;
 }
 
-const PERIODOS = [15, 30, 60, 90];
+const PERIODOS = [15, 30, 45, 60, 90];
 
 export default function PainelRelatorioAds({ contas }: { contas: OpcaoConta[] }) {
   const [contaId, setContaId] = useState(contas[0]?.id ?? "");
@@ -91,7 +91,7 @@ export default function PainelRelatorioAds({ contas }: { contas: OpcaoConta[] })
           ))}
         </select>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {PERIODOS.map((p) => (
             <button
               key={p}
