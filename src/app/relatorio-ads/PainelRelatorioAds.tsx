@@ -270,12 +270,12 @@ function BlocoOrganico({ itens }: { itens: ItemOrganico[] }) {
       </h3>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {itens.map((i) => {
-          const dividido = i.organico !== null && i.trafego !== null && i.total > 0;
-          const pctOrganico = dividido ? ((i.organico as number) / i.total) * 100 : 0;
+          const dividido = i.total !== null && i.organico !== null && i.trafego !== null && i.total > 0;
+          const pctOrganico = dividido ? ((i.organico as number) / (i.total as number)) * 100 : 0;
           return (
             <div key={i.chave} className="selo-vidro px-4 py-3.5">
               <p className="text-[11.5px] text-neutral-400">{i.rotulo}</p>
-              <p className="mt-1 font-display text-2xl font-bold tabular-nums text-neutral-100">{inteiro(i.total)}</p>
+              <p className="mt-1 font-display text-2xl font-bold tabular-nums text-neutral-100">{i.total === null ? "—" : inteiro(i.total)}</p>
               {dividido ? (
                 <>
                   <div className="mt-2.5 flex h-1.5 overflow-hidden rounded-full bg-accent/60">
@@ -289,9 +289,18 @@ function BlocoOrganico({ itens }: { itens: ItemOrganico[] }) {
                       <span className="font-semibold tabular-nums">{inteiro(i.trafego as number)}</span> tráfego
                     </span>
                   </div>
+                  {i.origem === "posts" && (
+                    <p className="mt-1 text-[10.5px] text-neutral-500">Soma dos posts do período</p>
+                  )}
                 </>
               ) : (
-                <p className="mt-2 text-[11.5px] text-neutral-500">Total da conta (sem divisão)</p>
+                <p className="mt-2 text-[11.5px] text-neutral-500">
+                  {i.total === null
+                    ? i.trafego !== null
+                      ? `${inteiro(i.trafego)} pelo tráfego · total da conta indisponível`
+                      : "A Meta não liberou esse número"
+                    : "Total da conta (sem divisão)"}
+                </p>
               )}
             </div>
           );

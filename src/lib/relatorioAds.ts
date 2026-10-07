@@ -2,11 +2,13 @@ import { criarClienteAdmin } from "@/lib/supabase/admin";
 import {
   obterInsightsRelatorio,
   obterInsightsInstagramRelatorio,
+  obterResumoContaInstagram,
+  listarPostsInstagramDesde,
   type InsightsInstagramRelatorio,
   type LinhaInsightRelatorio,
 } from "@/lib/meta/api";
 import { comContaMeta } from "@/lib/meta/conexao";
-import { adicionarDias, diaEmSaoPaulo } from "@/lib/tempoSaoPaulo";
+import { adicionarDias, diaEmSaoPaulo, formatarDiaExibicao } from "@/lib/tempoSaoPaulo";
 
 export const PERIODOS_RELATORIO_ADS = [15, 30, 45, 60, 90] as const;
 
@@ -48,8 +50,11 @@ export interface CampanhaRelatorioAds {
 export interface ItemOrganico {
   chave: string;
   rotulo: string;
-  /** Total que a conta teve no Instagram (orgânico + o que veio dos anúncios). */
-  total: number;
+  /** Total que a conta teve no Instagram (orgânico + o que veio dos anúncios); null = a Meta não
+   * liberou esse número pra essa conta. */
+  total: number | null;
+  /** De onde veio o total: insights da conta, ou soma dos posts publicados no período. */
+  origem: "conta" | "posts" | null;
   /** Parte atribuída aos anúncios; null quando a Meta não informa esse número pelos anúncios. */
   trafego: number | null;
   /** total − tráfego (nunca negativo); null quando não dá pra separar. */
@@ -133,30 +138,63 @@ async function insightsInstagramEmJanelas(igId: string, pageId: string | null, d
   return total;
 }
 
-/** Separa orgânico de tráfego: o Instagram informa o total da conta; os anúncios informam o que
- * eles mesmos trouxeram; o orgânico é a diferença. */
-function montarOrganico(ig: Record<string, number>, t: TotaisAds): ItemOrganico[] {
-  const definicoes: Array<[string, string, string, number | null]> = [
-    ["views", "visualizacoes", "Visualizações", t.impressoes],
-    ["reach", "alcance", "Alcance", t.alcance],
-    ["likes", "curtidas", "Curtidas", t.curtidas],
-    ["comments", "comentarios", "Comentários", t.comentarios],
-    ["shares", "compartilhamentos", "Compartilhamentos", t.compartilhamentos],
-    ["saves", "salvamentos", "Salvamentos", t.salvamentos],
-    ["profile_views", "visitas", "Visitas ao perfil", t.visitasPerfilAnuncios],
+/** Separa orgânico de tráfego: o Instagram informa o total; os anúncios informam o que eles mesmos
+ * trouxeram; o orgânico é a diferença. Curtidas e comentários, quando a Meta não libera os insights
+ * da conta, vêm da soma dos posts publicados no período (campos da própria mídia). */
+function montarOrganico(
+  ig: Record<string, number>,
+  postsPeriodo: { curtidas: number; comentarios: number } | null,
+  t: TotaisAds
+): ItemOrganico[] {
+  const definicoes: Array<[string, string, string, number | null, number | null]> = [
+    ["views", "visualizacoes", "Visualizações", t.impressoes, null],
+    ["reach", "alcance", "Alcance", t.alcance, null],
+    ["likes", "curtidas", "Curtidas", t.curtidas, postsPeriodo?.curtidas ?? null],
+    ["comments", "comentarios", "Comentários", t.comentarios, postsPeriodo?.comentarios ?? null],
+    ["shares", "compartilhamentos", "Compartilhamentos", t.compartilhamentos, null],
+    ["saves", "salvamentos", "Salvamentos", t.salvamentos, null],
+    ["profile_views", "visitas", "Visitas ao perfil", t.visitasPerfilAnuncios, null],
   ];
-  return definicoes
-    .filter(([metrica]) => ig[metrica] !== undefined)
-    .map(([metrica, chave, rotulo, trafego]) => {
-      const total = ig[metrica];
-      return {
-        chave,
-        rotulo,
-        total,
-        trafego,
-        organico: trafego === null ? null : Math.max(total - trafego, 0),
-      };
-    });
+  return definicoes.map(([metrica, chave, rotulo, trafego, dosPosts]) => {
+    const daConta = ig[metrica];
+    const total = daConta !== undefined ? daConta : dosPosts;
+    const origem: ItemOrganico["origem"] = daConta !== undefined ? "conta" : dosPosts !== null ? "posts" : null;
+    // Se os anúncios trouxeram mais do que o total lido, o total está incompleto (ex.: posts mais
+    // antigos que a janela) — nunca mostra orgânico negativo nem total menor que o tráfego.
+    const totalAjustado = total !== null && trafego !== null ? Math.max(total, trafego) : total;
+    return {
+      chave,
+      rotulo,
+      total: totalAjustado,
+      origem,
+      trafego,
+      organico: totalAjustado === null || trafego === null ? null : Math.max(totalAjustado - trafego, 0),
+    };
+  });
+}
+
+/** Grava a leitura de seguidores de hoje e devolve o ganho desde a leitura mais antiga dentro do
+ * período (ou null se ainda não há leitura anterior). */
+async function ganhoDeSeguidoresPorLeituras(
+  contaId: string,
+  seguidoresAgora: number,
+  hoje: string,
+  desde: string
+): Promise<{ ganho: number; desdeDia: string } | null> {
+  const supabase = criarClienteAdmin();
+  await supabase
+    .from("smartads_seguidores_snapshot")
+    .upsert({ conta_id: contaId, dia: hoje, seguidores: seguidoresAgora }, { onConflict: "conta_id,dia" });
+  const { data } = await supabase
+    .from("smartads_seguidores_snapshot")
+    .select("dia, seguidores")
+    .eq("conta_id", contaId)
+    .gte("dia", desde)
+    .lt("dia", hoje)
+    .order("dia", { ascending: true })
+    .limit(1);
+  const base = data?.[0];
+  return base ? { ganho: seguidoresAgora - base.seguidores, desdeDia: base.dia } : null;
 }
 
 /** Relatório de tráfego (anúncios) de UMA conta no período — só números de resultado: alcance,
@@ -179,13 +217,17 @@ export async function gerarRelatorioAds(contaId: string, dias: number, comOrgani
   const avisos: string[] = [];
 
   return comContaMeta(contaId, async () => {
-    const [totalAtual, porDia, porCampanha, igInsights] = await Promise.allSettled([
+    const [totalAtual, porDia, porCampanha, igInsights, igPosts, igResumo] = await Promise.allSettled([
       obterInsightsRelatorio(adAccountId, { nivel: "account", desde, ate: hoje }),
       obterInsightsRelatorio(adAccountId, { nivel: "account", desde, ate: hoje, porDia: true }),
       obterInsightsRelatorio(adAccountId, { nivel: "campaign", desde, ate: hoje }),
       conta.instagram_business_id
         ? insightsInstagramEmJanelas(conta.instagram_business_id, (conta.page_id as string | null) ?? null, dias)
         : Promise.resolve(null),
+      conta.instagram_business_id
+        ? listarPostsInstagramDesde(conta.instagram_business_id, Math.floor(new Date(`${desde}T00:00:00-03:00`).getTime() / 1000))
+        : Promise.resolve(null),
+      conta.instagram_business_id ? obterResumoContaInstagram(conta.instagram_business_id) : Promise.resolve(null),
     ]);
 
     if (totalAtual.status === "rejected") {
@@ -223,21 +265,65 @@ export async function gerarRelatorioAds(contaId: string, dias: number, comOrgani
         : [];
 
     const ig = igInsights.status === "fulfilled" ? igInsights.value : null;
+    const posts = igPosts.status === "fulfilled" ? igPosts.value : null;
+    const postsPeriodo = posts
+      ? {
+          curtidas: posts.reduce((soma, p) => soma + (p.like_count ?? 0), 0),
+          comentarios: posts.reduce((soma, p) => soma + (p.comments_count ?? 0), 0),
+        }
+      : null;
+    const seguidoresAgora = igResumo.status === "fulfilled" ? igResumo.value?.followers_count ?? null : null;
+
     let instagram: DadosRelatorioAds["instagram"] = null;
     if (conta.instagram_business_id) {
+      let novosSeguidores = ig?.novosSeguidores ?? null;
+      if (novosSeguidores === null && seguidoresAgora !== null) {
+        try {
+          const leitura = await ganhoDeSeguidoresPorLeituras(contaId, seguidoresAgora, hoje, desde);
+          if (leitura) {
+            novosSeguidores = leitura.ganho;
+            if (leitura.desdeDia !== desde) {
+              avisos.push(`Novos seguidores contados desde ${formatarDiaExibicao(leitura.desdeDia)}, a primeira leitura guardada no período.`);
+            }
+          } else {
+            avisos.push("Comecei a guardar a leitura de seguidores hoje. A partir de amanhã o relatório mostra quantos você ganhou no período.");
+          }
+        } catch {
+          /* sem snapshot — fica "—" */
+        }
+      } else if (dias > 30 && novosSeguidores !== null) {
+        avisos.push("A Meta só informa novos seguidores dos últimos 30 dias.");
+      }
       instagram = {
-        novosSeguidores: ig?.novosSeguidores ?? null,
+        novosSeguidores,
         alcance: ig?.metricas.reach ?? null,
         visitasPerfil: ig?.metricas.profile_views ?? null,
       };
-      if (dias > 30) {
+      if (dias > 30 && ig && ig.metricas.reach !== undefined) {
         avisos.push("Alcance do Instagram em períodos longos soma janelas de 30 dias, então pode repetir a mesma pessoa.");
-        if (instagram.novosSeguidores !== null) avisos.push("A Meta só informa novos seguidores dos últimos 30 dias.");
       }
-      if (igInsights.status === "rejected") {
-        avisos.push("Não deu pra buscar os números do Instagram.");
-      } else if (ig && ig.erros.length > 0) {
-        for (const e of ig.erros.slice(0, 3)) avisos.push(`Instagram (Meta): ${e.length > 220 ? `${e.slice(0, 220)}…` : e}`);
+      const semInsights = igInsights.status === "rejected" || (ig !== null && Object.keys(ig.metricas).length === 0);
+      if (semInsights || (ig && ig.erros.length > 0)) {
+        const motivo =
+          igInsights.status === "rejected"
+            ? igInsights.reason instanceof Error
+              ? igInsights.reason.message
+              : "erro desconhecido"
+            : ig?.erros[0] ?? "";
+        const resumido = motivo.length > 260 ? `${motivo.slice(0, 260)}…` : motivo;
+        avisos.push(
+          semInsights
+            ? `O Instagram não liberou os números gerais da conta (alcance, visualizações, visitas...). Motivo da Meta: ${resumido}`
+            : `Alguns números gerais do Instagram não vieram. Motivo da Meta: ${resumido}`
+        );
+        // Deixa o motivo real gravado pra eu poder ler depois sem depender dos logs da Vercel.
+        try {
+          await criarClienteAdmin()
+            .from("smartads_cron_diagnostico")
+            .insert({ cron: `relatorio-ads:${contaId}`, iniciado_em: new Date().toISOString(), erro: (ig?.erros ?? [motivo]).join(" | ").slice(0, 1500) });
+        } catch {
+          /* diagnóstico é só um extra */
+        }
       }
     }
 
@@ -246,10 +332,12 @@ export async function gerarRelatorioAds(contaId: string, dias: number, comOrgani
     if (comOrganico) {
       if (!conta.instagram_business_id) {
         avisos.push("Essa conta não tem Instagram conectado, então não dá pra separar o orgânico.");
-      } else if (ig) {
-        organico = montarOrganico(ig.metricas, totaisAtuais);
-        if (organico.length === 0) avisos.push("O Instagram não devolveu números orgânicos nesse período.");
-        if (organico.some((i) => i.trafego === null)) {
+      } else {
+        organico = montarOrganico(ig?.metricas ?? {}, postsPeriodo, totaisAtuais);
+        if (organico.some((i) => i.origem === "posts")) {
+          avisos.push("Curtidas e comentários do orgânico foram somados dos posts publicados no período.");
+        }
+        if (organico.some((i) => i.chave === "visitas" && i.trafego === null)) {
           avisos.push("A Meta não informa as visitas ao perfil vindas dos anúncios, então esse número não é dividido.");
         }
       }

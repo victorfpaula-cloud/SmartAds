@@ -139,8 +139,8 @@ export async function baixarPdfRelatorioAds(dados: DadosRelatorioAds): Promise<v
         const x = M + n * (w + gap);
         cartao(x, y, w, 90);
         texto(i.rotulo, x + 12, y + 18, 8.5, COR.suave);
-        texto(inteiro(i.total), x + 12, y + 38, 18, COR.texto, true);
-        if (i.organico !== null && i.trafego !== null && i.total > 0) {
+        texto(i.total === null ? "—" : inteiro(i.total), x + 12, y + 38, 18, COR.texto, true);
+        if (i.total !== null && i.organico !== null && i.trafego !== null && i.total > 0) {
           const larg = w - 24;
           doc.setFillColor(...COR.acento);
           doc.roundedRect(x + 12, y + 47, larg, 4, 2, 2, "F");
@@ -151,7 +151,17 @@ export async function baixarPdfRelatorioAds(dados: DadosRelatorioAds): Promise<v
           texto(`${inteiro(i.organico)} orgânico`, x + 12, y + 66, 7.5, COR.ok, true);
           texto(`${inteiro(i.trafego)} tráfego`, x + 12, y + 79, 7.5, COR.acento, true);
         } else {
-          texto("Total da conta (sem divisão)", x + 12, y + 64, 7.5, COR.fraco);
+          texto(
+            i.total === null
+              ? i.trafego !== null
+                ? `${inteiro(i.trafego)} pelo tráfego`
+                : "Meta não liberou"
+              : "Total da conta (sem divisão)",
+            x + 12,
+            y + 64,
+            7.5,
+            COR.fraco
+          );
         }
       });
       y += 102;
