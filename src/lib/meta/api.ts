@@ -239,6 +239,34 @@ export async function listarPostsInstagram(instagramBusinessId: string): Promise
   return dados.data;
 }
 
+export interface PostInstagramEngajamento {
+  id: string;
+  timestamp: string;
+  like_count?: number;
+  comments_count?: number;
+}
+
+/** Posts do feed publicados a partir de `desdeUnix` com curtidas e comentários — campos que vêm
+ * direto na mídia, sem precisar das permissões de insights. Pagina até `maxPaginas` de 100. */
+export async function listarPostsInstagramDesde(
+  instagramBusinessId: string,
+  desdeUnix: number,
+  maxPaginas = 5
+): Promise<PostInstagramEngajamento[]> {
+  const posts: PostInstagramEngajamento[] = [];
+  let depois: string | undefined;
+  for (let pagina = 0; pagina < maxPaginas; pagina++) {
+    const dados = await chamar<{ data: PostInstagramEngajamento[]; paging?: { cursors?: { after?: string }; next?: string } }>(
+      `${instagramBusinessId}/media`,
+      { query: { fields: "id,timestamp,like_count,comments_count", limit: 100, since: desdeUnix, after: depois } }
+    );
+    posts.push(...dados.data);
+    depois = dados.paging?.next ? dados.paging.cursors?.after : undefined;
+    if (!depois) break;
+  }
+  return posts.filter((p) => new Date(p.timestamp).getTime() / 1000 >= desdeUnix);
+}
+
 /** Um post específico — usado quando "usar publicação existente" precisa buscar de novo a
  * imagem/legenda no momento de publicar (ver criarCriativoAPartirDePost em route.ts). */
 export async function obterPostInstagram(mediaId: string): Promise<PostInstagram> {
