@@ -48,7 +48,7 @@ export async function obterEmpresasParaInicio(): Promise<EmpresaInicio[]> {
       boostsComErro: daEmpresa.filter((u) => u.boost.ativo && u.boost.falha).length,
       saldoAcabando: daEmpresa.filter((u) => {
         const f = financeiroPorConta.get(u.contaId);
-        if (!f) return false;
+        if (!f || u.semSaldo) return false; // sem saldo já tem o próprio alerta
         const dias = calcularPrevisaoSaldo(f.saldo_disponivel_centavos, f.media_diaria_centavos ?? 0).dias;
         return dias !== null && dias <= 7;
       }).length,

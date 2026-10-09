@@ -4,6 +4,7 @@ import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { empresaDaPagina } from "@/lib/ambiente";
 import { carregarInvestimentos } from "@/lib/investimentos";
 import { mesAtualEmSaoPaulo } from "@/lib/tempoSaoPaulo";
+import AbasFinanceiro from "@/components/AbasFinanceiro";
 import PainelInvestimentos from "./PainelInvestimentos";
 
 export const dynamic = "force-dynamic";
@@ -30,11 +31,10 @@ export default async function InvestimentosPage({ searchParams }: { searchParams
   return (
     <>
       <Cabecalho ativo="/financeiro" />
-      <main className="mx-auto max-w-5xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
-        <Link href="/financeiro" className="text-xs text-neutral-500 hover:text-neutral-300">
-          ← Financeiro
-        </Link>
-        <h1 className="mt-1 font-display text-2xl font-bold">Investimento por unidade</h1>
+      <main className="mx-auto max-w-6xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
+        <h1 className="font-display text-2xl font-bold">Financeiro</h1>
+        <div className="mt-3" />
+        <AbasFinanceiro ativa="investimento" />
         <p className="mt-1 text-sm text-neutral-400">
           Quanto cada unidade combinou investir no mês, quanto já investiu e quando. Recargas que a Meta registra entram
           sozinhas; o resto você lança à mão.

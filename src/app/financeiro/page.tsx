@@ -1,12 +1,13 @@
 import Cabecalho from "@/components/Cabecalho";
 import Link from "next/link";
-import { empresaDaPagina } from "@/lib/ambiente";
+import { empresaDaPagina, lerAmbiente } from "@/lib/ambiente";
 import { coletarFinanceiro, calcularPlanejamento, unicasPorContaDeAnuncio, type ContaFinanceiro } from "@/lib/financeiro/coletarFinanceiro";
 import { Wallet, Info, ChartLine } from "@phosphor-icons/react/dist/ssr";
 import { calcularPrevisaoSaldo, type NivelPrevisao } from "@/lib/financeiro/previsaoSaldo";
 import EditarSaldo from "./EditarSaldo";
 import EditarOrcamentoMensal from "./EditarOrcamentoMensal";
 import AtualizarAgora from "./AtualizarAgora";
+import AbasFinanceiro from "@/components/AbasFinanceiro";
 import { descreverSituacaoConta, type TomSituacao } from "@/lib/financeiro/situacaoConta";
 
 export const dynamic = "force-dynamic";
@@ -32,15 +33,13 @@ export default async function FinanceiroPage({
 }: {
   searchParams: { rede?: string; empresa?: string };
 }) {
-  const apenasRede = searchParams.rede === FILTRO_REDE;
-  const todasContas = await coletarFinanceiro();
+  const ambiente = await lerAmbiente();
   const empresaId = await empresaDaPagina(searchParams.empresa);
-  const empresaFiltro = empresaId ? todasContas.find((c) => c.empresaId === empresaId) : undefined;
-  const contas = empresaFiltro
-    ? todasContas.filter((c) => c.empresaId === empresaId)
-    : apenasRede
-      ? todasContas.filter((c) => c.empresaTipo === "franquia")
-      : todasContas;
+  // Estrito: com ambiente (ou empresa escolhida) só entram as contas dela — nunca as de outras empresas.
+  const contas = await coletarFinanceiro(empresaId);
+  const empresaFiltro = empresaId ? { empresaNome: ambiente?.nome ?? contas[0]?.empresaNome ?? "" } : undefined;
+  // O planejamento do mínimo mensal (e a reserva do boost) é coisa de franquia.
+  const apenasRede = ambiente?.tipo === "franquia";
 
   // Totais contam cada conta de anúncio da Meta uma vez só (duas contas locais podem apontar pra mesma).
   const contasUnicas = unicasPorContaDeAnuncio(contas);
@@ -71,40 +70,19 @@ export default async function FinanceiroPage({
 
   return (
     <>
-      <Cabecalho
-        ativo="/financeiro"
-        rede={apenasRede}
-        geralHref="/financeiro"
-        empresa={empresaFiltro && empresaId ? { id: empresaId, nome: empresaFiltro.empresaNome } : undefined}
-      />
+      <Cabecalho ativo="/financeiro" />
       <main className="mx-auto max-w-6xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
-        {apenasRede && (
-          <Link href="/estrategias" className="text-xs text-neutral-500 hover:text-neutral-300">
-            ← Central da rede
-          </Link>
-        )}
-        <div className="mt-1 flex items-center gap-2.5">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-neutral-300">
-            <Wallet size={16} weight="fill" />
-          </div>
+        <AbasFinanceiro ativa="saldos" />
+        <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="font-display text-2xl font-bold">{empresaFiltro ? `Financeiro · ${empresaFiltro.empresaNome}` : apenasRede ? "Financeiro da rede" : "Financeiro"}</h1>
-            <p className="mt-0.5 text-sm text-neutral-400">
-              {apenasRede
-                ? "Só as unidades de franquia — pra ver tudo, inclusive empresas individuais, use Financeiro no menu."
-                : "Saldo disponível de cada conta e ritmo de gasto. Atualiza sozinho 1x por dia."}
+            <h1 className="font-display text-2xl font-bold">
+              {empresaFiltro?.empresaNome ? `Financeiro · ${empresaFiltro.empresaNome}` : "Financeiro"}
+            </h1>
+            <p className="mt-1 text-sm text-neutral-400">
+              Saldo e situação da conta de cada unidade, ritmo de gasto e previsão de quando o saldo acaba.
             </p>
           </div>
-        </div>
-
-        <div className="mt-3 flex flex-wrap items-center justify-end gap-3">
-          <Link
-            href="/financeiro/investimentos"
-            className="rounded-lg bg-accent px-3.5 py-2 text-xs font-semibold text-white hover:bg-accent-strong"
-          >
-            Investimento por unidade
-          </Link>
-          <AtualizarAgora rotulo="Atualizar todas agora" />
+          <AtualizarAgora rotulo="Atualizar agora" />
         </div>
 
         {contasComProblema.length > 0 && (
@@ -277,7 +255,7 @@ export default async function FinanceiroPage({
                       rel="noopener noreferrer"
                       className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-accent-strong"
                     >
-                      Ver faturamento na Meta
+                      Adicionar crédito na Meta
                     </a>
                   </div>
                 </div>

@@ -1,4 +1,5 @@
 import Cabecalho from "@/components/Cabecalho";
+import { AbasUnidades } from "@/components/AbasRede";
 import Link from "next/link";
 import { calcularSemaforo, type CorSemaforo } from "@/lib/semaforo";
 
@@ -25,11 +26,9 @@ export default async function SemaforoPage() {
   return (
     <>
       <Cabecalho ativo="/estrategias" />
-      <main className="mx-auto max-w-3xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
-        <Link href="/estrategias" className="text-xs text-neutral-500 hover:text-neutral-300">
-          ← Estratégias
-        </Link>
-        <h1 className="mt-1 font-display text-2xl font-bold">Semáforo das unidades</h1>
+      <main className="mx-auto max-w-6xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
+        <AbasUnidades />
+        <h1 className="font-display text-2xl font-bold">Semáforo das unidades</h1>
         <p className="mt-1 text-sm text-neutral-400">
           CTR dos últimos 7 dias comparado com a mediana das outras unidades ativas.
         </p>

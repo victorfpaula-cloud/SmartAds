@@ -12,6 +12,7 @@ export default async function RelatorioAdsPage() {
   let consulta = supabase
     .from("smartads_clientes")
     .select("nome, smartads_contas_meta(id, nome_exibicao, meta_ad_account_nome, instagram_username, ativo)")
+    .eq("ativo", true)
     .order("nome");
   if (ambiente) consulta = consulta.eq("empresa_id", ambiente.id);
   const { data } = await consulta;
@@ -34,12 +35,11 @@ export default async function RelatorioAdsPage() {
       <Cabecalho ativo="/relatorio-ads" />
       <main className="mx-auto max-w-6xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
         <h1 className="font-display text-2xl font-bold">Relatórios</h1>
-        <div className="mt-3" />
-        <AbasRelatorios ativa="conta" />
         <p className="mt-1 text-sm text-neutral-400">
           Só os números do tráfego pago: alcance, engajamento, visitas ao perfil e investimento.
         </p>
-        <div className="mt-6">
+        <div className="mt-4">
+          <AbasRelatorios ativa="conta" />
           <PainelRelatorioAds contas={contas} />
         </div>
       </main>

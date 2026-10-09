@@ -12,25 +12,23 @@ const limpar = (destino: string) => `/api/ambiente?limpar=1&ir=${encodeURICompon
 // conta única (card do Início) abre o menu daquele ambiente.
 const MENU_GERAL: ItemMenu[] = [
   { href: "/", label: "Início" },
+  { href: limpar("/boost"), label: "Boost", tambem: ["/boost"] },
+  { href: limpar("/financeiro"), label: "Financeiro", tambem: ["/financeiro"] },
+  { href: limpar("/relatorios"), label: "Relatórios", tambem: ["/relatorios", "/relatorio-ads"] },
   { href: "/contas", label: "Contas e conexões" },
-  { href: limpar("/financeiro"), label: "Financeiro de todas", tambem: ["/financeiro"] },
-  { href: limpar("/relatorios"), label: "Relatórios de todas", tambem: ["/relatorios", "/relatorio-ads"] },
 ];
 
 function menuDoAmbiente(a: Ambiente): ItemMenu[] {
   if (a.tipo === "franquia") {
     return [
-      { href: "/estrategias", label: "Visão geral da rede" },
+      { href: "/estrategias", label: "Visão geral" },
       { href: "/estrategias/calendario", label: "Calendário" },
+      { href: "/estrategias/campanhas-mae", label: "Campanha oficial", tambem: ["/estrategias/moldes", "/estrategias/planos"] },
       { href: "/campanhas", label: "Campanhas", tambem: ["/campanhas/conta", "/campanhas/nova"] },
+      { href: "/estrategias/semaforo", label: "Unidades", tambem: ["/estrategias/postagens", "/estrategias/diagnostico"] },
       { href: "/boost", label: "Boost" },
-      { href: "/financeiro", label: "Financeiro" },
-      { href: "/financeiro/investimentos", label: "Investimento" },
+      { href: "/financeiro", label: "Financeiro", tambem: ["/financeiro/investimentos"] },
       { href: "/relatorios", label: "Relatórios", tambem: ["/relatorio-ads"] },
-      { href: "/estrategias/postagens", label: "Radar de posts" },
-      { href: "/estrategias/semaforo", label: "Semáforo" },
-      { href: "/estrategias/moldes", label: "Moldes" },
-      { href: "/estrategias/campanhas-mae", label: "Campanha oficial" },
       { href: "/publicos", label: "Públicos" },
       { href: "/automacao", label: "Automação" },
     ];
@@ -39,8 +37,7 @@ function menuDoAmbiente(a: Ambiente): ItemMenu[] {
     { href: `/central/${a.id}`, label: "Visão geral" },
     { href: "/campanhas", label: "Campanhas", tambem: ["/campanhas/conta", "/campanhas/nova"] },
     { href: "/boost", label: "Boost" },
-    { href: "/financeiro", label: "Financeiro" },
-    { href: "/financeiro/investimentos", label: "Investimento" },
+    { href: "/financeiro", label: "Financeiro", tambem: ["/financeiro/investimentos"] },
     { href: "/relatorios", label: "Relatórios", tambem: ["/relatorio-ads"] },
     { href: "/publicos", label: "Públicos" },
     { href: "/automacao", label: "Automação" },

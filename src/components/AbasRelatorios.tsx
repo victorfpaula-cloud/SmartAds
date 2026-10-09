@@ -17,8 +17,8 @@ export default function AbasRelatorios({ ativa }: { ativa: "resumo" | "conta" })
   );
   return (
     <div className="mb-5 flex flex-wrap gap-2">
-      {aba("/relatorios", "Resumo de todas as contas", ativa === "resumo")}
-      {aba("/relatorio-ads", "Relatório de uma conta (PDF)", ativa === "conta")}
+      {aba("/relatorios", "Resumo", ativa === "resumo")}
+      {aba("/relatorio-ads", "Por conta (PDF)", ativa === "conta")}
     </div>
   );
 }
