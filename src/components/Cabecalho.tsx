@@ -6,28 +6,28 @@ import {
   Wallet,
   Lightning,
   ChartLineUp,
-  DotsThreeCircle,
+  UsersThree,
+  Target,
+  Robot,
   SignOut,
   ArrowLeft,
 } from "@phosphor-icons/react/dist/ssr";
 
-// As 6 coisas que se abrem quase todo dia ficam fixas aqui: Início, Campanhas, Boost (a função
-// principal), Financeiro e Relatórios. Contas (cadastro/administração), Públicos e Automação — uso
-// mais esporádico — ficam em "Mais", que explica o que cada um faz (ver /mais/page.tsx).
-// "Estratégias"/Central da Rede nem entra aqui — é pauta só de franquia, acessada pelo card da
-// empresa na tela inicial.
+// Tudo que se usa pra gerenciar fica no menu: Início, Campanhas, Boost, Rede (planejamento e
+// acompanhamento da franquia), Financeiro, Relatórios, Contas, Públicos e Automação. No desktop só o
+// item aberto mostra o nome em telas médias (os outros ficam só com o ícone, o nome aparece ao
+// passar o mouse) e todos mostram nome em telas largas; no celular a barra de baixo rola de lado.
 const LINKS = [
   { href: "/", label: "Início", Icone: House },
   { href: "/campanhas", label: "Campanhas", Icone: Megaphone },
   { href: "/boost", label: "Boost", Icone: Lightning },
+  { href: "/estrategias", label: "Rede", Icone: UsersThree },
   { href: "/financeiro", label: "Financeiro", Icone: Wallet },
   { href: "/relatorios", label: "Relatórios", Icone: ChartLineUp },
-  { href: "/mais", label: "Mais", Icone: DotsThreeCircle },
+  { href: "/contas", label: "Contas", Icone: Buildings },
+  { href: "/publicos", label: "Públicos", Icone: Target },
+  { href: "/automacao", label: "Automação", Icone: Robot },
 ];
-
-// Páginas que vivem "dentro" de Mais — abrem a página normalmente, mas a aba que acende na barra é
-// a de Mais, não nenhuma (senão pareceria que saiu da navegação principal ao entrar nelas).
-const PAGINAS_DENTRO_DE_MAIS = ["/contas", "/publicos", "/automacao", "/mais"];
 
 /** Navegação principal — vira barra de abas fixa embaixo no celular (padrão de app, mais fácil de
  * alcançar com o polegar) e barra no topo no desktop. Um só componente, dois layouts via classes
@@ -49,12 +49,13 @@ export default function Cabecalho({
   geralHref?: string;
 }) {
   const modoRede = rede || ativo === "/estrategias" || Boolean(empresa);
-  const ativoNaBarra = modoRede
-    ? ""
-    : PAGINAS_DENTRO_DE_MAIS.includes(ativo)
-      ? "/mais"
+  // Dentro da Central da rede acende "Rede"; a Central de uma empresa individual não tem aba própria.
+  const ativoNaBarra = ativo.startsWith("/estrategias")
+    ? "/estrategias"
+    : modoRede
+      ? ""
       : ativo === "/relatorio-ads"
-        ? "/relatorios" // Relatório Ads é uma aba dentro de Relatórios
+        ? "/relatorios" // Relatório de uma conta é uma aba dentro de Relatórios
         : ativo;
 
   return (
@@ -67,21 +68,22 @@ export default function Cabecalho({
         style={{ paddingTop: "env(safe-area-inset-top)" }}
       >
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
-          <div className="flex items-center gap-8">
+          <div className="flex items-center gap-5 lg:gap-8">
             <span className="font-display text-[15px] font-bold tracking-tight">SmartAds</span>
-            <nav className="hidden items-center gap-1.5 sm:flex">
+            <nav className="hidden items-center gap-1 sm:flex">
               {LINKS.map(({ href, label, Icone }) => (
                 <Link
                   key={href}
                   href={href}
+                  title={label}
                   className={
                     ativoNaBarra === href
-                      ? "pilula-ativa flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-[13px] font-semibold text-neutral-100"
-                      : "flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-[13px] font-medium text-neutral-400 hover:text-neutral-200"
+                      ? "pilula-ativa flex items-center gap-1.5 rounded-lg px-3 py-2 text-[13px] font-semibold text-neutral-100"
+                      : "flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-[13px] font-medium text-neutral-400 hover:text-neutral-200"
                   }
                 >
                   <Icone size={16} weight={ativoNaBarra === href ? "fill" : "regular"} />
-                  {label}
+                  <span className={ativoNaBarra === href ? "" : "hidden xl:inline"}>{label}</span>
                 </Link>
               ))}
             </nav>
@@ -129,21 +131,21 @@ export default function Cabecalho({
 
       {/* Barra de abas no celular — fixa embaixo, mesmo tratamento glass do resto do app. Some a
           partir do breakpoint sm, onde a navegação do topo já dá conta. `pb-[env(safe-area-inset-
-          bottom)]` evita ficar por baixo da barra de gestos do iPhone. 6 itens (não 7-8) dão pra
-          cada um respirar e ter uma área de toque de verdade. */}
+          bottom)]` evita ficar por baixo da barra de gestos do iPhone. a barra rola de lado quando
+          os itens não cabem, cada um com área de toque de verdade. */}
       <nav
         className="barra-vidro fixed inset-x-0 bottom-0 z-20 border-t sm:hidden"
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 6px)" }}
       >
-        <div className="grid grid-cols-6">
+        <div className="flex overflow-x-auto [scrollbar-width:none]">
           {LINKS.map(({ href, label, Icone }) => (
             <Link
               key={href}
               href={href}
               className={
                 ativoNaBarra === href
-                  ? "flex flex-col items-center gap-1 px-1 py-3 text-accent-strong"
-                  : "flex flex-col items-center gap-1 px-1 py-3 text-neutral-500"
+                  ? "flex min-w-[4.5rem] shrink-0 flex-col items-center gap-1 px-2 py-3 text-accent-strong"
+                  : "flex min-w-[4.5rem] shrink-0 flex-col items-center gap-1 px-2 py-3 text-neutral-500"
               }
             >
               <Icone size={22} weight={ativoNaBarra === href ? "fill" : "regular"} />

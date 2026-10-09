@@ -807,3 +807,14 @@ create table if not exists smartads_meta_mensal (
   primary key (conta_id, mes)
 );
 alter table smartads_meta_mensal enable row level security;
+
+-- Calendário da rede: datas comerciais por empresa (a campanha deve começar `antecedencia_dias` antes).
+create table if not exists smartads_calendario_rede (
+  id uuid primary key default gen_random_uuid(),
+  empresa_id uuid not null references smartads_empresas(id) on delete cascade,
+  nome text not null,
+  data date not null,
+  antecedencia_dias integer not null default 14 check (antecedencia_dias between 0 and 90),
+  criado_em timestamptz not null default now()
+);
+alter table smartads_calendario_rede enable row level security;
