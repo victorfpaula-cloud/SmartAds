@@ -2,9 +2,11 @@ import { criarClienteAdmin } from "@/lib/supabase/admin";
 import {
   obterSaldoConta,
   obterInsightsConta,
-  calcularSaldoIncremental,
   obterFonteDePagamento,
+  obterSituacaoConta,
+  somarMovimentacaoFinanceiraDesde,
 } from "@/lib/meta/api";
+import { diaEmSaoPaulo } from "@/lib/tempoSaoPaulo";
 
 export interface FinanceiroCacheLinha {
   saldoDisponivelCentavos: number | null;
@@ -13,8 +15,32 @@ export interface FinanceiroCacheLinha {
   gasto7diasCentavos: number;
   mediaDiariaCentavos: number;
   projecaoMensalCentavos: number;
+  /** account_status da Meta (1 = ativa); null quando não deu pra ler. */
+  statusConta: number | null;
+  motivoDesativacao: number | null;
+  contaPrePaga: boolean | null;
+  /** Gasto real do mês corrente (insights this_month). */
+  gastoMesCentavos: number | null;
+  /** Recargas (Pix/boleto) do mês, somadas dia a dia a partir do log de atividades da Meta. */
+  recargaMesCentavos: number | null;
+  recargaContadaDesde: string | null;
+  recargaErro: string | null;
   erro: string | null;
   calculadoEm: string;
+}
+
+/** Soma o que entrou (recargas) e o que foi cobrado desde `desde`; falha vira erro legível em vez
+ * de derrubar a conta toda. */
+async function movimentacaoSegura(adAccountId: string, desde: Date) {
+  try {
+    return { ...(await somarMovimentacaoFinanceiraDesde(adAccountId, desde)), erro: null as string | null };
+  } catch (e) {
+    return {
+      totalFundingCentavos: 0,
+      totalChargeCentavos: 0,
+      erro: e instanceof Error ? e.message : String(e),
+    };
+  }
 }
 
 /** Busca ao vivo na Meta os números financeiros de UMA conta e grava no cache
@@ -39,25 +65,57 @@ export async function atualizarCacheFinanceiroDaConta(
   try {
     const { data: cacheAnterior } = await supabase
       .from("smartads_financeiro_cache")
-      .select("saldo_disponivel_centavos, calculado_em")
+      .select(
+        "saldo_disponivel_centavos, calculado_em, recarga_mes_centavos, recarga_mes_ref, recarga_contada_desde, recarga_calculada_em"
+      )
       .eq("conta_id", contaId)
       .maybeSingle();
 
+    const agora = new Date();
+    const hoje = diaEmSaoPaulo(agora.toISOString());
+    const mesAtual = hoje.slice(0, 7);
+    const inicioDoMes = new Date(`${mesAtual}-01T00:00:00-03:00`);
+    const mesmoMes = cacheAnterior?.recarga_mes_ref === mesAtual && cacheAnterior.recarga_calculada_em;
+
+    // Recargas do mês: a Meta só guarda ~6 dias de atividades, então o total do mês é um ledger
+    // próprio — soma só o que entrou desde a última leitura e vira o mês zerando.
+    const movRecarga = await movimentacaoSegura(
+      metaAdAccountId,
+      mesmoMes ? new Date(cacheAnterior!.recarga_calculada_em as string) : inicioDoMes
+    );
+    const recargaMesCentavos = movRecarga.erro
+      ? mesmoMes
+        ? cacheAnterior!.recarga_mes_centavos ?? null
+        : null
+      : (mesmoMes ? cacheAnterior!.recarga_mes_centavos ?? 0 : 0) + movRecarga.totalFundingCentavos;
+    const recargaContadaDesde = mesmoMes
+      ? cacheAnterior!.recarga_contada_desde ?? null
+      : diaEmSaoPaulo(new Date(Math.max(inicioDoMes.getTime(), agora.getTime() - 6 * 86_400_000)).toISOString());
+
+    // Saldo próprio (ledger a partir do valor digitado) — janela desde a última leitura do saldo.
+    const saldoAnterior = cacheAnterior?.saldo_disponivel_centavos ?? null;
+    let saldoIncrementalCentavos: number | null = null;
+    if (saldoAnterior !== null && cacheAnterior?.calculado_em) {
+      const movSaldo = await movimentacaoSegura(metaAdAccountId, new Date(cacheAnterior.calculado_em));
+      saldoIncrementalCentavos = movSaldo.erro
+        ? saldoAnterior
+        : saldoAnterior + movSaldo.totalFundingCentavos - movSaldo.totalChargeCentavos;
+    }
+
     let erroFonte: string | null = null;
-    const [saldoIncrementalCentavos, saldo, insights, fonte] = await Promise.all([
-      calcularSaldoIncremental(
-        metaAdAccountId,
-        cacheAnterior?.saldo_disponivel_centavos ?? null,
-        cacheAnterior?.calculado_em ? new Date(cacheAnterior.calculado_em) : null
-      ),
+    const [saldo, insights, insightsMes, fonte, situacao] = await Promise.all([
       obterSaldoConta(metaAdAccountId),
       obterInsightsConta(metaAdAccountId, { nivel: "account", datePreset: "last_7d", porDia: false }),
+      obterInsightsConta(metaAdAccountId, { nivel: "account", datePreset: "this_month", porDia: false }).catch(
+        () => null
+      ),
       // Saldo que a própria Meta mostra na forma de pagamento da conta (ver FonteDePagamentoMeta).
       // Sem permissão/erro aqui, cai no saldo próprio de sempre em vez de derrubar a conta toda.
       obterFonteDePagamento(metaAdAccountId).catch((e) => {
         erroFonte = e instanceof Error ? e.message : String(e);
         return null;
       }),
+      obterSituacaoConta(metaAdAccountId).catch(() => null),
     ]);
     // A Meta manda quando a conta é pré-paga e o texto traz o saldo; senão o saldo próprio
     // (valor digitado + movimentos), que nunca é inventado — fica null sem ponto de partida.
@@ -65,22 +123,34 @@ export async function atualizarCacheFinanceiroDaConta(
     const spend7dReais = Number(insights[0]?.spend ?? 0);
     const gasto7diasCentavos = Math.round(spend7dReais * 100);
     const mediaDiariaCentavos = Math.round(gasto7diasCentavos / 7);
+    const gastoMesCentavos = insightsMes ? Math.round(Number(insightsMes[0]?.spend ?? 0) * 100) : null;
+
+    // Quando a Meta não devolve a forma de pagamento, diz o motivo provável em vez de um texto mudo.
+    const semFormaDePagamento = situacao?.temFormaDePagamento === false;
 
     linha = {
       saldoDisponivelCentavos,
       faturaEmAbertoCentavos: saldo.faturaEmAbertoCentavos,
-      // Texto da Meta; quando não vem, guarda o motivo (erro ou "sem forma de pagamento") pra
-      // aparecer na tela em vez de um traço mudo.
       fontePagamentoTexto: fonte
-        ? fonte.texto ?? "Meta não devolveu forma de pagamento pra essa conta"
+        ? fonte.texto ??
+          (semFormaDePagamento
+            ? "Conta sem forma de pagamento cadastrada na Meta"
+            : "A Meta não mostra a forma de pagamento dessa conta pro login atual (confira as permissões/administração do portfólio)")
         : erroFonte
           ? `Erro ao ler da Meta: ${erroFonte}`
           : null,
       gasto7diasCentavos,
       mediaDiariaCentavos,
       projecaoMensalCentavos: mediaDiariaCentavos * 30,
+      statusConta: situacao?.status ?? null,
+      motivoDesativacao: situacao?.motivoDesativacao ?? null,
+      contaPrePaga: situacao?.prePaga ?? fonte?.prePaga ?? null,
+      gastoMesCentavos,
+      recargaMesCentavos,
+      recargaContadaDesde,
+      recargaErro: movRecarga.erro,
       erro: null,
-      calculadoEm: new Date().toISOString(),
+      calculadoEm: agora.toISOString(),
     };
   } catch (e) {
     linha = {
@@ -90,6 +160,13 @@ export async function atualizarCacheFinanceiroDaConta(
       gasto7diasCentavos: 0,
       mediaDiariaCentavos: 0,
       projecaoMensalCentavos: 0,
+      statusConta: null,
+      motivoDesativacao: null,
+      contaPrePaga: null,
+      gastoMesCentavos: null,
+      recargaMesCentavos: null,
+      recargaContadaDesde: null,
+      recargaErro: null,
       erro: e instanceof Error ? e.message : "Falha ao buscar dados financeiros na Meta.",
       calculadoEm: new Date().toISOString(),
     };
@@ -103,6 +180,19 @@ export async function atualizarCacheFinanceiroDaConta(
     gasto_7d_centavos: linha.gasto7diasCentavos,
     media_diaria_centavos: linha.mediaDiariaCentavos,
     projecao_mensal_centavos: linha.projecaoMensalCentavos,
+    status_conta: linha.statusConta,
+    motivo_desativacao: linha.motivoDesativacao,
+    conta_pre_paga: linha.contaPrePaga,
+    gasto_mes_centavos: linha.gastoMesCentavos,
+    ...(linha.erro
+      ? {}
+      : {
+          recarga_mes_centavos: linha.recargaMesCentavos,
+          recarga_mes_ref: diaEmSaoPaulo(linha.calculadoEm).slice(0, 7),
+          recarga_contada_desde: linha.recargaContadaDesde,
+          recarga_calculada_em: linha.recargaErro ? undefined : linha.calculadoEm,
+        }),
+    recarga_erro: linha.recargaErro,
     erro: linha.erro,
     calculado_em: linha.calculadoEm,
   });

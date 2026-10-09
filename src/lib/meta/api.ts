@@ -157,6 +157,30 @@ export async function obterFonteDePagamento(adAccountId: string): Promise<FonteD
   };
 }
 
+export interface SituacaoContaMeta {
+  /** account_status da Meta: 1 ativa, 2 desativada, 3 pagamento pendente, 7 em análise de risco,
+   * 8 acerto pendente, 9 período de carência, 100/101 em encerramento, 201 qualquer encerrada. */
+  status: number | null;
+  motivoDesativacao: number | null;
+  prePaga: boolean | null;
+  temFormaDePagamento: boolean | null;
+}
+
+export async function obterSituacaoConta(adAccountId: string): Promise<SituacaoContaMeta> {
+  const dados = await chamar<{
+    account_status?: number;
+    disable_reason?: number;
+    is_prepay_account?: boolean;
+    funding_source?: string;
+  }>(adAccountId, { query: { fields: "account_status,disable_reason,is_prepay_account,funding_source" } });
+  return {
+    status: dados.account_status ?? null,
+    motivoDesativacao: dados.disable_reason ?? null,
+    prePaga: dados.is_prepay_account ?? null,
+    temFormaDePagamento: dados.funding_source ? true : dados.funding_source === undefined ? null : false,
+  };
+}
+
 export interface PaginaMeta {
   id: string;
   name: string;
@@ -1178,7 +1202,7 @@ export async function obterResumoCampanhasAtivas(adAccountId: string): Promise<R
 /** Cada evento de dinheiro entrando/saindo da conta, com o valor já extraído do extra_data.
  * `funding_event_successful` = Pix/boleto caindo na conta; `ad_account_billing_charge` = cobrança
  * automática (quase diária) que desconta do saldo. */
-async function somarMovimentacaoFinanceiraDesde(
+export async function somarMovimentacaoFinanceiraDesde(
   adAccountId: string,
   desde: Date
 ): Promise<{ totalFundingCentavos: number; totalChargeCentavos: number }> {

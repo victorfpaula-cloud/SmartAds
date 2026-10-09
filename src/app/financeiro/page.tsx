@@ -1,10 +1,12 @@
 import Cabecalho from "@/components/Cabecalho";
 import Link from "next/link";
-import { coletarFinanceiro, calcularPlanejamento } from "@/lib/financeiro/coletarFinanceiro";
+import { coletarFinanceiro, calcularPlanejamento, unicasPorContaDeAnuncio, type ContaFinanceiro } from "@/lib/financeiro/coletarFinanceiro";
 import { Wallet, Info, ChartLine } from "@phosphor-icons/react/dist/ssr";
 import { calcularPrevisaoSaldo, type NivelPrevisao } from "@/lib/financeiro/previsaoSaldo";
 import EditarSaldo from "./EditarSaldo";
 import EditarOrcamentoMensal from "./EditarOrcamentoMensal";
+import AtualizarAgora from "./AtualizarAgora";
+import { descreverSituacaoConta, type TomSituacao } from "@/lib/financeiro/situacaoConta";
 
 export const dynamic = "force-dynamic";
 
@@ -39,10 +41,17 @@ export default async function FinanceiroPage({
       ? todasContas.filter((c) => c.empresaTipo === "franquia")
       : todasContas;
 
-  const totalSaldoDisponivel = contas.reduce((s, c) => s + (c.saldoDisponivelCentavos ?? 0), 0);
-  const totalGasto7d = contas.reduce((s, c) => s + c.gasto7diasCentavos, 0);
+  // Totais contam cada conta de anúncio da Meta uma vez só (duas contas locais podem apontar pra mesma).
+  const contasUnicas = unicasPorContaDeAnuncio(contas);
+  const totalSaldoDisponivel = contasUnicas.reduce((s, c) => s + (c.saldoDisponivelCentavos ?? 0), 0);
+  const totalGasto7d = contasUnicas.reduce((s, c) => s + c.gasto7diasCentavos, 0);
+  const totalGastoMes = contasUnicas.reduce((s, c) => s + (c.gastoMesCentavos ?? 0), 0);
+  const contasComProblema = contasUnicas.filter((c) => {
+    const status = descreverSituacaoConta(c.statusConta, c.motivoDesativacao);
+    return status.tom === "critico" || status.tom === "atencao";
+  });
   // Contas cujo saldo acaba em até 7 dias (ou já zerou) no ritmo atual de gasto.
-  const contasSaldoAcabando = contas.filter((c) => {
+  const contasSaldoAcabando = contasUnicas.filter((c) => {
     const previsao = calcularPrevisaoSaldo(c.saldoDisponivelCentavos, c.mediaDiariaCentavos);
     return previsao.dias !== null && previsao.dias <= 7;
   }).length;
@@ -51,13 +60,13 @@ export default async function FinanceiroPage({
   // Planejamento (orçamento mensal x reservado pro boost x sobra pra campanhas extras) só faz
   // sentido pra rede de franquia — é onde existe o teto combinado (ex: R$500/unidade).
   const planejamentoPorConta = new Map(contas.map((c) => [c.contaId, calcularPlanejamento(c)]));
-  const totalOrcamentoMensal = contas.reduce((s, c) => s + c.orcamentoMensalCentavos, 0);
-  const totalBoostReservado = contas.reduce(
+  const totalOrcamentoMensal = contasUnicas.reduce((s, c) => s + c.orcamentoMensalCentavos, 0);
+  const totalBoostReservado = contasUnicas.reduce(
     (s, c) => s + (planejamentoPorConta.get(c.contaId)?.boostReservadoMensalCentavos ?? 0),
     0
   );
-  const totalProjecao = contas.reduce((s, c) => s + c.projecaoMensalCentavos, 0);
-  const unidadesEstourando = contas.filter((c) => planejamentoPorConta.get(c.contaId)?.estourou).length;
+  const totalProjecao = contasUnicas.reduce((s, c) => s + c.projecaoMensalCentavos, 0);
+  const unidadesEstourando = contasUnicas.filter((c) => planejamentoPorConta.get(c.contaId)?.estourou).length;
 
   return (
     <>
@@ -87,6 +96,33 @@ export default async function FinanceiroPage({
           </div>
         </div>
 
+        <div className="mt-3 flex justify-end">
+          <AtualizarAgora rotulo="Atualizar todas agora" />
+        </div>
+
+        {contasComProblema.length > 0 && (
+          <div className="cartao-vidro mt-3 border border-danger/30 bg-danger/5 px-4 py-3 text-xs text-neutral-200">
+            <p className="font-semibold text-danger">
+              {contasComProblema.length} conta{contasComProblema.length !== 1 ? "s" : ""} com a situação na Meta
+              pedindo atenção
+            </p>
+            <ul className="mt-1.5 flex flex-col gap-0.5 text-neutral-300">
+              {contasComProblema.map((c) => {
+                const st = descreverSituacaoConta(c.statusConta, c.motivoDesativacao);
+                return (
+                  <li key={c.contaId}>
+                    <a href={`#conta-${c.contaId}`} className="font-medium underline-offset-2 hover:underline">
+                      {c.clienteNome} · {c.contaNome}
+                    </a>
+                    : {st.texto}
+                    {st.detalhe ? ` — ${st.detalhe}` : ""}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+
         <div className="cartao-vidro mt-4 flex items-start gap-2.5 border border-white/10 px-4 py-3 text-xs text-neutral-400">
           <Info size={15} className="mt-0.5 shrink-0 text-neutral-500" />
           <p>
@@ -105,7 +141,7 @@ export default async function FinanceiroPage({
           </div>
         )}
 
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div className="cartao-vidro px-4 py-3.5">
             <p className="text-[11px] font-medium uppercase tracking-wide text-neutral-500">Saldo disponível (total)</p>
             <p className="mt-1 text-lg font-bold text-neutral-100">{reais(totalSaldoDisponivel)}</p>
@@ -113,6 +149,10 @@ export default async function FinanceiroPage({
           <div className="cartao-vidro px-4 py-3.5">
             <p className="text-[11px] font-medium uppercase tracking-wide text-neutral-500">Gasto últimos 7 dias</p>
             <p className="mt-1 text-lg font-bold text-neutral-100">{reais(totalGasto7d)}</p>
+          </div>
+          <div className="cartao-vidro px-4 py-3.5">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-neutral-500">Gasto no mês</p>
+            <p className="mt-1 text-lg font-bold text-neutral-100">{reais(totalGastoMes)}</p>
           </div>
           <div className="cartao-vidro px-4 py-3.5">
             <p className="text-[11px] font-medium uppercase tracking-wide text-neutral-500">Saldo acabando (até 7 dias)</p>
@@ -221,14 +261,18 @@ export default async function FinanceiroPage({
                       {conta.empresaNome} · {conta.clienteNome} · {formatarAtualizacao(conta.atualizadoEm)}
                     </p>
                   </div>
-                  <a
-                    href={conta.linkAdicionarCredito}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-accent-strong"
-                  >
-                    Ver faturamento na Meta
-                  </a>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <SituacaoChip conta={conta} />
+                    <AtualizarAgora contaId={conta.contaId} />
+                    <a
+                      href={conta.linkAdicionarCredito}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-accent-strong"
+                    >
+                      Ver faturamento na Meta
+                    </a>
+                  </div>
                 </div>
 
                 {conta.erro ? (
@@ -252,6 +296,7 @@ export default async function FinanceiroPage({
                         previsao={calcularPrevisaoSaldo(conta.saldoDisponivelCentavos, conta.mediaDiariaCentavos)}
                       />
                     </div>
+                    <MinimoDoMes conta={conta} />
                     <EditarSaldo contaId={conta.contaId} saldoAtualCentavos={conta.saldoDisponivelCentavos} />
                   </div>
                 )}
@@ -261,6 +306,66 @@ export default async function FinanceiroPage({
         )}
       </main>
     </>
+  );
+}
+
+const TOM_SITUACAO: Record<TomSituacao, string> = {
+  ok: "border-ok/30 bg-ok/10 text-ok",
+  atencao: "border-amber-500/30 bg-amber-500/10 text-amber-300",
+  critico: "border-danger/30 bg-danger/10 text-danger",
+  neutro: "border-white/10 bg-white/[0.04] text-neutral-400",
+};
+
+function SituacaoChip({ conta }: { conta: ContaFinanceiro }) {
+  const st = descreverSituacaoConta(conta.statusConta, conta.motivoDesativacao);
+  return (
+    <span
+      title={st.detalhe ?? undefined}
+      className={`rounded-full border px-2.5 py-1 text-[10.5px] font-semibold ${TOM_SITUACAO[st.tom]}`}
+    >
+      {st.texto}
+    </span>
+  );
+}
+
+const formatoDiaMes = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", timeZone: "UTC" });
+
+/** Quanto a unidade recarregou e gastou neste mês frente ao mínimo combinado (o orçamento mensal
+ * da conta). A recarga vem de um ledger diário (a Meta só guarda ~6 dias de atividades), então diz
+ * desde quando está contando. */
+function MinimoDoMes({ conta }: { conta: ContaFinanceiro }) {
+  const minimo = conta.orcamentoMensalCentavos;
+  const recarga = conta.recargaMesCentavos;
+  const pct = recarga !== null && minimo > 0 ? Math.min(100, Math.round((recarga / minimo) * 100)) : null;
+  const desde = conta.recargaContadaDesde ? formatoDiaMes.format(new Date(`${conta.recargaContadaDesde}T00:00:00Z`)) : null;
+  return (
+    <div className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2.5">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 text-[11.5px]">
+        <span className="text-neutral-400">
+          Recarregado no mês:{" "}
+          <span className="font-semibold text-neutral-100">{recarga !== null ? reais(recarga) : "—"}</span>
+          <span className="text-neutral-500"> de {reais(minimo)} (mínimo)</span>
+        </span>
+        <span className="text-neutral-400">
+          Gasto no mês:{" "}
+          <span className="font-semibold text-neutral-100">
+            {conta.gastoMesCentavos !== null ? reais(conta.gastoMesCentavos) : "—"}
+          </span>
+        </span>
+      </div>
+      {pct !== null && (
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
+          <div className={`h-full ${pct >= 100 ? "bg-ok" : "bg-accent"}`} style={{ width: `${pct}%` }} />
+        </div>
+      )}
+      <p className="mt-1.5 text-[10px] text-neutral-500">
+        {conta.recargaErro
+          ? `Não consegui ler as recargas na Meta: ${conta.recargaErro}`
+          : desde
+            ? `Recargas contadas desde ${desde} (a Meta só guarda ~6 dias de histórico; o total soma a cada atualização).`
+            : "Recargas ainda não contadas — clique em Atualizar agora."}
+      </p>
+    </div>
   );
 }
 

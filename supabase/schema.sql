@@ -748,3 +748,12 @@ alter table smartads_meta_conexoes enable row level security;
 
 alter table smartads_contas_meta
   add column if not exists conexao_id uuid references smartads_meta_conexoes(id) on delete set null;
+
+-- Financeiro: situação da conta na Meta + recarga/gasto do mês (mínimo da rede).
+alter table smartads_financeiro_cache
+  add column if not exists status_conta smallint,
+  add column if not exists motivo_desativacao smallint,
+  add column if not exists conta_pre_paga boolean,
+  add column if not exists recarga_mes_centavos integer,
+  add column if not exists gasto_mes_centavos integer,
+  add column if not exists recarga_erro text;
