@@ -1,4 +1,5 @@
 import Cabecalho from "@/components/Cabecalho";
+import { AbasUnidades } from "@/components/AbasRede";
 import { exigirAmbiente } from "@/lib/ambiente";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import PainelDelivery, { type ContaDelivery } from "./PainelDelivery";
@@ -29,6 +30,7 @@ export default async function DeliveryPage() {
     <>
       <Cabecalho ativo="/delivery" />
       <main className="mx-auto max-w-6xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
+        <AbasUnidades />
         <h1 className="font-display text-2xl font-bold">Delivery · {ambiente.nome}</h1>
         <p className="mt-1 text-sm text-neutral-400">
           Deixe o link do iFood e o do WhatsApp salvos em cada conta e crie a campanha de clique no link em poucos

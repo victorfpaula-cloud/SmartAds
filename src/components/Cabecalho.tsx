@@ -11,38 +11,39 @@ const limpar = (destino: string) => `/api/ambiente?limpar=1&ir=${encodeURICompon
 // Visão geral: o que serve pra gerenciar TODAS as contas de uma vez. Entrar numa franquia ou numa
 // conta única (card do Início) abre o menu daquele ambiente.
 const MENU_GERAL: ItemMenu[] = [
-  { href: "/", label: "Início" },
-  { href: limpar("/boost"), label: "Boost", tambem: ["/boost"] },
-  { href: limpar("/financeiro"), label: "Financeiro", tambem: ["/financeiro"] },
-  { href: limpar("/relatorios"), label: "Relatórios", tambem: ["/relatorios", "/relatorio-ads"] },
-  { href: "/contas", label: "Contas e conexões" },
+  { href: "/", label: "Início", icone: "inicio" },
+  { href: limpar("/boost"), label: "Boost", icone: "boost", tambem: ["/boost"] },
+  { href: limpar("/financeiro"), label: "Financeiro", icone: "financeiro", tambem: ["/financeiro"] },
+  { href: limpar("/relatorios"), label: "Relatórios", icone: "relatorios", tambem: ["/relatorios", "/relatorio-ads"] },
+  { href: "/contas", label: "Contas e conexões", icone: "contas" },
 ];
 
 function menuDoAmbiente(a: Ambiente): ItemMenu[] {
   if (a.tipo === "franquia") {
     return [
-      { href: "/estrategias", label: "Visão geral" },
-      { href: "/estrategias/calendario", label: "Calendário" },
-      { href: "/estrategias/campanhas-mae", label: "Campanha oficial", tambem: ["/estrategias/moldes", "/estrategias/planos"] },
-      { href: "/campanhas", label: "Campanhas", tambem: ["/campanhas/conta", "/campanhas/nova"] },
-      { href: "/estrategias/semaforo", label: "Unidades", tambem: ["/estrategias/postagens", "/estrategias/diagnostico"] },
-      { href: "/delivery", label: "Delivery" },
-      { href: "/boost", label: "Boost" },
-      { href: "/financeiro", label: "Financeiro", tambem: ["/financeiro/investimentos"] },
-      { href: "/relatorios", label: "Relatórios", tambem: ["/relatorio-ads"] },
-      { href: "/publicos", label: "Públicos" },
-      { href: "/automacao", label: "Automação" },
+      { href: "/estrategias", label: "Visão geral", icone: "inicio" },
+      {
+        href: "/campanhas",
+        label: "Campanhas",
+        icone: "campanhas",
+        tambem: ["/campanhas/conta", "/campanhas/nova", "/estrategias/campanhas-mae", "/estrategias/moldes", "/estrategias/planos", "/estrategias/calendario"],
+      },
+      { href: "/estrategias/postagens", label: "Radar de posts", icone: "radar" },
+      { href: "/boost", label: "Unidades", icone: "unidades", tambem: ["/delivery", "/publicos", "/estrategias/semaforo", "/estrategias/diagnostico"] },
+      { href: "/financeiro", label: "Financeiro", icone: "financeiro", tambem: ["/financeiro/investimentos"] },
+      { href: "/relatorios", label: "Relatórios", icone: "relatorios", tambem: ["/relatorio-ads"] },
+      { href: "/automacao", label: "Automação", icone: "automacao" },
     ];
   }
   return [
-    { href: `/central/${a.id}`, label: "Visão geral" },
-    { href: "/campanhas", label: "Campanhas", tambem: ["/campanhas/conta", "/campanhas/nova"] },
-    { href: "/delivery", label: "Delivery" },
-    { href: "/boost", label: "Boost" },
-    { href: "/financeiro", label: "Financeiro", tambem: ["/financeiro/investimentos"] },
-    { href: "/relatorios", label: "Relatórios", tambem: ["/relatorio-ads"] },
-    { href: "/publicos", label: "Públicos" },
-    { href: "/automacao", label: "Automação" },
+    { href: `/central/${a.id}`, label: "Visão geral", icone: "inicio" },
+    { href: "/campanhas", label: "Campanhas", icone: "campanhas", tambem: ["/campanhas/conta", "/campanhas/nova"] },
+    { href: "/delivery", label: "Delivery", icone: "delivery" },
+    { href: "/boost", label: "Boost", icone: "boost" },
+    { href: "/financeiro", label: "Financeiro", icone: "financeiro", tambem: ["/financeiro/investimentos"] },
+    { href: "/relatorios", label: "Relatórios", icone: "relatorios", tambem: ["/relatorio-ads"] },
+    { href: "/publicos", label: "Públicos", icone: "publicos" },
+    { href: "/automacao", label: "Automação", icone: "automacao" },
   ];
 }
 

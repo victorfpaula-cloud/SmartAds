@@ -1,4 +1,5 @@
 import Cabecalho from "@/components/Cabecalho";
+import { AbasCampanhas } from "@/components/AbasRede";
 import Link from "next/link";
 import { exigirAmbiente } from "@/lib/ambiente";
 import { obterResumoPorUnidade } from "@/lib/campanhasRede";
@@ -16,6 +17,7 @@ export default async function CampanhasPage() {
     <>
       <Cabecalho ativo="/campanhas" />
       <main className="mx-auto max-w-6xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
+        <AbasCampanhas />
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="font-display text-2xl font-bold">Campanhas · {ambiente.nome}</h1>
