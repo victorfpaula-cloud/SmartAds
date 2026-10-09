@@ -633,7 +633,11 @@ export async function listarPublicosSalvosDaMeta(adAccountId: string): Promise<P
  * igual já previsto pra outros pontos da integração (destination_type de "visita ao perfil", anexo
  * de formulário de Leads).
  */
-export function montarTargeting(publico: Publico, ehReels: boolean = false): Record<string, unknown> {
+export function montarTargeting(
+  publico: Publico,
+  ehReels: boolean = false,
+  posicionamento?: "stories"
+): Record<string, unknown> {
   const geoLocations: Record<string, unknown[]> & { cities?: any[]; regions?: any[]; countries?: string[]; custom_locations?: any[] } = {};
 
   for (const localizacao of publico.localizacoes) {
@@ -645,7 +649,8 @@ export function montarTargeting(publico: Publico, ehReels: boolean = false): Rec
     age_min: publico.idadeMin ?? 18,
     age_max: publico.idadeMax ?? 65,
     publisher_platforms: ["instagram"],
-    instagram_positions: ehReels ? ["stream", "reels"] : ["stream"],
+    instagram_positions:
+      posicionamento === "stories" ? ["story"] : ehReels ? ["stream", "reels"] : ["stream"],
     // Passou a ser obrigatório sinalizar explicitamente se o público Advantage (expansão
     // automática de público pela própria Meta) está ligado — "0" porque o SmartAds sempre
     // trabalha com o público definido manualmente na tela (localizações + interesses), sem

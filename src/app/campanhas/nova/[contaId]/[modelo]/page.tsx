@@ -9,8 +9,10 @@ export const dynamic = "force-dynamic";
 
 export default async function FormularioCampanhaPage({
   params,
+  searchParams,
 }: {
   params: { contaId: string; modelo: string };
+  searchParams: { canal?: string };
 }) {
   const modelo = MODELOS_CAMPANHA[params.modelo as TipoModeloCampanha];
   if (!modelo) notFound();
@@ -24,6 +26,14 @@ export default async function FormularioCampanhaPage({
 
   if (!conta) notFound();
 
+  const canal: "ifood" | "whatsapp" | undefined =
+    searchParams.canal === "ifood" || searchParams.canal === "whatsapp" ? searchParams.canal : undefined;
+  const linkSalvo = canal === "ifood" ? (conta as any).link_ifood : canal === "whatsapp" ? (conta as any).link_whatsapp : null;
+  const delivery =
+    canal && modelo.tipo === "cliques_link"
+      ? { canal, link: (linkSalvo as string | null) ?? "", cta: canal === "ifood" ? "ORDER_NOW" : "CONTACT_US" }
+      : undefined;
+
   return (
     <>
       <Cabecalho ativo="/campanhas" />
@@ -31,7 +41,7 @@ export default async function FormularioCampanhaPage({
         <p className="text-xs font-medium text-neutral-500">
           {(conta as any).smartads_clientes?.nome} · {conta.nome_exibicao || conta.meta_ad_account_nome}
         </p>
-        <h1 className="mt-1 font-display text-2xl font-bold">{modelo.nomeExibicao}</h1>
+        <h1 className="mt-1 font-display text-2xl font-bold">{delivery ? `Delivery · ${canal === "ifood" ? "iFood" : "WhatsApp"}` : modelo.nomeExibicao}</h1>
 
         <FormularioCampanha
           contaId={params.contaId}
@@ -39,6 +49,7 @@ export default async function FormularioCampanhaPage({
           clienteNome={(conta as any).smartads_clientes?.nome ?? ""}
           instagramBusinessId={conta.instagram_business_id}
           modelo={modelo}
+          delivery={delivery}
         />
       </main>
     </>
