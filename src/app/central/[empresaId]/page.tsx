@@ -10,8 +10,7 @@ export const dynamic = "force-dynamic";
 
 /** Central de uma empresa — o mesmo ambiente da Central da rede, só que com as opções que fazem
  * sentido pra empresa individual (sem Campanhas-Mãe, moldes, semáforo e radar, que comparam
- * unidades de uma rede). Tudo aqui dentro é só dessa empresa; as abas do topo seguem sendo de todas
- * as contas. Franquia continua na Central da rede (/estrategias). */
+ * unidades de uma rede). Tudo aqui dentro é só dessa empresa (o menu do topo é o do ambiente dela). Franquia continua na Central da rede (/estrategias). */
 export default async function CentralDaEmpresaPage({ params }: { params: Promise<{ empresaId: string }> }) {
   const { empresaId } = await params;
   const supabase = criarClienteAdmin();

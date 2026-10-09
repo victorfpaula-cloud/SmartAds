@@ -1,6 +1,7 @@
 import Cabecalho from "@/components/Cabecalho";
 import Link from "next/link";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
+import { empresaDaPagina } from "@/lib/ambiente";
 import { carregarBoostDaRede } from "@/lib/boostRedeServidor";
 import PainelBoost, { type UnidadeBoost } from "./PainelBoost";
 
@@ -10,7 +11,8 @@ export default async function BoostPage({ searchParams }: { searchParams: { empr
   const supabase = criarClienteAdmin();
   const { data: empresas } = await supabase.from("smartads_empresas").select("id, nome, tipo").order("nome");
   const lista = (empresas ?? []).sort((a, b) => (a.tipo === b.tipo ? a.nome.localeCompare(b.nome) : a.tipo === "franquia" ? -1 : 1));
-  const empresa = lista.find((e) => e.id === searchParams.empresa) ?? lista[0];
+  const empresaAlvo = await empresaDaPagina(searchParams.empresa);
+  const empresa = lista.find((e) => e.id === empresaAlvo) ?? lista[0];
 
   let unidades: UnidadeBoost[] = [];
   let rede = null as Awaited<ReturnType<typeof carregarBoostDaRede>> | null;
@@ -40,7 +42,7 @@ export default async function BoostPage({ searchParams }: { searchParams: { empr
           O padrão do boost da rede: o que entrega, quanto gasta e quando muda (datas especiais).
         </p>
 
-        {lista.length > 1 && (
+        {lista.length > 1 && !empresaAlvo && (
           <div className="mt-4 flex flex-wrap gap-2">
             {lista.map((e) => (
               <Link

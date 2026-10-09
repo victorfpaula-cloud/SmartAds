@@ -1,159 +1,110 @@
 import Link from "next/link";
-import {
-  House,
-  Buildings,
-  Megaphone,
-  Wallet,
-  Lightning,
-  ChartLineUp,
-  UsersThree,
-  Target,
-  Robot,
-  SignOut,
-  ArrowLeft,
-} from "@phosphor-icons/react/dist/ssr";
+import { SignOut, ArrowLeft, Buildings, Storefront } from "@phosphor-icons/react/dist/ssr";
+import { lerAmbiente, type Ambiente } from "@/lib/ambiente";
+import MenuNavegacao, { type ItemMenu } from "@/components/MenuNavegacao";
 
-// Tudo que se usa pra gerenciar fica no menu: Início, Campanhas, Boost, Rede (planejamento e
-// acompanhamento da franquia), Financeiro, Relatórios, Contas, Públicos e Automação. No desktop só o
-// item aberto mostra o nome em telas médias (os outros ficam só com o ícone, o nome aparece ao
-// passar o mouse) e todos mostram nome em telas largas; no celular a barra de baixo rola de lado.
-const LINKS = [
-  { href: "/", label: "Início", Icone: House },
-  { href: "/campanhas", label: "Campanhas", Icone: Megaphone },
-  { href: "/boost", label: "Boost", Icone: Lightning },
-  { href: "/estrategias", label: "Rede", Icone: UsersThree },
-  { href: "/financeiro", label: "Financeiro", Icone: Wallet },
-  { href: "/relatorios", label: "Relatórios", Icone: ChartLineUp },
-  { href: "/contas", label: "Contas", Icone: Buildings },
-  { href: "/publicos", label: "Públicos", Icone: Target },
-  { href: "/automacao", label: "Automação", Icone: Robot },
+// Páginas da visão geral (fora de qualquer ambiente): o menu é só o de gerenciar as contas.
+const PAGINAS_GERAIS = ["/", "/contas", "/login"];
+
+const limpar = (destino: string) => `/api/ambiente?limpar=1&ir=${encodeURIComponent(destino)}`;
+
+// Visão geral: o que serve pra gerenciar TODAS as contas de uma vez. Entrar numa franquia ou numa
+// conta única (card do Início) abre o menu daquele ambiente.
+const MENU_GERAL: ItemMenu[] = [
+  { href: "/", label: "Início" },
+  { href: "/contas", label: "Contas e conexões" },
+  { href: limpar("/financeiro"), label: "Financeiro de todas", tambem: ["/financeiro"] },
+  { href: limpar("/relatorios"), label: "Relatórios de todas", tambem: ["/relatorios", "/relatorio-ads"] },
 ];
 
-/** Navegação principal — vira barra de abas fixa embaixo no celular (padrão de app, mais fácil de
- * alcançar com o polegar) e barra no topo no desktop. Um só componente, dois layouts via classes
- * responsivas, pra nunca desalinhar qual aba está ativa entre as duas versões. */
-export default function Cabecalho({
+function menuDoAmbiente(a: Ambiente): ItemMenu[] {
+  if (a.tipo === "franquia") {
+    return [
+      { href: "/estrategias", label: "Visão geral da rede" },
+      { href: "/estrategias/calendario", label: "Calendário" },
+      { href: "/campanhas", label: "Campanhas", tambem: ["/campanhas/conta", "/campanhas/nova"] },
+      { href: "/boost", label: "Boost" },
+      { href: "/financeiro", label: "Financeiro" },
+      { href: "/financeiro/investimentos", label: "Investimento" },
+      { href: "/relatorios", label: "Relatórios", tambem: ["/relatorio-ads"] },
+      { href: "/estrategias/postagens", label: "Radar de posts" },
+      { href: "/estrategias/semaforo", label: "Semáforo" },
+      { href: "/estrategias/moldes", label: "Moldes" },
+      { href: "/estrategias/campanhas-mae", label: "Campanha oficial" },
+      { href: "/publicos", label: "Públicos" },
+      { href: "/automacao", label: "Automação" },
+    ];
+  }
+  return [
+    { href: `/central/${a.id}`, label: "Visão geral" },
+    { href: "/campanhas", label: "Campanhas", tambem: ["/campanhas/conta", "/campanhas/nova"] },
+    { href: "/boost", label: "Boost" },
+    { href: "/financeiro", label: "Financeiro" },
+    { href: "/financeiro/investimentos", label: "Investimento" },
+    { href: "/relatorios", label: "Relatórios", tambem: ["/relatorio-ads"] },
+    { href: "/publicos", label: "Públicos" },
+    { href: "/automacao", label: "Automação" },
+  ];
+}
+
+/** Menu do topo. Dois modos, sem misturar: a visão geral (gerenciar as contas) e o ambiente de uma
+ * franquia ou de uma conta única, com só os botões que fazem sentido pra ela. Os parâmetros
+ * `ativo`, `rede`, `geralHref` e `empresa` ficam só por compatibilidade com as telas antigas — quem
+ * decide o modo agora é o ambiente aberto (cookie) e a página em que a pessoa está. */
+export default async function Cabecalho({
   ativo,
-  rede = false,
-  geralHref = "/campanhas",
-  empresa,
 }: {
   ativo: string;
-  /** Central de uma empresa (ex.: uma empresa individual): mesma faixa da rede, com o nome dela. */
-  empresa?: { id: string; nome: string };
-  /** Página da Central da rede (só unidades de franquia). As abas do topo são a visão GERAL de todas
-   * as contas; dentro da rede nenhuma delas acende e uma faixa avisa onde a pessoa está. Páginas de
-   * /estrategias já contam como rede sem precisar passar isso. */
   rede?: boolean;
-  /** Pra onde vai o "Ver todas as contas" da faixa da rede: a versão geral da mesma tela. */
   geralHref?: string;
+  empresa?: { id: string; nome: string };
 }) {
-  const modoRede = rede || ativo === "/estrategias" || Boolean(empresa);
-  // Dentro da Central da rede acende "Rede"; a Central de uma empresa individual não tem aba própria.
-  const ativoNaBarra = ativo.startsWith("/estrategias")
-    ? "/estrategias"
-    : modoRede
-      ? ""
-      : ativo === "/relatorio-ads"
-        ? "/relatorios" // Relatório de uma conta é uma aba dentro de Relatórios
-        : ativo;
+  const ambiente = PAGINAS_GERAIS.includes(ativo) ? null : await lerAmbiente();
+  const itens = ambiente ? menuDoAmbiente(ambiente) : MENU_GERAL;
+  const Icone = ambiente?.tipo === "franquia" ? Buildings : Storefront;
 
   return (
-    <>
-      {/* `env(safe-area-inset-top)` evita colidir com a barra de status do iPad/iPhone quando o
-          app roda "Adicionado à Tela de Início" (modo standalone, sem a barra do Safari que antes
-          empurrava o conteúdo pra baixo) — mesmo problema já corrigido embaixo, agora em cima. */}
-      <header
-        className="barra-vidro sticky top-0 z-20 border-b"
-        style={{ paddingTop: "env(safe-area-inset-top)" }}
-      >
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
-          <div className="flex items-center gap-5 lg:gap-8">
+    <header
+      className="barra-vidro sticky top-0 z-20 border-b"
+      // O iPad/iPhone em tela cheia tem uma barra de status em cima: o respiro extra evita o menu
+      // ficar colado nela.
+      style={{ paddingTop: "calc(env(safe-area-inset-top) + 14px)" }}
+    >
+      <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 pb-3.5 sm:px-6">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
             <span className="font-display text-[15px] font-bold tracking-tight">SmartAds</span>
-            <nav className="hidden items-center gap-1 sm:flex">
-              {LINKS.map(({ href, label, Icone }) => (
+            {ambiente && (
+              <>
                 <Link
-                  key={href}
-                  href={href}
-                  title={label}
-                  className={
-                    ativoNaBarra === href
-                      ? "pilula-ativa flex items-center gap-1.5 rounded-lg px-3 py-2 text-[13px] font-semibold text-neutral-100"
-                      : "flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-[13px] font-medium text-neutral-400 hover:text-neutral-200"
-                  }
+                  href={limpar("/")}
+                  className="flex shrink-0 items-center gap-1 text-xs font-medium text-neutral-400 hover:text-neutral-200"
                 >
-                  <Icone size={16} weight={ativoNaBarra === href ? "fill" : "regular"} />
-                  <span className={ativoNaBarra === href ? "" : "hidden xl:inline"}>{label}</span>
+                  <ArrowLeft size={13} /> Início
                 </Link>
-              ))}
-            </nav>
+                <span className="flex min-w-0 items-center gap-1.5 rounded-full border border-accent/30 bg-accent/10 px-3 py-1 text-xs font-semibold text-accent-strong">
+                  <Icone size={13} weight="fill" className="shrink-0" />
+                  <span className="truncate">{ambiente.nome}</span>
+                  <span className="hidden font-normal text-neutral-400 sm:inline">
+                    · {ambiente.tipo === "franquia" ? "Franquia" : "Conta única"}
+                  </span>
+                </span>
+              </>
+            )}
           </div>
-
           <form action="/api/auth/logout" method="POST">
             <button
               type="submit"
               aria-label="Sair"
-              className="botao-icone-vidro h-9 w-9 shrink-0 rounded-lg text-neutral-400 sm:h-auto sm:w-auto sm:gap-1.5 sm:rounded-lg sm:px-3 sm:py-2 sm:text-xs sm:font-medium"
+              className="botao-icone-vidro h-9 shrink-0 gap-1.5 rounded-lg px-3 text-xs font-medium text-neutral-400"
             >
               <SignOut size={16} />
-              <span className="hidden sm:inline">Sair</span>
+              Sair
             </button>
           </form>
         </div>
-
-        {modoRede && (
-          <div className="border-t border-accent/25 bg-accent/10">
-            <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-2 sm:px-6">
-              <p className="flex items-center gap-2 text-xs font-semibold text-accent-strong">
-                <Buildings size={14} weight="fill" />
-                {empresa ? `Central · ${empresa.nome}` : "Central da rede"}
-                <span className="hidden font-normal text-neutral-400 sm:inline">
-                  {empresa
-                    ? "— só as contas desta empresa. As abas acima são de todas as contas."
-                    : "— só as unidades de franquia. As abas acima são de todas as contas."}
-                </span>
-              </p>
-              <div className="flex items-center gap-4 text-xs font-medium">
-                <Link
-                  href={empresa ? `/central/${empresa.id}` : "/estrategias"}
-                  className="flex items-center gap-1 text-neutral-300 hover:text-neutral-100"
-                >
-                  <ArrowLeft size={12} /> {empresa ? "Central da empresa" : "Hub da rede"}
-                </Link>
-                <Link href={geralHref} className="text-neutral-400 hover:text-neutral-200">
-                  Ver todas as contas →
-                </Link>
-              </div>
-            </div>
-          </div>
-        )}
-      </header>
-
-      {/* Barra de abas no celular — fixa embaixo, mesmo tratamento glass do resto do app. Some a
-          partir do breakpoint sm, onde a navegação do topo já dá conta. `pb-[env(safe-area-inset-
-          bottom)]` evita ficar por baixo da barra de gestos do iPhone. a barra rola de lado quando
-          os itens não cabem, cada um com área de toque de verdade. */}
-      <nav
-        className="barra-vidro fixed inset-x-0 bottom-0 z-20 border-t sm:hidden"
-        style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 6px)" }}
-      >
-        <div className="flex overflow-x-auto [scrollbar-width:none]">
-          {LINKS.map(({ href, label, Icone }) => (
-            <Link
-              key={href}
-              href={href}
-              className={
-                ativoNaBarra === href
-                  ? "flex min-w-[4.5rem] shrink-0 flex-col items-center gap-1 px-2 py-3 text-accent-strong"
-                  : "flex min-w-[4.5rem] shrink-0 flex-col items-center gap-1 px-2 py-3 text-neutral-500"
-              }
-            >
-              <Icone size={22} weight={ativoNaBarra === href ? "fill" : "regular"} />
-              <span className="text-center text-[11px] font-medium leading-tight">{label}</span>
-            </Link>
-          ))}
-        </div>
-      </nav>
-    </>
+        <MenuNavegacao itens={itens} />
+      </div>
+    </header>
   );
 }

@@ -53,7 +53,7 @@ export async function obterEmpresasParaInicio(): Promise<EmpresaInicio[]> {
         return dias !== null && dias <= 7;
       }).length,
       contasSemDados: daEmpresa.filter((u) => u.campanhasAtivas === null).length,
-      href: empresa.tipo === "franquia" ? "/estrategias" : `/central/${empresa.id}`,
+      href: `/api/ambiente?empresa=${empresa.id}`,
     };
   });
 }

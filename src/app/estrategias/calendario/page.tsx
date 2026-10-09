@@ -1,6 +1,7 @@
 import Cabecalho from "@/components/Cabecalho";
 import Link from "next/link";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
+import { empresaDaPagina } from "@/lib/ambiente";
 import { carregarCalendario, datasSugeridas } from "@/lib/calendarioRede";
 import { diaEmSaoPaulo } from "@/lib/tempoSaoPaulo";
 import PainelCalendario from "./PainelCalendario";
@@ -10,7 +11,8 @@ export const dynamic = "force-dynamic";
 export default async function CalendarioPage({ searchParams }: { searchParams: { empresa?: string } }) {
   const { data: empresas } = await criarClienteAdmin().from("smartads_empresas").select("id, nome, tipo").order("nome");
   const lista = (empresas ?? []).sort((a, b) => (a.tipo === b.tipo ? a.nome.localeCompare(b.nome) : a.tipo === "franquia" ? -1 : 1));
-  const empresa = lista.find((e) => e.id === searchParams.empresa) ?? lista[0];
+  const alvo = await empresaDaPagina(searchParams.empresa);
+  const empresa = lista.find((e) => e.id === alvo) ?? lista[0];
   const ano = Number(diaEmSaoPaulo(new Date().toISOString()).slice(0, 4));
 
   return (
@@ -26,7 +28,7 @@ export default async function CalendarioPage({ searchParams }: { searchParams: {
           uma data importante está chegando sem campanha.
         </p>
 
-        {lista.length > 1 && (
+        {lista.length > 1 && !alvo && (
           <div className="mt-4 flex flex-wrap gap-2">
             {lista.map((e) => (
               <Link

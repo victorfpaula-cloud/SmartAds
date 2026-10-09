@@ -1,5 +1,6 @@
 import Cabecalho from "@/components/Cabecalho";
 import Link from "next/link";
+import { empresaDaPagina } from "@/lib/ambiente";
 import { coletarFinanceiro, calcularPlanejamento, unicasPorContaDeAnuncio, type ContaFinanceiro } from "@/lib/financeiro/coletarFinanceiro";
 import { Wallet, Info, ChartLine } from "@phosphor-icons/react/dist/ssr";
 import { calcularPrevisaoSaldo, type NivelPrevisao } from "@/lib/financeiro/previsaoSaldo";
@@ -33,7 +34,7 @@ export default async function FinanceiroPage({
 }) {
   const apenasRede = searchParams.rede === FILTRO_REDE;
   const todasContas = await coletarFinanceiro();
-  const empresaId = searchParams.empresa;
+  const empresaId = await empresaDaPagina(searchParams.empresa);
   const empresaFiltro = empresaId ? todasContas.find((c) => c.empresaId === empresaId) : undefined;
   const contas = empresaFiltro
     ? todasContas.filter((c) => c.empresaId === empresaId)
