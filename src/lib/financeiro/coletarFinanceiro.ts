@@ -21,9 +21,27 @@ export interface ContaFinanceiro {
   linkAdicionarCredito: string;
   atualizadoEm: string | null;
   erro: string | null;
+  statusConta: number | null;
+  motivoDesativacao: number | null;
+  contaPrePaga: boolean | null;
+  gastoMesCentavos: number | null;
+  recargaMesCentavos: number | null;
+  recargaContadaDesde: string | null;
+  recargaErro: string | null;
   orcamentoMensalCentavos: number;
   boostAutomaticoAtivo: boolean;
   boostOrcamentoDiarioCentavos: number | null;
+}
+
+/** Duas contas locais podem apontar pra MESMA conta de anúncio na Meta (ex.: a conta geral da rede
+ * cadastrada em dois clientes) — nos totais ela só pode contar uma vez. */
+export function unicasPorContaDeAnuncio(contas: ContaFinanceiro[]): ContaFinanceiro[] {
+  const vistas = new Set<string>();
+  return contas.filter((c) => {
+    if (vistas.has(c.metaAdAccountId)) return false;
+    vistas.add(c.metaAdAccountId);
+    return true;
+  });
 }
 
 export interface PlanejamentoConta {
@@ -76,7 +94,7 @@ export async function coletarFinanceiro(): Promise<ContaFinanceiro[]> {
     supabase
       .from("smartads_financeiro_cache")
       .select(
-        "conta_id, saldo_disponivel_centavos, fatura_em_aberto_centavos, fonte_pagamento_texto, gasto_7d_centavos, media_diaria_centavos, projecao_mensal_centavos, erro, calculado_em"
+        "conta_id, saldo_disponivel_centavos, fatura_em_aberto_centavos, fonte_pagamento_texto, gasto_7d_centavos, media_diaria_centavos, projecao_mensal_centavos, erro, calculado_em, status_conta, motivo_desativacao, conta_pre_paga, gasto_mes_centavos, recarga_mes_centavos, recarga_contada_desde, recarga_erro"
       ),
   ]);
 
@@ -141,6 +159,13 @@ export async function coletarFinanceiro(): Promise<ContaFinanceiro[]> {
           projecao_mensal_centavos: resultado.projecaoMensalCentavos,
           erro: resultado.erro,
           calculado_em: resultado.calculadoEm,
+          status_conta: resultado.statusConta,
+          motivo_desativacao: resultado.motivoDesativacao,
+          conta_pre_paga: resultado.contaPrePaga,
+          gasto_mes_centavos: resultado.gastoMesCentavos,
+          recarga_mes_centavos: resultado.recargaMesCentavos,
+          recarga_contada_desde: resultado.recargaContadaDesde,
+          recarga_erro: resultado.recargaErro,
         };
       }
 
@@ -168,6 +193,13 @@ export async function coletarFinanceiro(): Promise<ContaFinanceiro[]> {
         linkAdicionarCredito: `https://www.facebook.com/ads/manager/account_settings/account_billing/?act=${idNumerico}`,
         atualizadoEm: linhaCache.calculado_em ?? null,
         erro: linhaCache.erro ?? null,
+        statusConta: linhaCache.status_conta ?? null,
+        motivoDesativacao: linhaCache.motivo_desativacao ?? null,
+        contaPrePaga: linhaCache.conta_pre_paga ?? null,
+        gastoMesCentavos: linhaCache.gasto_mes_centavos ?? null,
+        recargaMesCentavos: linhaCache.recarga_mes_centavos ?? null,
+        recargaContadaDesde: linhaCache.recarga_contada_desde ?? null,
+        recargaErro: linhaCache.recarga_erro ?? null,
         orcamentoMensalCentavos: conta.orcamento_mensal_centavos ?? 50000,
         boostAutomaticoAtivo: Boolean(conta.boost_automatico_ativo),
         boostOrcamentoDiarioCentavos: conta.boost_automatico_orcamento_centavos ?? null,
