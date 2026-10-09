@@ -2,7 +2,6 @@ import Cabecalho from "@/components/Cabecalho";
 import Link from "next/link";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { empresaDaPagina } from "@/lib/ambiente";
-import { carregarBoostDaRede } from "@/lib/boostRedeServidor";
 import PainelBoost, { type UnidadeBoost } from "./PainelBoost";
 
 export const dynamic = "force-dynamic";
@@ -15,13 +14,11 @@ export default async function BoostPage({ searchParams }: { searchParams: { empr
   const empresa = lista.find((e) => e.id === empresaAlvo) ?? lista[0];
 
   let unidades: UnidadeBoost[] = [];
-  let rede = null as Awaited<ReturnType<typeof carregarBoostDaRede>> | null;
   if (empresa) {
-    rede = await carregarBoostDaRede(empresa.id);
     const { data: clientes } = await supabase
       .from("smartads_clientes")
       .select(
-        "id, nome, smartads_contas_meta(id, nome_exibicao, meta_ad_account_nome, meta_ad_account_id, ativo, boost_automatico_ativo, boost_automatico_publico_id, boost_automatico_orcamento_centavos, boost_automatico_duracao_dias)"
+        "id, nome, smartads_contas_meta(id, nome_exibicao, meta_ad_account_nome, meta_ad_account_id, ativo, boost_automatico_ativo, boost_automatico_publico_id, boost_automatico_orcamento_centavos, boost_automatico_duracao_dias, boost_tipo_entrega, boost_posts_por_dia)"
       )
       .eq("empresa_id", empresa.id)
       .eq("ativo", true)
@@ -39,7 +36,7 @@ export default async function BoostPage({ searchParams }: { searchParams: { empr
       <main className="mx-auto max-w-6xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
         <h1 className="font-display text-2xl font-bold">Boost</h1>
         <p className="mt-1 text-sm text-neutral-400">
-          O padrão do boost da rede: o que entrega, quanto gasta e quando muda (datas especiais).
+          Cada conta tem o seu próprio boost. Clique em Configurar na linha da conta para definir o que entrega, o público, quanto gasta e as datas especiais.
         </p>
 
         {lista.length > 1 && !empresaAlvo && (
@@ -60,10 +57,10 @@ export default async function BoostPage({ searchParams }: { searchParams: { empr
           </div>
         )}
 
-        {!empresa || !rede ? (
+        {!empresa ? (
           <p className="cartao-vidro mt-6 px-5 py-6 text-sm text-neutral-400">Nenhuma rede cadastrada ainda.</p>
         ) : (
-          <PainelBoost key={empresa.id} empresaId={empresa.id} empresaNome={empresa.nome} configInicial={rede.config} regrasIniciais={rede.regras} unidades={unidades} />
+          <PainelBoost key={empresa.id} unidades={unidades} />
         )}
       </main>
     </>

@@ -3,13 +3,10 @@ import { listarPostsInstagram } from "@/lib/meta/api";
 import { criarCampanhaCompleta } from "@/lib/meta/criarCampanhaCompleta";
 import type { Publico } from "@/lib/meta/tipos";
 import { mapearEmLotes } from "@/lib/lotes";
+import { configDaConta, regraDeLinha } from "@/lib/boostRedeServidor";
 import {
-  CONFIG_BOOST_PADRAO,
   configEfetiva,
   modelosDaEntrega,
-  type ConfigBoostRede,
-  type RegraBoostRede,
-  type TipoEntregaBoost,
 } from "@/lib/boostRede";
 
 const FUSO_HORARIO = "America/Sao_Paulo";
@@ -55,48 +52,30 @@ export async function avaliarBoostAutomatico(): Promise<{
   const { data: contas } = await supabase
     .from("smartads_contas_meta")
     .select(
-      "id, instagram_business_id, boost_automatico_publico_id, boost_automatico_orcamento_centavos, boost_automatico_duracao_dias, smartads_clientes(empresa_id)"
+      "id, instagram_business_id, boost_automatico_publico_id, boost_automatico_orcamento_centavos, boost_automatico_duracao_dias, boost_tipo_entrega, boost_posts_por_dia"
     )
     .eq("ativo", true)
     .eq("boost_automatico_ativo", true);
 
-  // Padrão da rede (por empresa) + regras por data, carregados uma vez só pro cron inteiro.
-  const [{ data: configsRede }, { data: regrasRede }] = await Promise.all([
-    supabase.from("smartads_boost_rede_config").select("*"),
-    supabase.from("smartads_boost_rede_regras").select("*").order("criado_em", { ascending: true }),
-  ]);
+  // Datas especiais por conta, carregadas uma vez só pro cron inteiro.
+  const { data: regrasBrutas } = await supabase
+    .from("smartads_boost_rede_regras")
+    .select("*")
+    .not("conta_id", "is", null)
+    .order("criado_em", { ascending: true });
   const hojeSP = dataEmSaoPaulo(new Date().toISOString());
-  const configDaEmpresa = (empresaId: string | null) => {
-    const bruta = (configsRede ?? []).find((c) => c.empresa_id === empresaId);
-    const config: ConfigBoostRede = bruta
-      ? {
-          tipoEntrega: bruta.tipo_entrega as TipoEntregaBoost,
-          orcamentoDiarioCentavos: bruta.orcamento_diario_centavos,
-          duracaoDias: bruta.duracao_dias,
-          boostsPorDia: bruta.boosts_por_dia,
-        }
-      : CONFIG_BOOST_PADRAO;
-    const regras: RegraBoostRede[] = (regrasRede ?? [])
-      .filter((r) => r.empresa_id === empresaId)
-      .map((r) => ({
-        id: r.id,
-        nome: r.nome,
-        dataInicio: r.data_inicio,
-        dataFim: r.data_fim,
-        tipoEntrega: r.tipo_entrega as TipoEntregaBoost,
-        boostsPorDia: r.boosts_por_dia,
-      }));
-    return configEfetiva(config, regras, hojeSP).config;
-  };
+  const configDaContaHoje = (conta: any) =>
+    configEfetiva(
+      configDaConta(conta),
+      (regrasBrutas ?? []).filter((r) => r.conta_id === conta.id).map(regraDeLinha),
+      hojeSP
+    ).config;
 
   const criadasPorConta = await mapearEmLotes(contas ?? [], async (conta): Promise<boolean> => {
     try {
-      const clienteRel = (conta as any).smartads_clientes;
-      const empresaId: string | null = (Array.isArray(clienteRel) ? clienteRel[0] : clienteRel)?.empresa_id ?? null;
-      const rede = configDaEmpresa(empresaId);
-      // O padrão da rede, quando define orçamento/duração, vale pra todas as unidades.
-      const orcamentoDiarioCentavos = rede.orcamentoDiarioCentavos ?? conta.boost_automatico_orcamento_centavos;
-      const duracaoDias = rede.duracaoDias ?? conta.boost_automatico_duracao_dias ?? 3;
+      const rede = configDaContaHoje(conta);
+      const orcamentoDiarioCentavos = rede.orcamentoDiarioCentavos;
+      const duracaoDias = rede.duracaoDias ?? 3;
 
       if (!conta.instagram_business_id || !conta.boost_automatico_publico_id || !orcamentoDiarioCentavos) {
         return false; // Ligado mas sem configurar público/orçamento ainda — nada a fazer.
