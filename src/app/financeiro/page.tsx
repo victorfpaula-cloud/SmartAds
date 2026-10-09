@@ -96,7 +96,13 @@ export default async function FinanceiroPage({
           </div>
         </div>
 
-        <div className="mt-3 flex justify-end">
+        <div className="mt-3 flex flex-wrap items-center justify-end gap-3">
+          <Link
+            href="/financeiro/investimentos"
+            className="rounded-lg bg-accent px-3.5 py-2 text-xs font-semibold text-white hover:bg-accent-strong"
+          >
+            Investimento por unidade
+          </Link>
           <AtualizarAgora rotulo="Atualizar todas agora" />
         </div>
 

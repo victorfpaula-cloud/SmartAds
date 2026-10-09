@@ -1242,6 +1242,46 @@ export async function somarMovimentacaoFinanceiraDesde(
   return { totalFundingCentavos, totalChargeCentavos };
 }
 
+export interface RecargaMeta {
+  /** Chave estável do evento (horário + valor) pra nunca gravar a mesma recarga duas vezes. */
+  chave: string;
+  quando: string; // ISO
+  valorCentavos: number;
+}
+
+/** Recargas (funding_event_successful) da conta desde `desde`, uma a uma — a Meta só guarda ~6 dias
+ * de atividades, então quem chama grava o que vier no próprio banco (ver smartads_investimentos). */
+export async function listarRecargasDesde(adAccountId: string, desde: Date): Promise<RecargaMeta[]> {
+  const recargas: RecargaMeta[] = [];
+  let after: string | undefined;
+  for (let pagina = 0; pagina < 10; pagina++) {
+    const dados = await chamar<{
+      data: Array<{ event_type: string; event_time: string; extra_data?: string }>;
+      paging?: { cursors?: { after?: string }; next?: string };
+    }>(`${adAccountId}/activities`, { query: { limit: 100, fields: "event_type,event_time,extra_data", after } });
+
+    let passouDoLimite = false;
+    for (const item of dados.data) {
+      if (new Date(item.event_time).getTime() <= desde.getTime()) {
+        passouDoLimite = true;
+        break;
+      }
+      if (item.event_type !== "funding_event_successful" || !item.extra_data) continue;
+      try {
+        const extra = JSON.parse(item.extra_data);
+        if (typeof extra.amount === "number" && extra.amount > 0) {
+          recargas.push({ chave: `${item.event_time}|${extra.amount}`, quando: item.event_time, valorCentavos: extra.amount });
+        }
+      } catch {
+        /* extra_data ilegível — ignora o evento */
+      }
+    }
+    if (passouDoLimite || !dados.paging?.next || !dados.paging.cursors?.after) break;
+    after = dados.paging.cursors.after;
+  }
+  return recargas;
+}
+
 /** Novo saldo disponível = saldo anterior + o que entrou - o que foi cobrado, desde a última vez
  * que isso foi calculado. `null` quando ainda não tem um saldo anterior (conta nova, ninguém
  * digitou o valor inicial ainda) — quem chama decide o que fazer nesse caso (não dá pra "estimar"
