@@ -28,6 +28,8 @@ export interface ParametrosCriarCampanha {
   nomeCampanha: string;
   publico: Publico;
   publicoId?: string;
+  /** Delivery: "stories" restringe a entrega só aos Stories do Instagram. */
+  posicionamento?: "stories";
   /** Preenchido quando essa campanha nasce de uma etapa de um Plano de Execução — ao concluir com
    * sucesso, marca a etapa como 'concluida' no checklist e guarda o id da campanha criada, sem
    * precisar de um passo manual extra pra "vincular" depois. */
@@ -153,7 +155,7 @@ async function criarCampanhaCompletaComConexao(corpo: ParametrosCriarCampanha): 
     if (corpo.criativo.usarPostExistente && corpo.criativo.postSelecionadoId) {
       postExistente = await obterPostInstagram(corpo.criativo.postSelecionadoId);
     }
-    const targeting = montarTargeting(corpo.publico, postExistente?.media_type === "VIDEO");
+    const targeting = montarTargeting(corpo.publico, postExistente?.media_type === "VIDEO", corpo.posicionamento);
 
     const campanha = await criarCampanha(adAccountId, {
       name: nomeCampanhaFinal,

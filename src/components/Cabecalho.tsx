@@ -26,6 +26,7 @@ function menuDoAmbiente(a: Ambiente): ItemMenu[] {
       { href: "/estrategias/campanhas-mae", label: "Campanha oficial", tambem: ["/estrategias/moldes", "/estrategias/planos"] },
       { href: "/campanhas", label: "Campanhas", tambem: ["/campanhas/conta", "/campanhas/nova"] },
       { href: "/estrategias/semaforo", label: "Unidades", tambem: ["/estrategias/postagens", "/estrategias/diagnostico"] },
+      { href: "/delivery", label: "Delivery" },
       { href: "/boost", label: "Boost" },
       { href: "/financeiro", label: "Financeiro", tambem: ["/financeiro/investimentos"] },
       { href: "/relatorios", label: "Relatórios", tambem: ["/relatorio-ads"] },
@@ -36,6 +37,7 @@ function menuDoAmbiente(a: Ambiente): ItemMenu[] {
   return [
     { href: `/central/${a.id}`, label: "Visão geral" },
     { href: "/campanhas", label: "Campanhas", tambem: ["/campanhas/conta", "/campanhas/nova"] },
+    { href: "/delivery", label: "Delivery" },
     { href: "/boost", label: "Boost" },
     { href: "/financeiro", label: "Financeiro", tambem: ["/financeiro/investimentos"] },
     { href: "/relatorios", label: "Relatórios", tambem: ["/relatorio-ads"] },

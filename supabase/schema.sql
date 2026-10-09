@@ -818,3 +818,7 @@ create table if not exists smartads_calendario_rede (
   criado_em timestamptz not null default now()
 );
 alter table smartads_calendario_rede enable row level security;
+
+-- Delivery: links pré-configurados por conta (campanhas de clique no link, só Stories).
+alter table smartads_contas_meta add column if not exists link_ifood text;
+alter table smartads_contas_meta add column if not exists link_whatsapp text;

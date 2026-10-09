@@ -49,6 +49,7 @@ export default function FormularioCampanha({
   valoresIniciais,
   etapaInicial = 1,
   planoEtapaId,
+  delivery,
 }: {
   contaId: string;
   clienteId?: string;
@@ -61,6 +62,8 @@ export default function FormularioCampanha({
    * /campanhas/nova-do-plano/[planoEtapaId]) — a rota /api/campanhas usa isso pra marcar a etapa
    * como concluída no checklist automaticamente, sem passo manual extra. */
   planoEtapaId?: string;
+  /** Campanha de delivery (iFood/WhatsApp): link já vem salvo da conta, entrega só em Stories. */
+  delivery?: { canal: "ifood" | "whatsapp"; link: string; cta: string };
 }) {
   const router = useRouter();
   const [etapa, setEtapa] = useState(etapaInicial);
@@ -97,8 +100,8 @@ export default function FormularioCampanha({
   // Uma imagem = um Anúncio depois (ver hierarquia explicada na tela) — todas as variações
   // entram no MESMO Conjunto de Anúncios, nunca um conjunto por imagem.
   const [imagens, setImagens] = useState<string[]>(criativoOficial ? [criativoOficial.imagemBase64] : []);
-  const [link, setLink] = useState("");
-  const [callToAction, setCallToAction] = useState(criativoOficial?.cta ?? "LEARN_MORE");
+  const [link, setLink] = useState(delivery?.link ?? "");
+  const [callToAction, setCallToAction] = useState(criativoOficial?.cta ?? delivery?.cta ?? "LEARN_MORE");
   const [leadGenFormId, setLeadGenFormId] = useState("");
 
   // Passo 4 — revisão
@@ -109,7 +112,9 @@ export default function FormularioCampanha({
   const [nomeCampanha, setNomeCampanha] = useState(
     valoresIniciais?.nomeCampanha
       ? `${valoresIniciais.nomeCampanha} (cópia)`
-      : `${clienteNome} - ${modelo.nomeExibicao}`
+      : delivery
+        ? `${clienteNome} - Delivery ${delivery.canal === "ifood" ? "iFood" : "WhatsApp"}`
+        : `${clienteNome} - ${modelo.nomeExibicao}`
   );
   const [publicando, setPublicando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -212,6 +217,7 @@ export default function FormularioCampanha({
         publico: publicoEfetivo,
         publicoId: modoPublico === "salvo" ? publicoSalvoId : undefined,
         planoEtapaId,
+        posicionamento: delivery ? "stories" : undefined,
         orcamento: {
           tipo: tipoOrcamento,
           valorCentavos,
@@ -584,6 +590,13 @@ export default function FormularioCampanha({
                   </>
                 )}
 
+                {delivery && (
+                  <p className="rounded-lg border border-white/10 bg-white/[0.03] p-3 text-xs text-neutral-300">
+                    Campanha de delivery: aparece só nos <strong>Stories</strong> do Instagram. Use imagem vertical
+                    (9:16, ex.: 1080×1920) pra não cortar.
+                  </p>
+                )}
+
                 {modelo.exigeLink && (
                   <>
                     <div>
@@ -599,7 +612,7 @@ export default function FormularioCampanha({
                       <label className="text-xs font-semibold text-neutral-400">Botão</label>
                       {criativoOficial ? (
                         <p className="mt-1 h-10 flex items-center rounded-lg border border-white/10 bg-white/[0.02] px-3 text-sm text-neutral-400">
-                          {{ LEARN_MORE: "Saiba mais", SHOP_NOW: "Comprar agora", SIGN_UP: "Cadastre-se", CONTACT_US: "Fale conosco" }[callToAction] ?? callToAction}{" "}
+                          {{ LEARN_MORE: "Saiba mais", SHOP_NOW: "Comprar agora", ORDER_NOW: "Peça agora", SIGN_UP: "Cadastre-se", CONTACT_US: "Fale conosco" }[callToAction] ?? callToAction}{" "}
                           <span className="ml-1.5 text-[11px]">(definido pela Campanha-Mãe)</span>
                         </p>
                       ) : (
@@ -609,6 +622,7 @@ export default function FormularioCampanha({
                           className="mt-1 h-10 w-full rounded-lg border border-white/14 bg-ink-850 px-3 text-sm text-neutral-100"
                         >
                           <option value="LEARN_MORE">Saiba mais</option>
+                          <option value="ORDER_NOW">Peça agora</option>
                           <option value="SHOP_NOW">Comprar agora</option>
                           <option value="SIGN_UP">Cadastre-se</option>
                           <option value="CONTACT_US">Fale conosco</option>
