@@ -86,6 +86,7 @@ function CardEmpresa({ empresa, nomeMes }: { empresa: EmpresaInicio; nomeMes: st
 
   return (
     <Link
+      prefetch={false}
       href={semContas ? "/contas" : empresa.href}
       className="cartao-vidro group flex flex-col gap-4 p-5 transition hover:border-accent/40"
     >
