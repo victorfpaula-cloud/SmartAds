@@ -757,3 +757,30 @@ alter table smartads_financeiro_cache
   add column if not exists recarga_mes_centavos integer,
   add column if not exists gasto_mes_centavos integer,
   add column if not exists recarga_erro text;
+
+-- Boost: padrão da rede (por empresa) + regras por data + tipos de campanha já criados por post.
+create table if not exists smartads_boost_rede_config (
+  empresa_id uuid primary key references smartads_empresas(id) on delete cascade,
+  tipo_entrega text not null default 'engajamento' check (tipo_entrega in ('engajamento','alcance','ambos')),
+  orcamento_diario_centavos integer check (orcamento_diario_centavos is null or orcamento_diario_centavos > 0),
+  duracao_dias integer check (duracao_dias is null or duracao_dias in (3,7)),
+  boosts_por_dia integer not null default 1 check (boosts_por_dia between 1 and 10),
+  atualizado_em timestamptz not null default now()
+);
+alter table smartads_boost_rede_config enable row level security;
+
+create table if not exists smartads_boost_rede_regras (
+  id uuid primary key default gen_random_uuid(),
+  empresa_id uuid not null references smartads_empresas(id) on delete cascade,
+  nome text not null,
+  data_inicio date not null,
+  data_fim date not null,
+  tipo_entrega text not null check (tipo_entrega in ('engajamento','alcance','ambos')),
+  boosts_por_dia integer check (boosts_por_dia is null or boosts_por_dia between 1 and 10),
+  criado_em timestamptz not null default now(),
+  check (data_fim >= data_inicio)
+);
+create index if not exists smartads_boost_rede_regras_empresa_idx on smartads_boost_rede_regras(empresa_id);
+alter table smartads_boost_rede_regras enable row level security;
+
+alter table smartads_boost_automatico_log add column if not exists tipos_criados text[] not null default '{}';

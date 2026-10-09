@@ -27,7 +27,7 @@ const LINKS = [
 
 // Páginas que vivem "dentro" de Mais — abrem a página normalmente, mas a aba que acende na barra é
 // a de Mais, não nenhuma (senão pareceria que saiu da navegação principal ao entrar nelas).
-const PAGINAS_DENTRO_DE_MAIS = ["/publicos", "/automacao", "/relatorios", "/mais"];
+const PAGINAS_DENTRO_DE_MAIS = ["/boost", "/publicos", "/automacao", "/relatorios", "/mais"];
 
 /** Navegação principal — vira barra de abas fixa embaixo no celular (padrão de app, mais fácil de
  * alcançar com o polegar) e barra no topo no desktop. Um só componente, dois layouts via classes

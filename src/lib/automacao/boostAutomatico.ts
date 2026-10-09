@@ -3,6 +3,14 @@ import { listarPostsInstagram } from "@/lib/meta/api";
 import { criarCampanhaCompleta } from "@/lib/meta/criarCampanhaCompleta";
 import type { Publico } from "@/lib/meta/tipos";
 import { mapearEmLotes } from "@/lib/lotes";
+import {
+  CONFIG_BOOST_PADRAO,
+  configEfetiva,
+  modelosDaEntrega,
+  type ConfigBoostRede,
+  type RegraBoostRede,
+  type TipoEntregaBoost,
+} from "@/lib/boostRede";
 
 const FUSO_HORARIO = "America/Sao_Paulo";
 
@@ -47,58 +55,101 @@ export async function avaliarBoostAutomatico(): Promise<{
   const { data: contas } = await supabase
     .from("smartads_contas_meta")
     .select(
-      "id, instagram_business_id, boost_automatico_publico_id, boost_automatico_orcamento_centavos, boost_automatico_duracao_dias"
+      "id, instagram_business_id, boost_automatico_publico_id, boost_automatico_orcamento_centavos, boost_automatico_duracao_dias, smartads_clientes(empresa_id)"
     )
     .eq("ativo", true)
     .eq("boost_automatico_ativo", true);
 
+  // Padrão da rede (por empresa) + regras por data, carregados uma vez só pro cron inteiro.
+  const [{ data: configsRede }, { data: regrasRede }] = await Promise.all([
+    supabase.from("smartads_boost_rede_config").select("*"),
+    supabase.from("smartads_boost_rede_regras").select("*").order("criado_em", { ascending: true }),
+  ]);
+  const hojeSP = dataEmSaoPaulo(new Date().toISOString());
+  const configDaEmpresa = (empresaId: string | null) => {
+    const bruta = (configsRede ?? []).find((c) => c.empresa_id === empresaId);
+    const config: ConfigBoostRede = bruta
+      ? {
+          tipoEntrega: bruta.tipo_entrega as TipoEntregaBoost,
+          orcamentoDiarioCentavos: bruta.orcamento_diario_centavos,
+          duracaoDias: bruta.duracao_dias,
+          boostsPorDia: bruta.boosts_por_dia,
+        }
+      : CONFIG_BOOST_PADRAO;
+    const regras: RegraBoostRede[] = (regrasRede ?? [])
+      .filter((r) => r.empresa_id === empresaId)
+      .map((r) => ({
+        id: r.id,
+        nome: r.nome,
+        dataInicio: r.data_inicio,
+        dataFim: r.data_fim,
+        tipoEntrega: r.tipo_entrega as TipoEntregaBoost,
+        boostsPorDia: r.boosts_por_dia,
+      }));
+    return configEfetiva(config, regras, hojeSP).config;
+  };
+
   const criadasPorConta = await mapearEmLotes(contas ?? [], async (conta): Promise<boolean> => {
     try {
-      if (!conta.instagram_business_id || !conta.boost_automatico_publico_id || !conta.boost_automatico_orcamento_centavos) {
+      const clienteRel = (conta as any).smartads_clientes;
+      const empresaId: string | null = (Array.isArray(clienteRel) ? clienteRel[0] : clienteRel)?.empresa_id ?? null;
+      const rede = configDaEmpresa(empresaId);
+      // O padrão da rede, quando define orçamento/duração, vale pra todas as unidades.
+      const orcamentoDiarioCentavos = rede.orcamentoDiarioCentavos ?? conta.boost_automatico_orcamento_centavos;
+      const duracaoDias = rede.duracaoDias ?? conta.boost_automatico_duracao_dias ?? 3;
+
+      if (!conta.instagram_business_id || !conta.boost_automatico_publico_id || !orcamentoDiarioCentavos) {
         return false; // Ligado mas sem configurar público/orçamento ainda — nada a fazer.
       }
 
-      // No máximo 1 boost automático por conta por dia, sempre do PRIMEIRO post publicado no dia —
-      // um perfil que posta sem parar não pode empilhar uma campanha nova a cada rodada do cron
-      // (até 3 por dia, cada uma rodando por 3 a 7 dias). Posts seguintes do mesmo dia ficam de
-      // fora do automático (continuam podendo ser turbinados à mão).
-      const inicioDoDia = new Date(`${dataEmSaoPaulo(new Date().toISOString())}T00:00:00-03:00`).toISOString();
+      // Limite de boosts por dia (padrão 1, sempre começando pelos primeiros posts do dia) — um
+      // perfil que posta sem parar não pode empilhar campanha a cada rodada do cron. Cada post
+      // turbinado conta 1, mesmo quando recebe duas campanhas (engajamento + alcance).
+      const inicioDoDia = new Date(`${hojeSP}T00:00:00-03:00`).toISOString();
       const { data: sucessosHoje } = await supabase
         .from("smartads_boost_automatico_log")
         .select("id")
         .eq("conta_id", conta.id)
         .eq("sucesso", true)
-        .gte("created_at", inicioDoDia)
-        .limit(1);
-      if ((sucessosHoje ?? []).length > 0) return false;
+        .gte("created_at", inicioDoDia);
+      if ((sucessosHoje ?? []).length >= rede.boostsPorDia) return false;
 
       const posts = await listarPostsInstagram(conta.instagram_business_id);
-      const postsDeHoje = posts.filter((p) => ehPostDeHoje(p.timestamp));
+      const postsDeHoje = posts
+        .filter((p) => ehPostDeHoje(p.timestamp))
+        .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
       if (postsDeHoje.length === 0) return false;
-      const primeiroDoDia = postsDeHoje.reduce((primeiro, p) => (p.timestamp < primeiro.timestamp ? p : primeiro));
 
-      // Só sucesso conta como "já turbinado". Falha anterior é retentada (até MAX_TENTATIVAS_POR_POST):
-      // antes qualquer linha no log, inclusive de falha, travava o post pra sempre — um erro
-      // passageiro às 15h significava que o post nunca mais era tentado (29/09/2026).
-      const { data: registro } = await supabase
+      // Primeiro post de hoje que ainda não foi turbinado e ainda tem tentativas sobrando.
+      const { data: registros } = await supabase
         .from("smartads_boost_automatico_log")
-        .select("sucesso, tentativas")
+        .select("instagram_media_id, sucesso, tentativas, tipos_criados")
         .eq("conta_id", conta.id)
-        .eq("instagram_media_id", primeiroDoDia.id)
-        .maybeSingle();
-      if (registro?.sucesso) return false;
+        .in(
+          "instagram_media_id",
+          postsDeHoje.map((p) => p.id)
+        );
+      const registroDoPost = new Map((registros ?? []).map((r) => [r.instagram_media_id, r]));
+      const alvo = postsDeHoje.find((p) => {
+        const r = registroDoPost.get(p.id);
+        return !r?.sucesso && (r?.tentativas ?? 0) < MAX_TENTATIVAS_POR_POST;
+      });
+      if (!alvo) return false;
+
+      const registro = registroDoPost.get(alvo.id);
       const tentativasAnteriores = registro?.tentativas ?? 0;
-      if (tentativasAnteriores >= MAX_TENTATIVAS_POR_POST) return false;
+      const jaCriados: string[] = registro?.tipos_criados ?? [];
 
       const gravarResultado = async (dados: {
         campanha_criada_id?: string | null;
         sucesso: boolean;
         erro_mensagem: string | null;
+        tipos_criados: string[];
       }) => {
         await supabase.from("smartads_boost_automatico_log").upsert(
           {
             conta_id: conta.id,
-            instagram_media_id: primeiroDoDia.id,
+            instagram_media_id: alvo.id,
             tentativas: erroNaoRetentavel(dados.erro_mensagem) ? MAX_TENTATIVAS_POR_POST : tentativasAnteriores + 1,
             created_at: new Date().toISOString(),
             campanha_criada_id: null,
@@ -118,34 +169,52 @@ export async function avaliarBoostAutomatico(): Promise<{
         await gravarResultado({
           sucesso: false,
           erro_mensagem: "O público salvo configurado pro boost automático não existe mais.",
+          tipos_criados: jaCriados,
         });
         return false;
       }
 
       const dataFim = new Date();
-      dataFim.setDate(dataFim.getDate() + (conta.boost_automatico_duracao_dias ?? 3));
+      dataFim.setDate(dataFim.getDate() + duracaoDias);
 
-      const resultado = await criarCampanhaCompleta({
-        contaId: conta.id,
-        tipoModelo: "engajamento",
-        nomeCampanha: `Boost automático ${new Date().toLocaleDateString("pt-BR")}`,
-        publico: publicoSalvo.targeting as Publico,
-        publicoId: conta.boost_automatico_publico_id,
-        orcamento: {
-          tipo: "diario",
-          valorCentavos: conta.boost_automatico_orcamento_centavos,
-          dataFim: dataFim.toISOString(),
-        },
-        criativo: { usarPostExistente: true, postSelecionadoId: primeiroDoDia.id, mensagem: "" },
-      });
+      // Uma campanha por tipo de entrega, cada uma com o orçamento diário completo. Num retry só
+      // cria o que faltou (tipos_criados), pra nunca duplicar a campanha que já foi.
+      const criados = [...jaCriados];
+      let primeiroId: string | null = null;
+      let erro: string | null = null;
+      for (const tipo of modelosDaEntrega(rede.tipoEntrega)) {
+        if (criados.includes(tipo)) continue;
+        const resultado = await criarCampanhaCompleta({
+          contaId: conta.id,
+          tipoModelo: tipo,
+          nomeCampanha: `Boost ${tipo === "alcance" ? "alcance" : "engajamento"} ${new Date().toLocaleDateString("pt-BR")}`,
+          publico: publicoSalvo.targeting as Publico,
+          publicoId: conta.boost_automatico_publico_id,
+          orcamento: {
+            tipo: "diario",
+            valorCentavos: orcamentoDiarioCentavos,
+            dataFim: dataFim.toISOString(),
+          },
+          criativo: { usarPostExistente: true, postSelecionadoId: alvo.id, mensagem: "" },
+        });
+        if (resultado.ok) {
+          criados.push(tipo);
+          primeiroId = primeiroId ?? (resultado.campanhaSalva as { id: string })?.id ?? null;
+        } else {
+          erro = resultado.erro;
+          break;
+        }
+      }
 
+      const completo = modelosDaEntrega(rede.tipoEntrega).every((t) => criados.includes(t));
       await gravarResultado({
-        campanha_criada_id: resultado.ok ? (resultado.campanhaSalva as { id: string })?.id ?? null : null,
-        sucesso: resultado.ok,
-        erro_mensagem: resultado.ok ? null : resultado.erro,
+        campanha_criada_id: primeiroId,
+        sucesso: completo,
+        erro_mensagem: completo ? null : erro,
+        tipos_criados: criados,
       });
 
-      return resultado.ok;
+      return completo;
     } catch (e) {
       await supabase.from("smartads_boost_automatico_log").insert({
         conta_id: conta.id,
