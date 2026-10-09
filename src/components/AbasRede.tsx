@@ -20,8 +20,9 @@ export async function AbasCampanhas() {
   if ((await lerAmbiente())?.tipo !== "franquia") return null;
   return (
     <AbasPagina
+      destaque
       abas={[
-        { href: "/campanhas", label: "No ar" },
+        { href: "/campanhas", label: "No ar", tambem: ["/campanhas/nova", "/campanhas/nova-rede", "/campanhas/conta"] },
         { href: "/estrategias/campanhas-mae", label: "Campanha oficial", tambem: ["/estrategias/moldes", "/estrategias/planos"] },
         { href: "/estrategias/calendario", label: "Calendário" },
       ]}
@@ -34,6 +35,7 @@ export async function AbasUnidades() {
   if ((await lerAmbiente())?.tipo !== "franquia") return null;
   return (
     <AbasPagina
+      destaque
       abas={[
         { href: "/boost", label: "Boost" },
         { href: "/delivery", label: "Delivery" },
