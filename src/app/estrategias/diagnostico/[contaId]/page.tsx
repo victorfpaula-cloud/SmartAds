@@ -1,4 +1,5 @@
 import Cabecalho from "@/components/Cabecalho";
+import { AbasUnidades } from "@/components/AbasRede";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { notFound } from "next/navigation";
 import PainelDiagnostico from "./PainelDiagnostico";
@@ -20,6 +21,7 @@ export default async function DiagnosticoPage({ params }: { params: Promise<{ co
     <>
       <Cabecalho ativo="/estrategias" />
       <main className="mx-auto max-w-6xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
+        <AbasUnidades />
         <p className="text-xs font-medium text-neutral-500">{(conta as any).smartads_clientes?.nome}</p>
         <h1 className="mt-1 font-display text-2xl font-bold">
           Diagnóstico — {conta.nome_exibicao || conta.meta_ad_account_nome}

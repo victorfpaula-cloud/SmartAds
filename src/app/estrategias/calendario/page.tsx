@@ -1,4 +1,5 @@
 import Cabecalho from "@/components/Cabecalho";
+import { AbasCampanhas } from "@/components/AbasRede";
 import Link from "next/link";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { empresaDaPagina } from "@/lib/ambiente";
@@ -19,10 +20,8 @@ export default async function CalendarioPage({ searchParams }: { searchParams: {
     <>
       <Cabecalho ativo="/estrategias" />
       <main className="mx-auto max-w-6xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
-        <Link href="/estrategias" className="text-xs text-neutral-500 hover:text-neutral-300">
-          ← Central da rede
-        </Link>
-        <h1 className="mt-1 font-display text-2xl font-bold">Calendário da rede</h1>
+        <AbasCampanhas />
+        <h1 className="font-display text-2xl font-bold">Calendário da rede</h1>
         <p className="mt-1 text-sm text-neutral-400">
           Tudo que a rede roda, por data: datas comerciais, campanhas oficiais e mudanças do boost. O calendário avisa quando
           uma data importante está chegando sem campanha.
