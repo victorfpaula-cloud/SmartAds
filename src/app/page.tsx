@@ -76,6 +76,13 @@ function CardEmpresa({ empresa, nomeMes }: { empresa: EmpresaInicio; nomeMes: st
       Icone: WarningCircle,
     });
   }
+  if (empresa.campanhasSemSaldo > 0) {
+    alertas.push({
+      texto: `${empresa.campanhasSemSaldo} campanha${empresa.campanhasSemSaldo > 1 ? "s" : ""} parada${empresa.campanhasSemSaldo > 1 ? "s" : ""} sem saldo`,
+      cor: "bg-danger/15 text-danger",
+      Icone: WarningCircle,
+    });
+  }
   if (empresa.saldoAcabando > 0) {
     alertas.push({
       texto: `${empresa.saldoAcabando} ${empresa.saldoAcabando > 1 ? "contas" : "conta"} com saldo acabando`,

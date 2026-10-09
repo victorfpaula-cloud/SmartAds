@@ -8,6 +8,8 @@ export interface EmpresaInicio {
   tipo: "individual" | "franquia";
   contas: number;
   campanhasNoAr: number;
+  /** Campanhas "ativas" na Meta em contas pré-pagas sem saldo — não estão entregando. */
+  campanhasSemSaldo: number;
   gastoMesCentavos: number | null;
   boostsNoAr: number;
   boostsComErro: number;
@@ -39,9 +41,10 @@ export async function obterEmpresasParaInicio(): Promise<EmpresaInicio[]> {
       nome: empresa.nome,
       tipo: empresa.tipo,
       contas: daEmpresa.length,
-      campanhasNoAr: soma((u) => u.campanhasAtivas ?? 0),
+      campanhasNoAr: soma((u) => (u.semSaldo ? 0 : u.campanhasAtivas ?? 0)),
+      campanhasSemSaldo: soma((u) => (u.semSaldo ? u.campanhasAtivas ?? 0 : 0)),
       gastoMesCentavos: algumGasto ? soma((u) => u.gastoMesCentavos ?? 0) : null,
-      boostsNoAr: soma((u) => (u.boost.ativo ? u.boost.noAr : 0)),
+      boostsNoAr: soma((u) => (u.boost.ativo && !u.semSaldo ? u.boost.noAr : 0)),
       boostsComErro: daEmpresa.filter((u) => u.boost.ativo && u.boost.falha).length,
       saldoAcabando: daEmpresa.filter((u) => {
         const f = financeiroPorConta.get(u.contaId);

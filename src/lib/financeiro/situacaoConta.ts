@@ -47,3 +47,10 @@ export function descreverSituacaoConta(status: number | null, motivo: number | n
       return { texto: `Status ${status}`, detalhe: null, tom: "atencao" };
   }
 }
+
+/** Conta pré-paga (Pix/boleto, "Fundos") com saldo zerado: a Meta continua devolvendo as campanhas
+ * como ACTIVE, mas nenhuma entrega acontece sem fundos — então elas NÃO estão realmente no ar. Só
+ * vale com saldo conhecido (cache do Financeiro) e conta que não é de cartão. */
+export function contaSemSaldo(saldoCentavos: number | null | undefined, prePaga: boolean | null | undefined): boolean {
+  return typeof saldoCentavos === "number" && saldoCentavos <= 0 && prePaga !== false;
+}

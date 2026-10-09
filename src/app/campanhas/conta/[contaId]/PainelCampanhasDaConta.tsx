@@ -131,8 +131,11 @@ function formatarOrcamento(campanha: Campanha): { valor: string; tipo: string } 
 export default function PainelCampanhasDaConta({
   contaId,
   gastoMesCentavos,
+  semSaldo = false,
 }: {
   contaId: string;
+  /** Conta pré-paga sem fundos: campanhas "ativas" na Meta não estão entregando. */
+  semSaldo?: boolean;
   /** Gasto do mês corrente da conta (cache atualizado 2x/dia); null = ainda não calculado. */
   gastoMesCentavos: number | null;
 }) {
@@ -198,7 +201,9 @@ export default function PainelCampanhasDaConta({
     [campanhas]
   );
   const campanhasExibidas = verTodas ? campanhas : campanhasRelevantes;
-  const ativas = campanhas.filter((c) => statusExibicao(c).rotulo === "Ativa");
+  const ativasNaMeta = campanhas.filter((c) => statusExibicao(c).rotulo === "Ativa");
+  // Sem saldo, "ativa" na Meta não entrega nada: não conta como no ar nem como orçamento rodando.
+  const ativas = semSaldo ? [] : ativasNaMeta;
   const orcamentoDiarioAtivoCentavos = ativas.reduce((total, c) => total + (c.orcamentoDiarioCentavos ?? 0), 0);
   const escondidas = campanhas.length - campanhasRelevantes.length;
 
@@ -255,9 +260,25 @@ export default function PainelCampanhasDaConta({
         <div className="rounded-lg border border-danger/30 bg-danger/10 px-4 py-2.5 text-sm text-danger">{erro}</div>
       )}
 
+      {semSaldo && !carregando && ativasNaMeta.length > 0 && (
+        <div className="rounded-lg border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
+          <p className="font-semibold">
+            {ativasNaMeta.length} campanha{ativasNaMeta.length > 1 ? "s aparecem" : " aparece"} como ativa
+            {ativasNaMeta.length > 1 ? "s" : ""} na Meta, mas a conta está sem saldo — nada está sendo entregue.
+          </p>
+          <p className="mt-0.5 text-xs text-danger/80">
+            Adicione fundos (Financeiro → Ver faturamento na Meta). Quando o saldo voltar, elas retomam sozinhas.
+          </p>
+        </div>
+      )}
+
       {!carregando && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <ResumoItem rotulo="Campanhas ativas" valor={String(ativas.length)} />
+          <ResumoItem
+            rotulo="Campanhas ativas"
+            valor={String(ativas.length)}
+            detalhe={semSaldo && ativasNaMeta.length > 0 ? `${ativasNaMeta.length} parada${ativasNaMeta.length > 1 ? "s" : ""} sem saldo` : undefined}
+          />
           <ResumoItem
             rotulo="Orçamento diário (ativas)"
             valor={orcamentoDiarioAtivoCentavos > 0 ? `${formatarCentavos(orcamentoDiarioAtivoCentavos)}/dia` : "—"}
@@ -341,6 +362,9 @@ export default function PainelCampanhasDaConta({
                       <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${status.cor}`}>
                         {status.rotulo}
                       </span>
+                    )}
+                    {semSaldo && status.rotulo === "Ativa" && (
+                      <p className="mt-1 text-[10.5px] font-semibold text-danger">Parada: sem saldo</p>
                     )}
                   </td>
                   <td className="px-4 py-3">

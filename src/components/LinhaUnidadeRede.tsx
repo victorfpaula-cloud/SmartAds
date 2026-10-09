@@ -67,7 +67,10 @@ export default function LinhaUnidadeRede({
   const [mostrarErro, setMostrarErro] = useState(false);
 
   const semDados = unidade.campanhasAtivas === null;
-  const ativa = (unidade.campanhasAtivas ?? 0) > 0;
+  const ativaNaMeta = (unidade.campanhasAtivas ?? 0) > 0;
+  const semSaldo = ativaNaMeta && unidade.semSaldo;
+  // Sem saldo na conta pré-paga, a campanha "ativa" na Meta não entrega — não conta como no ar.
+  const ativa = ativaNaMeta && !unidade.semSaldo;
   const href = `/campanhas/conta/${unidade.contaId}`;
   const boostLigado = boostConfig.boost_automatico_ativo;
 
@@ -102,11 +105,11 @@ export default function LinhaUnidadeRede({
       <div className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 px-5 py-3 ${colunas}`}>
         <Link href={href} className="flex min-w-0 items-center gap-2.5">
           <span
-            className={`h-2 w-2 shrink-0 rounded-full ${ativa ? "bg-ok" : "bg-neutral-700"}`}
-            title={semDados ? "Ainda não calculada" : ativa ? "Com campanha no ar" : "Sem campanha no ar"}
+            className={`h-2 w-2 shrink-0 rounded-full ${semSaldo ? "bg-danger" : ativa ? "bg-ok" : "bg-neutral-700"}`}
+            title={semDados ? "Ainda não calculada" : semSaldo ? "Campanha ativa, mas parada por falta de saldo" : ativa ? "Com campanha no ar" : "Sem campanha no ar"}
           />
           <div className="min-w-0">
-            <p className={`truncate text-sm font-semibold ${ativa ? "text-neutral-100" : "text-neutral-500"}`}>
+            <p className={`truncate text-sm font-semibold ${ativaNaMeta ? "text-neutral-100" : "text-neutral-500"}`}>
               {unidade.clienteNome}
             </p>
             <p className="truncate text-[10.5px] text-neutral-600">{unidade.contaNome}</p>
@@ -116,12 +119,14 @@ export default function LinhaUnidadeRede({
         <Link
           href={href}
           className={`justify-self-end whitespace-nowrap rounded-full px-2.5 py-1 text-center text-xs font-semibold sm:justify-self-start ${
-            ativa ? "bg-ok/15 text-ok" : "bg-white/[0.05] text-neutral-500"
+            semSaldo ? "bg-danger/15 text-danger" : ativa ? "bg-ok/15 text-ok" : "bg-white/[0.05] text-neutral-500"
           }`}
         >
           {semDados
             ? "Aguardando dados"
-            : ativa
+            : semSaldo
+              ? `${unidade.campanhasAtivas} parada${unidade.campanhasAtivas !== 1 ? "s" : ""} · sem saldo`
+              : ativa
               ? `${unidade.campanhasAtivas} campanha${unidade.campanhasAtivas !== 1 ? "s" : ""}`
               : "Nenhuma no ar"}
         </Link>
@@ -151,7 +156,7 @@ export default function LinhaUnidadeRede({
                     className={boostLigado ? "text-ok" : "text-neutral-500"}
                   />
                   Boost
-                  {boostLigado && unidade.boost.noAr > 0 && (
+                  {boostLigado && unidade.boost.noAr > 0 && !unidade.semSaldo && (
                     <span
                       title={`${unidade.boost.noAr} campanha${unidade.boost.noAr > 1 ? "s" : ""} de boost automático no ar`}
                       className="rounded-full bg-ok/20 px-1.5 py-px text-[10px] font-bold leading-none text-ok"
