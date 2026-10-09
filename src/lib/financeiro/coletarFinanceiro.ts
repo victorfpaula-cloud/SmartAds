@@ -149,22 +149,8 @@ export async function coletarFinanceiro(empresaId?: string): Promise<ContaFinanc
     ajustePorConta.set(s.conta_id, (ajustePorConta.get(s.conta_id) ?? 0) + valor);
   }
 
-  // Padrão do boost da rede (tipo de entrega, orçamento e duração) por empresa.
-  const { data: configsBoost } = await supabase.from("smartads_boost_rede_config").select("*");
-  const configBoostPorEmpresa = new Map(
-    (configsBoost ?? []).map((c) => [
-      c.empresa_id as string,
-      {
-        tipoEntrega: c.tipo_entrega as string,
-        orcamentoDiarioCentavos: c.orcamento_diario_centavos as number | null,
-        duracaoDias: c.duracao_dias as number | null,
-      },
-    ])
-  );
-
   return Promise.all(
     contas.map(async ({ cliente, conta }): Promise<ContaFinanceiro> => {
-      const boostRede = configBoostPorEmpresa.get(cliente.smartads_empresas?.id ?? "");
       const idNumerico = conta.meta_ad_account_id.replace(/^act_/, "");
       let linhaCache = cachePorConta.get(conta.id);
 
@@ -225,9 +211,9 @@ export async function coletarFinanceiro(empresaId?: string): Promise<ContaFinanc
         recargaErro: linhaCache.recarga_erro ?? null,
         orcamentoMensalCentavos: conta.orcamento_mensal_centavos ?? 50000,
         boostAutomaticoAtivo: Boolean(conta.boost_automatico_ativo),
-        boostOrcamentoDiarioCentavos: boostRede?.orcamentoDiarioCentavos ?? conta.boost_automatico_orcamento_centavos ?? null,
-        boostDuracaoDias: boostRede?.duracaoDias ?? conta.boost_automatico_duracao_dias ?? 3,
-        boostCampanhasPorPost: boostRede?.tipoEntrega === "ambos" ? 2 : 1,
+        boostOrcamentoDiarioCentavos: conta.boost_automatico_orcamento_centavos ?? null,
+        boostDuracaoDias: conta.boost_automatico_duracao_dias ?? 3,
+        boostCampanhasPorPost: conta.boost_tipo_entrega === "ambos" ? 2 : 1,
       };
     })
   );
