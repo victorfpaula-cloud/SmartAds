@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Lightning, X } from "@phosphor-icons/react";
+import { ROTULO_ENTREGA, custoPorBoostCentavos, type ConfigBoostRede, type RegraBoostRede } from "@/lib/boostRede";
 
 export interface ContaBoost {
   id: string;
@@ -57,6 +58,8 @@ export default function ModalBoostAutomatico({
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [montado, setMontado] = useState(false);
+  // O que a rede já definiu pra essa unidade (tipo de entrega, orçamento/duração padrão, regra por data).
+  const [rede, setRede] = useState<{ config: ConfigBoostRede; regra: RegraBoostRede | null } | null>(null);
 
   // O modal é aberto de dentro de cards com blur (.cartao-vidro): um ancestral com backdrop-filter
   // vira o "bloco de contenção" do position:fixed, então o modal ficava preso e cortado dentro do
@@ -78,11 +81,23 @@ export default function ModalBoostAutomatico({
       .catch(() => setPublicos([]));
   }, [clienteId]);
 
+  useEffect(() => {
+    fetch(`/api/boost-rede/efetivo?contaId=${conta.id}`)
+      .then((r) => r.json())
+      .then((corpo) => corpo.config && setRede({ config: corpo.config, regra: corpo.regra ?? null }))
+      .catch(() => {});
+  }, [conta.id]);
+
+  const orcamentoDaRede = rede?.config.orcamentoDiarioCentavos ?? null;
+  const duracaoDaRede = rede?.config.duracaoDias ?? null;
+  const tipoEntrega = rede?.config.tipoEntrega ?? "engajamento";
+
   async function salvar(evento: React.FormEvent) {
     evento.preventDefault();
     setErro(null);
 
-    const valorCentavos = orcamento.trim() ? Math.round(parseFloat(orcamento.replace(",", ".")) * 100) : null;
+    const valorDigitado = orcamento.trim() ? Math.round(parseFloat(orcamento.replace(",", ".")) * 100) : null;
+    const valorCentavos = orcamentoDaRede ?? valorDigitado;
     if (ativo && (!publicoId || !valorCentavos || valorCentavos <= 0)) {
       setErro("Selecione um público e informe um orçamento diário maior que zero.");
       return;
@@ -92,7 +107,7 @@ export default function ModalBoostAutomatico({
     const resposta = await fetch(`/api/contas-meta/${conta.id}/boost-automatico`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ativo, publicoId: publicoId || null, orcamentoCentavos: valorCentavos, duracaoDias }),
+      body: JSON.stringify({ ativo, publicoId: publicoId || null, orcamentoCentavos: valorCentavos, duracaoDias: duracaoDaRede ?? duracaoDias }),
     });
     const corpo = await resposta.json();
     setSalvando(false);
@@ -105,7 +120,7 @@ export default function ModalBoostAutomatico({
       boost_automatico_ativo: ativo,
       boost_automatico_publico_id: publicoId || null,
       boost_automatico_orcamento_centavos: valorCentavos,
-      boost_automatico_duracao_dias: duracaoDias,
+      boost_automatico_duracao_dias: duracaoDaRede ?? duracaoDias,
     });
   }
 
@@ -129,11 +144,22 @@ export default function ModalBoostAutomatico({
         <form onSubmit={salvar} className="flex flex-col gap-4 p-5">
           <p className="text-xs leading-relaxed text-neutral-400">
             De hora em hora, das 10h às 20h, o SmartAds confere os posts do dia no Instagram dessa
-            conta. O primeiro post de hoje, se ainda não tiver sido turbinado, ganha sozinho uma
-            campanha de engajamento, sempre com o público, o orçamento
-            diário e a duração configurados abaixo. No máximo 1 boost automático por dia — os
-            outros posts do mesmo dia ficam de fora (dá pra turbinar à mão).
+            conta. O primeiro post de hoje, se ainda não tiver sido turbinado, ganha sozinho{" "}
+            <span className="font-semibold text-neutral-200">
+              {tipoEntrega === "ambos" ? "duas campanhas (engajamento + alcance)" : `uma campanha de ${ROTULO_ENTREGA[tipoEntrega].toLowerCase()}`}
+            </span>
+            , com o público escolhido abaixo. O que ele entrega e quantos posts por dia vêm do{" "}
+            <a href="/boost" className="font-semibold text-accent underline underline-offset-2">
+              padrão da rede
+            </a>
+            .
           </p>
+          {rede?.regra && (
+            <p className="rounded-lg border border-accent/30 bg-accent/10 px-3 py-2 text-xs text-neutral-200">
+              Data especial em vigor: <span className="font-semibold">{rede.regra.nome}</span> —{" "}
+              {ROTULO_ENTREGA[rede.regra.tipoEntrega]}.
+            </p>
+          )}
 
           <label className="flex items-center gap-2.5">
             <input
@@ -175,18 +201,30 @@ export default function ModalBoostAutomatico({
 
           <div>
             <label className="text-xs font-semibold text-neutral-400">Orçamento diário (R$)</label>
-            <input
-              type="text"
-              inputMode="decimal"
-              value={orcamento}
-              onChange={(e) => setOrcamento(e.target.value)}
-              placeholder="0,00"
-              className="mt-1 h-9 w-full rounded-lg border border-white/14 bg-ink-850 px-2.5 text-sm text-neutral-100"
-            />
+            {orcamentoDaRede ? (
+              <p className="mt-1 text-sm text-neutral-200">
+                R$ {(orcamentoDaRede / 100).toFixed(2).replace(".", ",")}{" "}
+                <span className="text-xs text-neutral-500">· definido pelo padrão da rede</span>
+              </p>
+            ) : (
+              <input
+                type="text"
+                inputMode="decimal"
+                value={orcamento}
+                onChange={(e) => setOrcamento(e.target.value)}
+                placeholder="0,00"
+                className="mt-1 h-9 w-full rounded-lg border border-white/14 bg-ink-850 px-2.5 text-sm text-neutral-100"
+              />
+            )}
           </div>
 
           <div>
             <label className="text-xs font-semibold text-neutral-400">Duração da campanha</label>
+            {duracaoDaRede ? (
+              <p className="mt-1 text-sm text-neutral-200">
+                {duracaoDaRede} dias <span className="text-xs text-neutral-500">· definido pelo padrão da rede</span>
+              </p>
+            ) : (
             <select
               value={duracaoDias}
               onChange={(e) => setDuracaoDias(Number(e.target.value))}
@@ -195,7 +233,23 @@ export default function ModalBoostAutomatico({
               <option value={3}>3 dias</option>
               <option value={7}>7 dias</option>
             </select>
+            )}
           </div>
+
+          {(() => {
+            const orc = orcamentoDaRede ?? (orcamento.trim() ? Math.round(parseFloat(orcamento.replace(",", ".")) * 100) : 0);
+            const dias = duracaoDaRede ?? duracaoDias;
+            if (!orc || !Number.isFinite(orc)) return null;
+            const custo = custoPorBoostCentavos(orc, dias, tipoEntrega);
+            const fmt = (c: number) => `R$ ${(c / 100).toFixed(2).replace(".", ",")}`;
+            return (
+              <div className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2.5 text-xs text-neutral-300">
+                Cada boost custa até <span className="font-semibold text-neutral-100">{fmt(custo)}</span> (
+                {fmt(orc)}/dia × {dias} dias{tipoEntrega === "ambos" ? " × 2 campanhas" : ""}). Postando todo dia:
+                cerca de <span className="font-semibold text-neutral-100">{fmt(custo * 30)}</span> por mês.
+              </div>
+            );
+          })()}
 
           {erro && (
             <div className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">

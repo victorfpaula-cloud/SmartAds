@@ -168,14 +168,15 @@ export default function FormularioCampanha({
     if (!valorCentavos) return "-";
     const reais = (centavos: number) => `R$ ${(centavos / 100).toFixed(2).replace(".", ",")}`;
     if (tipoOrcamento === "vitalicio") return reais(valorCentavos);
-    if (dataFim && dataInicio) {
-      const dias = Math.max(
-        1,
-        Math.round((new Date(dataFim).getTime() - new Date(dataInicio).getTime()) / 86_400_000) + 1
-      );
-      return `${reais(valorCentavos * dias)} (${dias} dias)`;
+    // Diário com data de término: gasto previsto = valor diário × dias do período REAL da campanha
+    // (do início informado — ou de hoje, quando a campanha começa agora — até o término), nunca o mês.
+    if (dataFim) {
+      const inicio = dataInicio ? new Date(`${dataInicio}T00:00:00`) : new Date(new Date().toDateString());
+      const fim = new Date(`${dataFim}T00:00:00`);
+      const dias = Math.max(1, Math.round((fim.getTime() - inicio.getTime()) / 86_400_000) + 1);
+      return `${reais(valorCentavos * dias)} em ${dias} dia${dias !== 1 ? "s" : ""} (${reais(valorCentavos)}/dia)`;
     }
-    return `Contínuo, ~${reais(valorCentavos * 30)}/mês (estimativa)`;
+    return `${reais(valorCentavos)}/dia, sem data de término (~${reais(valorCentavos * 30)} a cada 30 dias)`;
   }
 
   function podeAvancarDe(passo: number): boolean {

@@ -1,11 +1,17 @@
 import Cabecalho from "@/components/Cabecalho";
 import Link from "next/link";
-import { Target, Robot, ChartLineUp } from "@phosphor-icons/react/dist/ssr";
+import { Lightning, Target, Robot, ChartLineUp } from "@phosphor-icons/react/dist/ssr";
 import type { Icon } from "@phosphor-icons/react";
 
 export const dynamic = "force-dynamic";
 
 const FERRAMENTAS: { href: string; nome: string; descricao: string; Icone: Icon }[] = [
+  {
+    href: "/boost",
+    nome: "Boost",
+    descricao: "O padrão do boost da rede: engajamento, alcance ou os dois, orçamento, duração e regras por data (Natal, Páscoa…).",
+    Icone: Lightning,
+  },
   {
     href: "/publicos",
     nome: "Públicos",
