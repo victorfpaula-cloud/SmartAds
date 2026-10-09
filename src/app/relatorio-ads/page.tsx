@@ -1,4 +1,5 @@
 import Cabecalho from "@/components/Cabecalho";
+import { lerAmbiente } from "@/lib/ambiente";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import AbasRelatorios from "@/components/AbasRelatorios";
 import PainelRelatorioAds, { type OpcaoConta } from "./PainelRelatorioAds";
@@ -7,10 +8,13 @@ export const dynamic = "force-dynamic";
 
 export default async function RelatorioAdsPage() {
   const supabase = criarClienteAdmin();
-  const { data } = await supabase
+  const ambiente = await lerAmbiente();
+  let consulta = supabase
     .from("smartads_clientes")
     .select("nome, smartads_contas_meta(id, nome_exibicao, meta_ad_account_nome, instagram_username, ativo)")
     .order("nome");
+  if (ambiente) consulta = consulta.eq("empresa_id", ambiente.id);
+  const { data } = await consulta;
 
   const contas: OpcaoConta[] = [];
   for (const cliente of data ?? []) {

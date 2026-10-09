@@ -1,5 +1,6 @@
 import Cabecalho from "@/components/Cabecalho";
 import Link from "next/link";
+import { empresaDaPagina } from "@/lib/ambiente";
 import { obterResumoPorUnidade } from "@/lib/campanhasRede";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import PanoramaCampanhasRede from "@/components/PanoramaCampanhasRede";
@@ -18,7 +19,7 @@ export default async function CampanhasPage({
   searchParams: { rede?: string; empresa?: string };
 }) {
   const apenasRede = searchParams.rede === FILTRO_REDE;
-  const empresaId = searchParams.empresa;
+  const empresaId = await empresaDaPagina(searchParams.empresa);
   const { data: empresa } = empresaId
     ? await criarClienteAdmin().from("smartads_empresas").select("id, nome").eq("id", empresaId).maybeSingle()
     : { data: null };

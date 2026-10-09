@@ -1,4 +1,5 @@
 import Cabecalho from "@/components/Cabecalho";
+import { lerAmbiente } from "@/lib/ambiente";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import PainelAutomacao from "./PainelAutomacao";
 
@@ -6,13 +7,16 @@ export const dynamic = "force-dynamic";
 
 export default async function AutomacaoPage() {
   const supabase = criarClienteAdmin();
-  const { data: clientes } = await supabase
+  const ambiente = await lerAmbiente();
+  let consulta = supabase
     .from("smartads_clientes")
     .select(
       "id, nome, smartads_contas_meta(id, meta_ad_account_nome, nome_exibicao, smartads_campanhas_criadas(id, meta_campaign_id, tipo_modelo, config_criacao))"
     )
     .eq("ativo", true)
     .order("nome");
+  if (ambiente) consulta = consulta.eq("empresa_id", ambiente.id);
+  const { data: clientes } = await consulta;
 
   return (
     <>

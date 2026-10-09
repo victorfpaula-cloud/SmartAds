@@ -1,4 +1,5 @@
 import Cabecalho from "@/components/Cabecalho";
+import { lerAmbiente } from "@/lib/ambiente";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import Link from "next/link";
 
@@ -8,11 +9,10 @@ export const dynamic = "force-dynamic";
  * é. Só mostra contas de clientes que já têm pelo menos uma conta Meta associada. */
 export default async function EscolherContaPage() {
   const supabase = criarClienteAdmin();
-  const { data: clientes } = await supabase
-    .from("smartads_clientes")
-    .select("*, smartads_contas_meta(*)")
-    .eq("ativo", true)
-    .order("nome");
+  const ambiente = await lerAmbiente();
+  let consulta = supabase.from("smartads_clientes").select("*, smartads_contas_meta(*)").eq("ativo", true).order("nome");
+  if (ambiente) consulta = consulta.eq("empresa_id", ambiente.id);
+  const { data: clientes } = await consulta;
 
   const clientesComConta = (clientes ?? []).filter((c) => c.smartads_contas_meta.length > 0);
 

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { lerAmbiente } from "@/lib/ambiente";
 import { buscarLinhasResumo } from "@/lib/relatorios";
 
 export const dynamic = "force-dynamic";
@@ -8,7 +9,7 @@ export const dynamic = "force-dynamic";
  * o resumo em texto gerado por IA (/api/ia/resumo). */
 export async function GET() {
   try {
-    const linhas = await buscarLinhasResumo();
+    const linhas = await buscarLinhasResumo((await lerAmbiente())?.id);
     return NextResponse.json({ linhas });
   } catch (erro) {
     return NextResponse.json(

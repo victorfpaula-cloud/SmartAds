@@ -1,6 +1,7 @@
 import Cabecalho from "@/components/Cabecalho";
 import Link from "next/link";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
+import { empresaDaPagina } from "@/lib/ambiente";
 import { carregarInvestimentos } from "@/lib/investimentos";
 import { mesAtualEmSaoPaulo } from "@/lib/tempoSaoPaulo";
 import PainelInvestimentos from "./PainelInvestimentos";
@@ -21,7 +22,8 @@ export default async function InvestimentosPage({ searchParams }: { searchParams
   const mes = /^\d{4}-\d{2}$/.test(searchParams.mes ?? "") ? (searchParams.mes as string) : mesAtual;
   const { data: empresas } = await criarClienteAdmin().from("smartads_empresas").select("id, nome, tipo").order("nome");
   const lista = (empresas ?? []).sort((a, b) => (a.tipo === b.tipo ? a.nome.localeCompare(b.nome) : a.tipo === "franquia" ? -1 : 1));
-  const empresaId = lista.find((e) => e.id === searchParams.empresa)?.id ?? lista.find((e) => e.tipo === "franquia")?.id ?? lista[0]?.id;
+  const alvo = await empresaDaPagina(searchParams.empresa);
+  const empresaId = lista.find((e) => e.id === alvo)?.id ?? lista.find((e) => e.tipo === "franquia")?.id ?? lista[0]?.id;
   const resumo = await carregarInvestimentos(mes, empresaId);
   const qs = (m: string) => `?mes=${m}${empresaId ? `&empresa=${empresaId}` : ""}`;
 
@@ -52,7 +54,7 @@ export default async function InvestimentosPage({ searchParams }: { searchParams
               <span className="h-8 w-8" />
             )}
           </div>
-          {lista.length > 1 && (
+          {lista.length > 1 && !alvo && (
             <div className="flex flex-wrap gap-2">
               {lista.map((e) => (
                 <Link

@@ -20,13 +20,15 @@ export interface LinhaResumo {
  * ido buscar o dado de jeito ligeiramente diferente. Uma conta com erro individual (token
  * revogado pro cliente específico, conta pausada etc.) não derruba o resumo inteiro: aparece com
  * `erro` preenchido e o resto segue. */
-export async function buscarLinhasResumo(): Promise<LinhaResumo[]> {
+export async function buscarLinhasResumo(empresaId?: string): Promise<LinhaResumo[]> {
   const supabase = criarClienteAdmin();
-  const { data: clientes, error } = await supabase
+  let consulta = supabase
     .from("smartads_clientes")
     .select("id, nome, smartads_contas_meta(id, meta_ad_account_id, nome_exibicao, meta_ad_account_nome)")
     .eq("ativo", true)
     .order("nome");
+  if (empresaId) consulta = consulta.eq("empresa_id", empresaId);
+  const { data: clientes, error } = await consulta;
 
   if (error) throw new Error(error.message);
 

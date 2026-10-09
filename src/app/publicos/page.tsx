@@ -1,4 +1,5 @@
 import Cabecalho from "@/components/Cabecalho";
+import { lerAmbiente } from "@/lib/ambiente";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import PainelPublicos from "./PainelPublicos";
 
@@ -6,11 +7,10 @@ export const dynamic = "force-dynamic";
 
 export default async function PublicosPage() {
   const supabase = criarClienteAdmin();
-  const { data: clientes } = await supabase
-    .from("smartads_clientes")
-    .select("id, nome")
-    .eq("ativo", true)
-    .order("nome");
+  const ambiente = await lerAmbiente();
+  let consulta = supabase.from("smartads_clientes").select("id, nome").eq("ativo", true).order("nome");
+  if (ambiente) consulta = consulta.eq("empresa_id", ambiente.id);
+  const { data: clientes } = await consulta;
 
   return (
     <>
