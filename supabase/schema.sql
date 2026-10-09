@@ -784,3 +784,26 @@ create index if not exists smartads_boost_rede_regras_empresa_idx on smartads_bo
 alter table smartads_boost_rede_regras enable row level security;
 
 alter table smartads_boost_automatico_log add column if not exists tipos_criados text[] not null default '{}';
+
+-- Investimento por unidade: aportes (recargas) com data/valor e o combinado de cada mês.
+create table if not exists smartads_investimentos (
+  id uuid primary key default gen_random_uuid(),
+  conta_id uuid not null references smartads_contas_meta(id) on delete cascade,
+  data date not null,
+  valor_centavos integer not null check (valor_centavos > 0),
+  origem text not null check (origem in ('meta','manual')),
+  meta_event_key text,
+  observacao text,
+  criado_em timestamptz not null default now()
+);
+create unique index if not exists smartads_investimentos_evento_uq on smartads_investimentos(conta_id, meta_event_key) where meta_event_key is not null;
+create index if not exists smartads_investimentos_conta_data_idx on smartads_investimentos(conta_id, data desc);
+alter table smartads_investimentos enable row level security;
+
+create table if not exists smartads_meta_mensal (
+  conta_id uuid not null references smartads_contas_meta(id) on delete cascade,
+  mes text not null check (mes ~ '^\d{4}-\d{2}$'),
+  valor_centavos integer not null check (valor_centavos >= 0),
+  primary key (conta_id, mes)
+);
+alter table smartads_meta_mensal enable row level security;

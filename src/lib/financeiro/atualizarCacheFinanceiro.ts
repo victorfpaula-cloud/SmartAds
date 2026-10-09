@@ -5,6 +5,7 @@ import {
   obterFonteDePagamento,
   obterSituacaoConta,
   somarMovimentacaoFinanceiraDesde,
+  listarRecargasDesde,
 } from "@/lib/meta/api";
 import { diaEmSaoPaulo } from "@/lib/tempoSaoPaulo";
 
@@ -79,10 +80,35 @@ export async function atualizarCacheFinanceiroDaConta(
 
     // Recargas do mês: a Meta só guarda ~6 dias de atividades, então o total do mês é um ledger
     // próprio — soma só o que entrou desde a última leitura e vira o mês zerando.
-    const movRecarga = await movimentacaoSegura(
-      metaAdAccountId,
-      mesmoMes ? new Date(cacheAnterior!.recarga_calculada_em as string) : inicioDoMes
-    );
+    const janelaRecarga = mesmoMes ? new Date(cacheAnterior!.recarga_calculada_em as string) : inicioDoMes;
+    let movRecarga: { totalFundingCentavos: number; erro: string | null };
+    try {
+      const recargas = await listarRecargasDesde(metaAdAccountId, janelaRecarga);
+      movRecarga = { totalFundingCentavos: recargas.reduce((t, r) => t + r.valorCentavos, 0), erro: null };
+      // Histórico permanente de aportes: cada recarga vira uma linha (única por evento).
+      if (recargas.length > 0) {
+        const { data: existentes } = await supabase
+          .from("smartads_investimentos")
+          .select("meta_event_key")
+          .eq("conta_id", contaId)
+          .in("meta_event_key", recargas.map((r) => r.chave));
+        const jaGravadas = new Set((existentes ?? []).map((e) => e.meta_event_key));
+        const novas = recargas.filter((r) => !jaGravadas.has(r.chave));
+        if (novas.length > 0) {
+          await supabase.from("smartads_investimentos").insert(
+            novas.map((r) => ({
+              conta_id: contaId,
+              data: diaEmSaoPaulo(r.quando),
+              valor_centavos: r.valorCentavos,
+              origem: "meta",
+              meta_event_key: r.chave,
+            }))
+          );
+        }
+      }
+    } catch (e) {
+      movRecarga = { totalFundingCentavos: 0, erro: e instanceof Error ? e.message : String(e) };
+    }
     const recargaMesCentavos = movRecarga.erro
       ? mesmoMes
         ? cacheAnterior!.recarga_mes_centavos ?? null
