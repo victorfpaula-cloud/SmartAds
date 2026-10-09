@@ -1,4 +1,4 @@
-import { Crown, Gauge, Stack, Broadcast, Megaphone, Wallet, Lightning, PiggyBank } from "@phosphor-icons/react/dist/ssr";
+import { Crown, Gauge, Stack, Broadcast, Megaphone, Wallet, Lightning, PiggyBank, CalendarBlank } from "@phosphor-icons/react/dist/ssr";
 import AtalhosCentral, { type AtalhoCentral } from "@/components/AtalhosCentral";
 import { obterResumoRedePorUnidade } from "@/lib/campanhasRede";
 import PanoramaCampanhasRede from "@/components/PanoramaCampanhasRede";
@@ -7,14 +7,20 @@ import PanoramaCampanhasRede from "@/components/PanoramaCampanhasRede";
 // ACOMPANHAR (ver o que está no ar, o dinheiro e a saúde de cada unidade).
 const PLANEJAR: AtalhoCentral[] = [
   {
+    href: "/estrategias/calendario",
+    nome: "1. Calendário da rede",
+    descricao: "Datas comerciais, campanhas oficiais e mudanças do boost por data — avisa quando uma data chega sem campanha.",
+    Icone: CalendarBlank,
+  },
+  {
     href: "/estrategias/moldes",
-    nome: "1. Moldes (sequências)",
+    nome: "2. Moldes (sequências)",
     descricao: "Monte uma vez uma sequência de campanhas (etapas, tipo, duração) pra reaproveitar em várias unidades.",
     Icone: Stack,
   },
   {
     href: "/estrategias/campanhas-mae",
-    nome: "2. Campanha oficial da rede",
+    nome: "3. Campanha oficial da rede",
     descricao: "Aplique um molde, com o criativo oficial, nas unidades que você escolher (a Campanha-Mãe).",
     Icone: Crown,
   },
