@@ -326,7 +326,16 @@ export default function PainelContas({
                             {conta.nome_exibicao || conta.meta_ad_account_nome || conta.meta_ad_account_id}
                           </span>
                           {conta.page_nome && <span>· {conta.page_nome}</span>}
-                          {conta.instagram_username && <span>· @{conta.instagram_username}</span>}
+                          {conta.instagram_username ? (
+                            <span>· @{conta.instagram_username}</span>
+                          ) : (
+                            <span
+                              title="Sem Instagram vinculado a essa Página: Radar de posts, boost e relatório orgânico não funcionam nessa unidade."
+                              className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-400"
+                            >
+                              Sem Instagram
+                            </span>
+                          )}
                           {conta.sigla_campanha && (
                             <span className="rounded-full bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-semibold text-neutral-300">
                               {conta.sigla_campanha}

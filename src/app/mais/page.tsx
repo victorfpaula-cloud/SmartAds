@@ -1,16 +1,16 @@
 import Cabecalho from "@/components/Cabecalho";
 import Link from "next/link";
-import { Lightning, Target, Robot, ChartLineUp } from "@phosphor-icons/react/dist/ssr";
+import { Buildings, Target, Robot } from "@phosphor-icons/react/dist/ssr";
 import type { Icon } from "@phosphor-icons/react";
 
 export const dynamic = "force-dynamic";
 
 const FERRAMENTAS: { href: string; nome: string; descricao: string; Icone: Icon }[] = [
   {
-    href: "/boost",
-    nome: "Boost",
-    descricao: "O padrão do boost da rede: engajamento, alcance ou os dois, orçamento, duração e regras por data (Natal, Páscoa…).",
-    Icone: Lightning,
+    href: "/contas",
+    nome: "Contas",
+    descricao: "Cadastro das empresas e unidades, conexão com a Meta, reconectar login e ligar o boost automático por conta.",
+    Icone: Buildings,
   },
   {
     href: "/publicos",
@@ -23,12 +23,6 @@ const FERRAMENTAS: { href: string; nome: string; descricao: string; Icone: Icon 
     nome: "Automação",
     descricao: "Regras que ajustam orçamento e pausam anúncio fraco sozinhas, dentro dos limites que você define.",
     Icone: Robot,
-  },
-  {
-    href: "/relatorios",
-    nome: "Relatórios",
-    descricao: "Resumo de gasto, alcance e resultado por cliente — pronto pra revisar ou mandar pra eles.",
-    Icone: ChartLineUp,
   },
 ];
 

@@ -1,38 +1,55 @@
-import { Crown, Gauge, Stack, Broadcast, Megaphone, Wallet } from "@phosphor-icons/react/dist/ssr";
+import { Crown, Gauge, Stack, Broadcast, Megaphone, Wallet, Lightning, PiggyBank } from "@phosphor-icons/react/dist/ssr";
 import AtalhosCentral, { type AtalhoCentral } from "@/components/AtalhosCentral";
 import { obterResumoRedePorUnidade } from "@/lib/campanhasRede";
 import PanoramaCampanhasRede from "@/components/PanoramaCampanhasRede";
 
-const ATALHOS: AtalhoCentral[] = [
+// Duas etapas, na ordem em que se usam: PLANEJAR (montar a sequência e a campanha oficial) e
+// ACOMPANHAR (ver o que está no ar, o dinheiro e a saúde de cada unidade).
+const PLANEJAR: AtalhoCentral[] = [
+  {
+    href: "/estrategias/moldes",
+    nome: "1. Moldes (sequências)",
+    descricao: "Monte uma vez uma sequência de campanhas (etapas, tipo, duração) pra reaproveitar em várias unidades.",
+    Icone: Stack,
+  },
+  {
+    href: "/estrategias/campanhas-mae",
+    nome: "2. Campanha oficial da rede",
+    descricao: "Aplique um molde, com o criativo oficial, nas unidades que você escolher (a Campanha-Mãe).",
+    Icone: Crown,
+  },
+  {
+    href: "/boost",
+    nome: "Boost da rede",
+    descricao: "O que o boost entrega (engajamento, alcance ou os dois), orçamento e datas especiais.",
+    Icone: Lightning,
+  },
+];
+
+const ACOMPANHAR: AtalhoCentral[] = [
   {
     href: "/campanhas?rede=franquia",
     nome: "Campanhas da rede",
-    descricao: "Só as unidades de franquia — escolha uma pra ver e mexer nas campanhas dela.",
+    descricao: "O que está no ar em cada unidade — escolha uma pra ver e mexer nas campanhas dela.",
     Icone: Megaphone,
   },
   {
     href: "/financeiro?rede=franquia",
     nome: "Financeiro da rede",
-    descricao: "Saldo e ritmo de gasto só das unidades de franquia.",
+    descricao: "Saldo, ritmo de gasto e situação da conta de cada unidade.",
     Icone: Wallet,
   },
   {
-    href: "/estrategias/campanhas-mae",
-    nome: "Campanhas-Mãe",
-    descricao: "O padrão oficial de campanha da rede, aplicado em quantas unidades você quiser.",
-    Icone: Crown,
+    href: "/financeiro/investimentos",
+    nome: "Investimento por unidade",
+    descricao: "Quanto cada unidade combinou investir no mês, quanto já investiu e quando.",
+    Icone: PiggyBank,
   },
   {
     href: "/estrategias/semaforo",
     nome: "Semáforo das unidades",
     descricao: "Quais unidades estão indo bem e quais precisam de atenção agora.",
     Icone: Gauge,
-  },
-  {
-    href: "/estrategias/moldes",
-    nome: "Moldes de campanhas",
-    descricao: "Sequências reutilizáveis (etapas, tipo, duração) — monte uma vez, aplique em várias unidades.",
-    Icone: Stack,
   },
   {
     href: "/estrategias/postagens",
@@ -55,7 +72,14 @@ export default async function PainelEstrategias() {
 
   return (
     <div className="flex flex-col gap-5">
-      <AtalhosCentral atalhos={ATALHOS} />
+      <section>
+        <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Planejar</h2>
+        <AtalhosCentral atalhos={PLANEJAR} />
+      </section>
+      <section>
+        <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Acompanhar</h2>
+        <AtalhosCentral atalhos={ACOMPANHAR} />
+      </section>
 
       <PanoramaCampanhasRede unidades={unidades} atualizadoEm={atualizadoEm} comBoost />
     </div>
