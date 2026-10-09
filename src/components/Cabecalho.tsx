@@ -76,6 +76,7 @@ export default async function Cabecalho({
             {ambiente && (
               <>
                 <Link
+                  prefetch={false}
                   href={limpar("/")}
                   className="flex shrink-0 items-center gap-1 text-xs font-medium text-neutral-400 hover:text-neutral-200"
                 >

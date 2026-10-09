@@ -32,6 +32,7 @@ export default function MenuNavegacao({ itens }: { itens: ItemMenu[] }) {
         <Link
           key={i.href + i.label}
           href={i.href}
+          prefetch={i.href.startsWith("/api/") ? false : undefined}
           className={
             ativo === i.href
               ? "pilula-ativa whitespace-nowrap rounded-lg px-3.5 py-2 text-[13px] font-semibold text-neutral-100"
