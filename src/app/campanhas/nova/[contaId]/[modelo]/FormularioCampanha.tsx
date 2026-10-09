@@ -234,7 +234,7 @@ export default function FormularioCampanha({
     setPublicando(false);
 
     if (resposta.ok) {
-      router.push("/campanhas");
+      router.push(`/campanhas/conta/${contaId}`);
     } else {
       setErro(corpo.erro || "Falha ao publicar a campanha.");
     }

@@ -175,8 +175,8 @@ function Detalhe({ u, mes, onMudou }: { u: InvestimentoUnidade; mes: string; onM
 
         <div>
           <p className="text-xs font-semibold text-neutral-400">Lançar um aporte</p>
-          <div className="mt-1 grid grid-cols-2 gap-2">
-            <input type="date" value={data} onChange={(e) => setData(e.target.value)} className={campo} />
+          <div className="mt-1 grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <input type="date" value={data} onChange={(e) => setData(e.target.value)} className={`${campo} min-w-0`} />
             <input value={valor} onChange={(e) => setValor(e.target.value)} inputMode="decimal" placeholder="Valor (R$)" className={campo} />
             <input value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Observação (opcional)" className={`${campo} col-span-2`} />
             <button

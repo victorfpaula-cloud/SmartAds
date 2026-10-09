@@ -1,4 +1,5 @@
 import Cabecalho from "@/components/Cabecalho";
+import { AbasUnidades } from "@/components/AbasRede";
 import Link from "next/link";
 import {
   obterRelatorioPostagens,
@@ -87,13 +88,11 @@ export default async function PostagensPage() {
   return (
     <>
       <Cabecalho ativo="/estrategias" />
-      <main className="mx-auto max-w-5xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
-        <Link href="/estrategias" className="text-xs text-neutral-500 hover:text-neutral-300">
-          ← Central da rede
-        </Link>
+      <main className="mx-auto max-w-6xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
+        <AbasUnidades />
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="mt-1 font-display text-2xl font-bold">Radar de posts</h1>
+            <h1 className="font-display text-2xl font-bold">Radar de posts</h1>
             <p className="mt-1 text-sm text-neutral-400">
               Post mais recente de cada unidade no Instagram — feed, Reels ou carrossel, vale
               qualquer formato — mais os stories do dia e do mês (com a comparação contra a rede). 5 dias

@@ -88,15 +88,18 @@ export function calcularPlanejamento(conta: ContaFinanceiro, hoje: Date = new Da
  * rodar pela primeira vez). Também soma quanto já está planejado mas ainda não começou a gastar
  * (etapas de Plano de Execução aguardando + ajustes de orçamento sugeridos pelo Diagnóstico ainda
  * não decididos) — isso sim é sempre ao vivo, é consulta só no Supabase, não na Meta. */
-export async function coletarFinanceiro(): Promise<ContaFinanceiro[]> {
+export async function coletarFinanceiro(empresaId?: string): Promise<ContaFinanceiro[]> {
   const supabase = criarClienteAdmin();
 
+  let consultaClientes = supabase
+    .from("smartads_clientes")
+    .select("id, nome, ativo, smartads_empresas(id, nome, tipo), smartads_contas_meta(*)")
+    .eq("ativo", true)
+    .order("nome");
+  if (empresaId) consultaClientes = consultaClientes.eq("empresa_id", empresaId);
+
   const [{ data: clientes }, { data: cache }] = await Promise.all([
-    supabase
-      .from("smartads_clientes")
-      .select("id, nome, ativo, smartads_empresas(id, nome, tipo), smartads_contas_meta(*)")
-      .eq("ativo", true)
-      .order("nome"),
+    consultaClientes,
     supabase
       .from("smartads_financeiro_cache")
       .select(

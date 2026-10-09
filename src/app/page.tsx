@@ -53,13 +53,6 @@ export default async function Home() {
           </div>
         )}
 
-        <Link
-          href="/campanhas"
-          className="mt-6 flex items-center justify-between rounded-xl border border-white/10 px-4 py-3 text-sm text-neutral-300 hover:bg-white/[0.04]"
-        >
-          Ver as campanhas de todas as contas
-          <ArrowRight size={16} />
-        </Link>
       </main>
     </>
   );

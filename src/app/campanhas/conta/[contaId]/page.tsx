@@ -4,6 +4,7 @@ import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { notFound } from "next/navigation";
 import PainelCampanhasDaConta from "./PainelCampanhasDaConta";
 import { mesAtualEmSaoPaulo } from "@/lib/tempoSaoPaulo";
+import { lerAmbiente } from "@/lib/ambiente";
 import { contaSemSaldo } from "@/lib/financeiro/situacaoConta";
 
 export const dynamic = "force-dynamic";
@@ -14,11 +15,15 @@ export default async function CampanhasDaContaPage({ params }: { params: Promise
 
   const { data: conta } = await supabase
     .from("smartads_contas_meta")
-    .select("id, nome_exibicao, meta_ad_account_nome, meta_ad_account_id, smartads_clientes(nome)")
+    .select("id, nome_exibicao, meta_ad_account_nome, meta_ad_account_id, smartads_clientes(nome, empresa_id)")
     .eq("id", contaId)
     .single();
 
   if (!conta) notFound();
+  // A conta tem que ser do ambiente aberto — não dá pra entrar na conta de outra empresa pelo link.
+  const ambiente = await lerAmbiente();
+  const rel = (conta as any).smartads_clientes;
+  if (ambiente && (Array.isArray(rel) ? rel[0] : rel)?.empresa_id !== ambiente.id) notFound();
 
   // Gasto do mês corrente da conta (atualizado pelo cron das campanhas da rede); só vale se for do
   // mês atual — um valor de mês anterior significaria que o cron ainda não rodou neste mês.

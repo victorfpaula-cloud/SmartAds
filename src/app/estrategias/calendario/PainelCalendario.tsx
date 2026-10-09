@@ -198,14 +198,14 @@ export default function PainelCalendario({
             ))}
           </div>
         )}
-        <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_10rem_9rem_auto] sm:items-end">
+        <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_11rem_9rem_auto] sm:items-end">
           <div>
             <label className="text-xs font-semibold text-neutral-400">Nome</label>
             <input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex.: Inauguração da loja nova" className={campo} />
           </div>
-          <div>
+          <div className="min-w-0">
             <label className="text-xs font-semibold text-neutral-400">Data</label>
-            <input type="date" value={data} onChange={(e) => setData(e.target.value)} className={campo} />
+            <input type="date" value={data} onChange={(e) => setData(e.target.value)} className={`${campo} min-w-0`} />
           </div>
           <div>
             <label className="text-xs font-semibold text-neutral-400">Começar (dias antes)</label>

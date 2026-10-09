@@ -192,8 +192,8 @@ export default function PainelContas({
       <div>
         <h1 className="font-display text-2xl font-bold">Contas</h1>
         <p className="mt-1 text-sm text-neutral-400">
-          Cadastro e conexão — clientes, empresas e contas de anúncio Meta. Pra criar campanha ou
-          ver diagnóstico no dia a dia, isso é no Início.
+          Cadastro e conexão com a Meta — empresas, clientes e contas de anúncio. O dia a dia (campanhas,
+          financeiro, boost) fica dentro de cada empresa: Início → card da empresa.
         </p>
       </div>
 

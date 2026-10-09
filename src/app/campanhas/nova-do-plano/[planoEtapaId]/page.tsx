@@ -99,7 +99,7 @@ export default async function NovaCampanhaDoPlanoPage({
   return (
     <>
       <Cabecalho ativo="/estrategias" />
-      <main className="mx-auto max-w-3xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
+      <main className="mx-auto max-w-6xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
         <p className="text-xs font-medium text-neutral-500">
           {conta.smartads_clientes?.nome} · {plano.nome}
         </p>

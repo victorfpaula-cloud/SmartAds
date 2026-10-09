@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 
 export const COOKIE_AMBIENTE = "smartads_ambiente";
@@ -18,7 +19,20 @@ export async function lerAmbiente(): Promise<Ambiente | null> {
   return data ? { id: data.id, nome: data.nome, tipo: data.tipo === "franquia" ? "franquia" : "individual" } : null;
 }
 
-/** Empresa a usar numa página: o parâmetro explícito da URL ou, na falta dele, o ambiente aberto. */
+/** Empresa a usar numa página: o ambiente aberto manda (nunca dá pra escapar dele por parâmetro); o
+ * parâmetro da URL só vale na visão geral, sem ambiente. */
 export async function empresaDaPagina(paramEmpresa?: string): Promise<string | undefined> {
-  return paramEmpresa || (await lerAmbiente())?.id;
+  return (await lerAmbiente())?.id ?? (paramEmpresa || undefined);
+}
+
+/** Tela que só existe dentro de um ambiente (e, se `tipo` vier, de um tipo específico). Sem ambiente
+ * volta pro Início; com o tipo errado leva pro começo do ambiente certo — assim nunca aparece tela de
+ * franquia dentro de conta única (nem lista de outras empresas dentro de um ambiente). */
+export async function exigirAmbiente(tipo?: Ambiente["tipo"]): Promise<Ambiente> {
+  const ambiente = await lerAmbiente();
+  if (!ambiente) redirect("/");
+  if (tipo && ambiente.tipo !== tipo) {
+    redirect(ambiente.tipo === "franquia" ? "/estrategias" : `/central/${ambiente.id}`);
+  }
+  return ambiente;
 }
