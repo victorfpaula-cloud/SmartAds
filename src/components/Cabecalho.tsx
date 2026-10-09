@@ -4,30 +4,30 @@ import {
   Buildings,
   Megaphone,
   Wallet,
-  FilePdf,
+  Lightning,
+  ChartLineUp,
   DotsThreeCircle,
   SignOut,
   ArrowLeft,
 } from "@phosphor-icons/react/dist/ssr";
 
-// Só as 6 coisas que se abrem quase todo dia ficam fixas aqui — era o padrão original do app, antes
-// da barra crescer pra 7-8 ícones conforme cada fase nova adicionava a própria aba (achado
-// reportado pelo dono: "não sei nem mexer nele" de tanta coisa espremida). Públicos, Automação e
-// Relatórios (uso mais esporádico — configura uma vez, revisita de vez em quando) foram pra dentro
-// de "Mais", que também explica o que cada um faz (ver /mais/page.tsx). "Estratégias"/Central da
-// Rede nem entra aqui — é pauta só de franquia, acessada pelo card da empresa na tela inicial.
+// As 6 coisas que se abrem quase todo dia ficam fixas aqui: Início, Campanhas, Boost (a função
+// principal), Financeiro e Relatórios. Contas (cadastro/administração), Públicos e Automação — uso
+// mais esporádico — ficam em "Mais", que explica o que cada um faz (ver /mais/page.tsx).
+// "Estratégias"/Central da Rede nem entra aqui — é pauta só de franquia, acessada pelo card da
+// empresa na tela inicial.
 const LINKS = [
   { href: "/", label: "Início", Icone: House },
-  { href: "/contas", label: "Contas", Icone: Buildings },
   { href: "/campanhas", label: "Campanhas", Icone: Megaphone },
+  { href: "/boost", label: "Boost", Icone: Lightning },
   { href: "/financeiro", label: "Financeiro", Icone: Wallet },
-  { href: "/relatorio-ads", label: "Relatório Ads", Icone: FilePdf },
+  { href: "/relatorios", label: "Relatórios", Icone: ChartLineUp },
   { href: "/mais", label: "Mais", Icone: DotsThreeCircle },
 ];
 
 // Páginas que vivem "dentro" de Mais — abrem a página normalmente, mas a aba que acende na barra é
 // a de Mais, não nenhuma (senão pareceria que saiu da navegação principal ao entrar nelas).
-const PAGINAS_DENTRO_DE_MAIS = ["/boost", "/publicos", "/automacao", "/relatorios", "/mais"];
+const PAGINAS_DENTRO_DE_MAIS = ["/contas", "/publicos", "/automacao", "/mais"];
 
 /** Navegação principal — vira barra de abas fixa embaixo no celular (padrão de app, mais fácil de
  * alcançar com o polegar) e barra no topo no desktop. Um só componente, dois layouts via classes
@@ -49,7 +49,13 @@ export default function Cabecalho({
   geralHref?: string;
 }) {
   const modoRede = rede || ativo === "/estrategias" || Boolean(empresa);
-  const ativoNaBarra = modoRede ? "" : PAGINAS_DENTRO_DE_MAIS.includes(ativo) ? "/mais" : ativo;
+  const ativoNaBarra = modoRede
+    ? ""
+    : PAGINAS_DENTRO_DE_MAIS.includes(ativo)
+      ? "/mais"
+      : ativo === "/relatorio-ads"
+        ? "/relatorios" // Relatório Ads é uma aba dentro de Relatórios
+        : ativo;
 
   return (
     <>
