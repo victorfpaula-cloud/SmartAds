@@ -17,8 +17,9 @@ function formatarAtualizacao(iso: string | null): string {
 
 function totais(unidades: UnidadeRedeResumo[]) {
   return {
-    campanhas: unidades.reduce((soma, u) => soma + (u.campanhasAtivas ?? 0), 0),
-    comCampanha: unidades.filter((u) => (u.campanhasAtivas ?? 0) > 0).length,
+    campanhas: unidades.reduce((soma, u) => soma + (u.semSaldo ? 0 : u.campanhasAtivas ?? 0), 0),
+    paradasSemSaldo: unidades.reduce((soma, u) => soma + (u.semSaldo ? u.campanhasAtivas ?? 0 : 0), 0),
+    comCampanha: unidades.filter((u) => !u.semSaldo && (u.campanhasAtivas ?? 0) > 0).length,
     semDados: unidades.filter((u) => u.campanhasAtivas === null).length,
     gastoMes: unidades.reduce((soma, u) => soma + (u.gastoMesCentavos ?? 0), 0),
     algumGasto: unidades.some((u) => u.gastoMesCentavos !== null),
@@ -33,6 +34,12 @@ function Indicadores({ unidades, nomeMes }: { unidades: UnidadeRedeResumo[]; nom
         <p className="text-[10.5px] font-medium uppercase tracking-wide text-neutral-500">No ar</p>
         <p className="text-lg font-bold leading-tight text-neutral-100">{t.campanhas}</p>
       </div>
+      {t.paradasSemSaldo > 0 && (
+        <div>
+          <p className="text-[10.5px] font-medium uppercase tracking-wide text-danger">Paradas sem saldo</p>
+          <p className="text-lg font-bold leading-tight text-danger">{t.paradasSemSaldo}</p>
+        </div>
+      )}
       <div>
         <p className="text-[10.5px] font-medium uppercase tracking-wide text-neutral-500">Gasto em {nomeMes}</p>
         <p className="text-lg font-bold leading-tight text-neutral-100">{t.algumGasto ? reais(t.gastoMes) : "—"}</p>

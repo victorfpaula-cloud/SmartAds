@@ -1,4 +1,5 @@
 import { criarClienteAdmin } from "@/lib/supabase/admin";
+import { contaSemSaldo } from "@/lib/financeiro/situacaoConta";
 import { listarCampanhas, campanhaAtivaAgora, obterInsightsConta } from "@/lib/meta/api";
 import { mesAtualEmSaoPaulo } from "@/lib/tempoSaoPaulo";
 import { obterResumoBoostPorConta, type ResumoBoostConta } from "@/lib/boostResumo";
@@ -325,6 +326,8 @@ export interface UnidadeRedeResumo {
   campanhasAtivas: number | null;
   /** Gasto do mês corrente, em centavos; null = ainda não calculado neste mês. */
   gastoMesCentavos: number | null;
+  /** Conta pré-paga sem saldo: as campanhas "ativas" na Meta não estão entregando de verdade. */
+  semSaldo: boolean;
   boost: BoostDaUnidade;
 }
 
@@ -348,11 +351,15 @@ export async function obterResumoPorUnidade(opcoes: { apenasFranquia: boolean; e
   if (opcoes.apenasFranquia) consultaClientes = consultaClientes.eq("smartads_empresas.tipo", "franquia");
   if (opcoes.empresaId) consultaClientes = consultaClientes.eq("empresa_id", opcoes.empresaId);
 
-  const [{ data: cacheCampanhas }, { data: cacheGasto }, { data: clientes }] = await Promise.all([
+  const [{ data: cacheCampanhas }, { data: cacheGasto }, { data: clientes }, { data: financeiro }] = await Promise.all([
     supabase.from("smartads_campanhas_rede_cache").select("conta_id, atualizado_em"),
     supabase.from("smartads_gasto_mes_cache").select("conta_id, mes, gasto_mes_centavos, atualizado_em"),
     consultaClientes,
+    supabase.from("smartads_financeiro_cache").select("conta_id, saldo_disponivel_centavos, conta_pre_paga"),
   ]);
+  const semSaldoPorConta = new Map(
+    (financeiro ?? []).map((f) => [f.conta_id, contaSemSaldo(f.saldo_disponivel_centavos, f.conta_pre_paga)])
+  );
 
   const ativasPorConta = new Map<string, number>();
   for (const linha of cacheCampanhas ?? []) {
@@ -382,6 +389,7 @@ export async function obterResumoPorUnidade(opcoes: { apenasFranquia: boolean; e
         campanhasAtivas:
           ativasPorConta.has(conta.id) || gastoPorConta.has(conta.id) ? ativasPorConta.get(conta.id) ?? 0 : null,
         gastoMesCentavos: gastoPorConta.has(conta.id) ? gastoPorConta.get(conta.id)! : null,
+        semSaldo: semSaldoPorConta.get(conta.id) ?? false,
         boost: {
           clienteId: cliente.id,
           temInstagram: Boolean(conta.instagram_business_id),

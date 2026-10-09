@@ -4,6 +4,7 @@ import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { notFound } from "next/navigation";
 import PainelCampanhasDaConta from "./PainelCampanhasDaConta";
 import { mesAtualEmSaoPaulo } from "@/lib/tempoSaoPaulo";
+import { contaSemSaldo } from "@/lib/financeiro/situacaoConta";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,12 @@ export default async function CampanhasDaContaPage({ params }: { params: Promise
     .eq("conta_id", contaId)
     .maybeSingle();
   const mesAtual = mesAtualEmSaoPaulo();
+  const { data: financeiro } = await supabase
+    .from("smartads_financeiro_cache")
+    .select("saldo_disponivel_centavos, conta_pre_paga")
+    .eq("conta_id", contaId)
+    .maybeSingle();
+  const semSaldo = contaSemSaldo(financeiro?.saldo_disponivel_centavos, financeiro?.conta_pre_paga);
 
   const nomeConta = conta.nome_exibicao || conta.meta_ad_account_nome || conta.meta_ad_account_id;
   const nomeCliente = (conta as any).smartads_clientes?.nome ?? "";
@@ -44,6 +51,7 @@ export default async function CampanhasDaContaPage({ params }: { params: Promise
         <div className="mt-6">
           <PainelCampanhasDaConta
             contaId={contaId}
+            semSaldo={semSaldo}
             gastoMesCentavos={gastoMes && gastoMes.mes === mesAtual ? gastoMes.gasto_mes_centavos : null}
           />
         </div>
