@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Manrope, Space_Grotesk } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -25,16 +25,19 @@ export const viewport: Viewport = {
 };
 
 // Mesmo par de fontes dos apps irmãos: Space Grotesk pros títulos/números (classe font-display,
-// ver tailwind.config.ts), Manrope pro corpo. Via next/font — hospedadas no próprio build, sem
-// chamada externa ao Google Fonts em produção.
-const fonteDisplay = Space_Grotesk({
-  subsets: ["latin"],
-  weight: ["500", "600", "700"],
+// ver tailwind.config.ts), Manrope pro corpo. Arquivos (variáveis, subconjunto latin) guardados em
+// src/app/fonts — antes vinham do Google Fonts na hora do build e o deploy falhava de vez em
+// quando quando o Google não respondia direito.
+const fonteDisplay = localFont({
+  src: "./fonts/SpaceGrotesk-latin.woff2",
+  weight: "500 700",
+  display: "swap",
   variable: "--font-display",
 });
-const fonteCorpo = Manrope({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
+const fonteCorpo = localFont({
+  src: "./fonts/Manrope-latin.woff2",
+  weight: "400 800",
+  display: "swap",
   variable: "--font-body",
 });
 
