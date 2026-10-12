@@ -84,14 +84,27 @@ export async function obterRelatorioPostagens(): Promise<UnidadeRelatorioPostage
   // Busca os stories já vistos de todas as unidades numa query só (não uma por conta) — mesma
   // janela de 30 dias da tabela, agrupado por conta+dia pra montar o contador de cada célula.
   const contaIds = unidades.map(({ conta }) => conta.id as string);
-  const { data: storiesLinhas } =
-    contaIds.length > 0
-      ? await supabase.from("smartads_stories_vistos").select("conta_id, dia").in("conta_id", contaIds).gte("dia", diasJanela[0])
-      : { data: [] as Array<{ conta_id: string; dia: string }> };
+  // O Supabase devolve no máximo 1000 linhas por consulta — com ~80 stories/dia a janela de 30 dias
+  // passa disso e os dias mais recentes sumiam (viravam "0"). Por isso a leitura é paginada.
+  const storiesLinhas: Array<{ conta_id: string; dia: string }> = [];
+  if (contaIds.length > 0) {
+    const TAMANHO_PAGINA = 1000;
+    for (let de = 0; ; de += TAMANHO_PAGINA) {
+      const { data: pagina } = await supabase
+        .from("smartads_stories_vistos")
+        .select("id, conta_id, dia")
+        .in("conta_id", contaIds)
+        .gte("dia", diasJanela[0])
+        .order("id", { ascending: true })
+        .range(de, de + TAMANHO_PAGINA - 1);
+      storiesLinhas.push(...((pagina ?? []) as Array<{ conta_id: string; dia: string }>));
+      if (!pagina || pagina.length < TAMANHO_PAGINA) break;
+    }
+  }
 
   const storiesPorConta = new Map<string, Map<string, number>>();
   let primeiroDiaComRegistro: string | null = null;
-  for (const linha of storiesLinhas ?? []) {
+  for (const linha of storiesLinhas) {
     if (primeiroDiaComRegistro === null || linha.dia < primeiroDiaComRegistro) primeiroDiaComRegistro = linha.dia;
     const porDia = storiesPorConta.get(linha.conta_id) ?? new Map<string, number>();
     porDia.set(linha.dia, (porDia.get(linha.dia) ?? 0) + 1);
