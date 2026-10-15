@@ -15,7 +15,7 @@ import { mapearEmLotes } from "@/lib/lotes";
  * pra unidades de franquia — mesmo recorte de obterRelatorioPostagens. Processa as contas em lotes
  * (mapearEmLotes) em vez de uma por uma — corta o tempo total sem arriscar estourar rate limit da
  * Meta quando o catálogo de clientes crescer. */
-export async function coletarStoriesAtivos(): Promise<{ contasVerificadas: number; storiesRegistrados: number }> {
+export async function coletarStoriesAtivos(): Promise<{ contasVerificadas: number; storiesRegistrados: number; contasComErro: string[] }> {
   const supabase = criarClienteAdmin();
   const { data: clientes } = await supabase
     .from("smartads_clientes")
@@ -27,8 +27,20 @@ export async function coletarStoriesAtivos(): Promise<{ contasVerificadas: numbe
     (cliente.smartads_contas_meta as any[]).filter((conta) => conta.ativo && conta.instagram_business_id)
   );
 
+  // Contas em que a Meta recusou/falhou a leitura dos stories: antes isso virava "0 stories" sem
+  // aviso nenhum; agora aparece no log e na resposta do cron.
+  const contasComErro: string[] = [];
+
   const registradosPorConta = await mapearEmLotes(contas, async (conta) => {
-    const stories = await listarStoriesAtivosInstagram(conta.instagram_business_id).catch(() => []);
+    let stories;
+    try {
+      stories = await listarStoriesAtivosInstagram(conta.instagram_business_id);
+    } catch (erro) {
+      const nome = conta.instagram_username || conta.nome_exibicao || conta.id;
+      contasComErro.push(`${nome}: ${erro instanceof Error ? erro.message.slice(0, 160) : "erro"}`);
+      console.error("[stories] falha ao ler stories de", nome, erro);
+      return 0;
+    }
     if (stories.length === 0) return 0;
 
     const linhas = stories.map((story) => ({
@@ -46,5 +58,5 @@ export async function coletarStoriesAtivos(): Promise<{ contasVerificadas: numbe
   });
 
   const storiesRegistrados = registradosPorConta.reduce((soma, n) => soma + n, 0);
-  return { contasVerificadas: contas.length, storiesRegistrados };
+  return { contasVerificadas: contas.length, storiesRegistrados, contasComErro };
 }
