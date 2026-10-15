@@ -9,6 +9,7 @@ import {
 } from "@/lib/relatorioPostagens";
 import { diasEntreEmSaoPaulo } from "@/lib/tempoSaoPaulo";
 import { WarningCircle, InstagramLogo, DownloadSimple, GridFour, CircleDashed, FilmStrip } from "@phosphor-icons/react/dist/ssr";
+import BotaoAtualizarRadar from "./BotaoAtualizarRadar";
 import BotaoEnviarRelatorio from "./BotaoEnviarRelatorio";
 
 export const dynamic = "force-dynamic";
@@ -99,7 +100,8 @@ export default async function PostagensPage() {
             </p>
             <p className="mt-1 text-[11px] text-neutral-600">Verificado às {horaVerificacao}</p>
           </div>
-          <div className="flex shrink-0 gap-2">
+          <div className="flex shrink-0 flex-wrap items-start gap-2">
+            <BotaoAtualizarRadar />
             <a
               href="/api/relatorios/postagens"
               download
