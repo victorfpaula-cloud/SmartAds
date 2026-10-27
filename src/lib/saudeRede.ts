@@ -80,6 +80,10 @@ export interface ParteOrganicoTrafego {
   total: number;
   organico: number;
   trafego: number;
+  /** Em quantas unidades a Meta deu os dois lados (a divisão só soma essas). */
+  unidades: number;
+  /** Em quantas dessas os anúncios disseram ter entregue mais que o total do Instagram (limitado ao total). */
+  limitadas: number;
 }
 
 export interface ResumoRede {
@@ -111,6 +115,9 @@ export interface ResumoRede {
     impressoes: number;
     cliquesNoLink: number;
     engajamentos: number;
+    /** Parte do alcance/gasto que rodou no Instagram; o resto rodou em outras plataformas (Facebook etc.). */
+    alcanceInstagram: number;
+    gastoForaInstagram: number;
     cpm: number | null;
     custoPorMilAlcancados: number | null;
     custoPorEngajamento: number | null;
@@ -146,11 +153,12 @@ export async function carregarSaudeRede(empresaId: string, dias: number): Promis
     taxaEngajamento: null,
     curtidas: 0, comentarios: 0, compartilhamentos: 0, salvamentos: 0,
     divisao: { alcance: null, visualizacoes: null, interacoes: null },
-    anuncios: { gasto: 0, alcance: 0, impressoes: 0, cliquesNoLink: 0, engajamentos: 0, cpm: null, custoPorMilAlcancados: null, custoPorEngajamento: null, unidadesInvestindo: 0 },
+    anuncios: { gasto: 0, alcance: 0, impressoes: 0, cliquesNoLink: 0, engajamentos: 0, alcanceInstagram: 0, gastoForaInstagram: 0, cpm: null, custoPorMilAlcancados: null, custoPorEngajamento: null, unidadesInvestindo: 0 },
     serieDiaria: [],
   };
   const serie = new Map<string, { alcance: number; gasto: number }>();
-  const dv = { alcance: { total: 0, organico: 0, trafego: 0, n: 0 }, visualizacoes: { total: 0, organico: 0, trafego: 0, n: 0 }, interacoes: { total: 0, organico: 0, trafego: 0, n: 0 } };
+  const novo = () => ({ total: 0, organico: 0, trafego: 0, n: 0, lim: 0 });
+  const dv = { alcance: novo(), visualizacoes: novo(), interacoes: novo() };
 
   const adsJaSomados = new Set<string>();
   const igJaSomados = new Set<string>();
@@ -186,6 +194,9 @@ export async function carregarSaudeRede(empresaId: string, dias: number): Promis
       r.anuncios.cliquesNoLink += t.cliquesNoLink;
       r.anuncios.engajamentos += t.engajamentos;
       if (t.gasto > 0) r.anuncios.unidadesInvestindo++;
+      const pl = d.plataformas ?? [];
+      r.anuncios.alcanceInstagram += pl.find((x) => x.plataforma === "instagram")?.alcance ?? (pl.length === 0 ? t.alcance : 0);
+      r.anuncios.gastoForaInstagram += pl.filter((x) => x.plataforma !== "instagram").reduce((a, x) => a + x.gasto, 0);
     }
     for (const s of novaContaAnuncio ? d.serieDiaria ?? [] : []) {
       const x = serie.get(s.dia) ?? { alcance: 0, gasto: 0 };
@@ -231,16 +242,17 @@ export async function carregarSaudeRede(empresaId: string, dias: number): Promis
     // Orgânico × tráfego: só soma onde a Meta deu os dois lados.
     const alc = item(d, "alcance");
     if (alc && alc.total != null && alc.organico != null && alc.trafego != null) {
-      dv.alcance.total += alc.total; dv.alcance.organico += alc.organico; dv.alcance.trafego += alc.trafego; dv.alcance.n++;
+      dv.alcance.total += alc.total; dv.alcance.organico += alc.organico; dv.alcance.trafego += alc.trafego; dv.alcance.n++; if ((alc.trafegoLido ?? 0) > alc.trafego) dv.alcance.lim++;
     }
     if (vis && vis.total != null && vis.organico != null && vis.trafego != null) {
-      dv.visualizacoes.total += vis.total; dv.visualizacoes.organico += vis.organico; dv.visualizacoes.trafego += vis.trafego; dv.visualizacoes.n++;
+      dv.visualizacoes.total += vis.total; dv.visualizacoes.organico += vis.organico; dv.visualizacoes.trafego += vis.trafego; dv.visualizacoes.n++; if ((vis.trafegoLido ?? 0) > vis.trafego) dv.visualizacoes.lim++;
     }
     if (partes.every((p) => p && p.total != null && p.organico != null && p.trafego != null)) {
       dv.interacoes.total += partes.reduce((s, p) => s + (p!.total ?? 0), 0);
       dv.interacoes.organico += partes.reduce((s, p) => s + (p!.organico ?? 0), 0);
       dv.interacoes.trafego += partes.reduce((s, p) => s + (p!.trafego ?? 0), 0);
       dv.interacoes.n++;
+      if (partes.some((p) => (p!.trafegoLido ?? 0) > (p!.trafego ?? 0))) dv.interacoes.lim++;
     }
 
     r.linhas.push({
@@ -262,7 +274,7 @@ export async function carregarSaudeRede(empresaId: string, dias: number): Promis
 
   r.taxaEngajamento = r.alcance > 0 && r.interacoes > 0 ? (r.interacoes / r.alcance) * 100 : null;
   for (const k of ["alcance", "visualizacoes", "interacoes"] as const) {
-    r.divisao[k] = dv[k].n > 0 ? { total: dv[k].total, organico: dv[k].organico, trafego: dv[k].trafego } : null;
+    r.divisao[k] = dv[k].n > 0 ? { total: dv[k].total, organico: dv[k].organico, trafego: dv[k].trafego, unidades: dv[k].n, limitadas: dv[k].lim } : null;
   }
   const a = r.anuncios;
   a.cpm = a.impressoes > 0 ? (a.gasto / a.impressoes) * 1000 : null;

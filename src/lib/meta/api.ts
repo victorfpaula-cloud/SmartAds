@@ -1086,13 +1086,15 @@ export interface LinhaInsightRelatorio {
   cpm?: string;
   cpc?: string;
   actions?: AcaoInsight[];
+  /** Só vem quando o relatório é pedido com breakdownPlataforma (instagram, facebook, audience_network...). */
+  publisher_platform?: string;
   date_start?: string;
   date_stop?: string;
 }
 
 export async function obterInsightsRelatorio(
   adAccountId: string,
-  opcoes: { nivel: "account" | "campaign"; desde: string; ate: string; porDia?: boolean }
+  opcoes: { nivel: "account" | "campaign"; desde: string; ate: string; porDia?: boolean; breakdownPlataforma?: boolean }
 ): Promise<LinhaInsightRelatorio[]> {
   const campos =
     "spend,impressions,reach,frequency,clicks,inline_link_clicks,ctr,cpm,cpc,actions" +
@@ -1103,6 +1105,7 @@ export async function obterInsightsRelatorio(
       fields: campos,
       time_range: { since: opcoes.desde, until: opcoes.ate },
       ...(opcoes.porDia ? { time_increment: 1 } : {}),
+      ...(opcoes.breakdownPlataforma ? { breakdowns: "publisher_platform" } : {}),
       limit: 500,
     },
   });
