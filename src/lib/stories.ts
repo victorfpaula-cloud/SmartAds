@@ -23,9 +23,18 @@ export async function coletarStoriesAtivos(): Promise<{ contasVerificadas: numbe
     .eq("ativo", true)
     .eq("smartads_empresas.tipo", "franquia");
 
-  const contas = (clientes ?? []).flatMap((cliente: any) =>
-    (cliente.smartads_contas_meta as any[]).filter((conta) => conta.ativo && conta.instagram_business_id)
-  );
+  // Duas contas podem apontar pro MESMO Instagram (ex.: Principal e Expansão): lê uma vez só, senão o
+  // story é gravado na primeira e a segunda conta fica sem nada (o Radar junta as duas na leitura).
+  const igsVistos = new Set<string>();
+  const contas = (clientes ?? [])
+    .flatMap((cliente: any) =>
+      (cliente.smartads_contas_meta as any[]).filter((conta) => conta.ativo && conta.instagram_business_id)
+    )
+    .filter((conta: any) => {
+      if (igsVistos.has(conta.instagram_business_id)) return false;
+      igsVistos.add(conta.instagram_business_id);
+      return true;
+    });
 
   // Contas em que a Meta recusou/falhou a leitura dos stories: antes isso virava "0 stories" sem
   // aviso nenhum; agora aparece no log e na resposta do cron.

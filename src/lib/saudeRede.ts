@@ -11,21 +11,45 @@ export interface ContaDaRede {
   contaId: string;
   unidade: string;
   instagram: string | null;
+  adAccountId: string | null;
+  instagramId: string | null;
 }
 
 /** Contas ativas da franquia (uma linha por conta de anúncio). */
 export async function listarContasDaRede(empresaId: string): Promise<ContaDaRede[]> {
   const { data } = await criarClienteAdmin()
     .from("smartads_clientes")
-    .select("nome, smartads_contas_meta(id, ativo, instagram_username)")
+    .select("nome, smartads_contas_meta(id, ativo, instagram_username, meta_ad_account_id, instagram_business_id)")
     .eq("empresa_id", empresaId)
     .eq("ativo", true)
     .order("nome");
   return (data ?? []).flatMap((c: any) =>
     (c.smartads_contas_meta ?? [])
       .filter((conta: any) => conta.ativo !== false)
-      .map((conta: any) => ({ contaId: conta.id, unidade: c.nome, instagram: conta.instagram_username ?? null }))
+      .map((conta: any) => ({
+        contaId: conta.id,
+        unidade: c.nome,
+        instagram: conta.instagram_username ?? null,
+        adAccountId: conta.meta_ad_account_id ?? null,
+        instagramId: conta.instagram_business_id ?? null,
+      }))
   );
+}
+
+/** Contas cuja conta de anúncio e Instagram já aparecem em outra da lista (ex.: Principal e Expansão
+ * usam a mesma) — contadas uma vez só, pra não dobrar os totais da rede. Devolve contaId → nome da
+ * unidade que já representa os mesmos números. */
+export function contasRepetidas(contas: ContaDaRede[]): Map<string, string> {
+  const vistas = new Map<string, string>();
+  const repetidas = new Map<string, string>();
+  for (const c of contas) {
+    const chave = `${c.adAccountId ?? "-"}|${c.instagramId ?? "-"}`;
+    if (chave === "-|-") continue;
+    const dona = vistas.get(chave);
+    if (dona) repetidas.set(c.contaId, dona);
+    else vistas.set(chave, c.unidade);
+  }
+  return repetidas;
 }
 
 /** Tira do relatório o que a Saúde da rede não usa (detalhe por campanha) pra o cache ficar pequeno. */
@@ -38,7 +62,7 @@ export interface LinhaUnidade {
   contaId: string;
   unidade: string;
   instagram: string | null;
-  status: "ok" | "sem_dados" | "erro" | "sem_instagram";
+  status: "ok" | "sem_dados" | "erro" | "sem_instagram" | "repetida";
   mensagem: string | null;
   calculadoEm: string | null;
   posts: number | null;
@@ -101,6 +125,7 @@ const item = (d: Omit<DadosRelatorioAds, "campanhas">, chave: string): ItemOrgan
 /** Lê o cache da Saúde da rede e soma tudo. Nada aqui chama a Meta — os números vêm do botão Atualizar. */
 export async function carregarSaudeRede(empresaId: string, dias: number): Promise<ResumoRede> {
   const contas = await listarContasDaRede(empresaId);
+  const repetidas = contasRepetidas(contas);
   const { data: cache } =
     contas.length > 0
       ? await criarClienteAdmin()
@@ -127,10 +152,17 @@ export async function carregarSaudeRede(empresaId: string, dias: number): Promis
   const serie = new Map<string, { alcance: number; gasto: number }>();
   const dv = { alcance: { total: 0, organico: 0, trafego: 0, n: 0 }, visualizacoes: { total: 0, organico: 0, trafego: 0, n: 0 }, interacoes: { total: 0, organico: 0, trafego: 0, n: 0 } };
 
+  const adsJaSomados = new Set<string>();
+  const igJaSomados = new Set<string>();
   for (const c of contas) {
     const linhaCache = porConta.get(c.contaId);
     const base = { contaId: c.contaId, unidade: c.unidade, instagram: c.instagram };
     const vazia: LinhaUnidade = { ...base, status: "sem_dados", mensagem: null, calculadoEm: null, posts: null, alcance: null, visualizacoes: null, interacoes: null, taxaEngajamento: null, novosSeguidores: null, seguidores: null, gasto: 0, alcanceAnuncios: 0 };
+    const dona = repetidas.get(c.contaId);
+    if (dona) {
+      r.linhas.push({ ...vazia, status: "repetida", mensagem: `Mesma conta de anúncio e Instagram de ${dona} — já contados lá, uma vez só.` });
+      continue;
+    }
     if (!linhaCache) {
       r.linhas.push(vazia);
       continue;
@@ -144,13 +176,18 @@ export async function carregarSaudeRede(empresaId: string, dias: number): Promis
     r.unidadesComDados++;
 
     const t = d.totais;
-    r.anuncios.gasto += t.gasto;
-    r.anuncios.alcance += t.alcance;
-    r.anuncios.impressoes += t.impressoes;
-    r.anuncios.cliquesNoLink += t.cliquesNoLink;
-    r.anuncios.engajamentos += t.engajamentos;
-    if (t.gasto > 0) r.anuncios.unidadesInvestindo++;
-    for (const s of d.serieDiaria ?? []) {
+    // Duas contas diferentes podem usar a mesma conta de anúncio (ex.: Stop Bike duplicada): soma uma vez.
+    const novaContaAnuncio = !c.adAccountId || !adsJaSomados.has(c.adAccountId);
+    if (c.adAccountId) adsJaSomados.add(c.adAccountId);
+    if (novaContaAnuncio) {
+      r.anuncios.gasto += t.gasto;
+      r.anuncios.alcance += t.alcance;
+      r.anuncios.impressoes += t.impressoes;
+      r.anuncios.cliquesNoLink += t.cliquesNoLink;
+      r.anuncios.engajamentos += t.engajamentos;
+      if (t.gasto > 0) r.anuncios.unidadesInvestindo++;
+    }
+    for (const s of novaContaAnuncio ? d.serieDiaria ?? [] : []) {
       const x = serie.get(s.dia) ?? { alcance: 0, gasto: 0 };
       x.alcance += s.alcance;
       x.gasto += s.gasto;
@@ -158,6 +195,12 @@ export async function carregarSaudeRede(empresaId: string, dias: number): Promis
     }
 
     const ig = d.instagram;
+    const novoInstagram = !c.instagramId || !igJaSomados.has(c.instagramId);
+    if (c.instagramId) igJaSomados.add(c.instagramId);
+    if (ig && !novoInstagram) {
+      r.linhas.push({ ...base, status: "repetida", mensagem: "Mesmo Instagram de outra unidade — contado uma vez só.", calculadoEm: linhaCache.calculado_em, posts: null, alcance: null, visualizacoes: null, interacoes: null, taxaEngajamento: null, novosSeguidores: null, seguidores: null, gasto: 0, alcanceAnuncios: 0 });
+      continue;
+    }
     if (!ig) {
       r.linhas.push({ ...base, status: "sem_instagram", mensagem: "Sem Instagram conectado", calculadoEm: linhaCache.calculado_em, posts: null, alcance: null, visualizacoes: null, interacoes: null, taxaEngajamento: null, novosSeguidores: null, seguidores: null, gasto: t.gasto, alcanceAnuncios: t.alcance });
       continue;

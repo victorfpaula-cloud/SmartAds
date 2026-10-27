@@ -65,6 +65,7 @@ export default async function SaudeDaRedePage({ searchParams }: { searchParams: 
   const linhas = [...r.linhas].sort((a, b) => (b.alcance ?? -1) - (a.alcance ?? -1));
   const maxAlcance = Math.max(...linhas.map((l) => l.alcance ?? 0), 1);
   const semDados = r.linhas.filter((l) => l.status === "sem_dados").length;
+  const unidadesContadas = r.unidadesTotal - r.linhas.filter((l) => l.status === "repetida").length;
   const comErro = r.linhas.filter((l) => l.status === "erro");
 
   return (
@@ -79,10 +80,10 @@ export default async function SaudeDaRedePage({ searchParams }: { searchParams: 
               que os anúncios estão entregando. Os números ficam guardados — clique em Atualizar para buscar de novo na Meta.
             </p>
             <p className="mt-1 text-[11px] text-neutral-600">
-              {r.atualizadoEm ? `Dados de ${dataHora(r.atualizadoEm)} · ${r.unidadesComDados} de ${r.unidadesTotal} unidades` : "Ainda sem dados nesse período."}
+              {r.atualizadoEm ? `Dados de ${dataHora(r.atualizadoEm)} · ${r.unidadesComDados} de ${unidadesContadas} unidades` : "Ainda sem dados nesse período."}
             </p>
           </div>
-          <BotaoAtualizarSaude key={dias} contaIds={r.linhas.map((l) => l.contaId)} dias={dias} />
+          <BotaoAtualizarSaude key={dias} contaIds={r.linhas.filter((l) => l.status !== "repetida").map((l) => l.contaId)} dias={dias} />
         </div>
 
         <div className="mt-5 flex flex-wrap gap-2">
@@ -194,6 +195,7 @@ export default async function SaudeDaRedePage({ searchParams }: { searchParams: 
                       <td colSpan={7} className="px-4 py-3 text-xs text-neutral-500">
                         {l.status === "sem_dados" && "Ainda sem números — clique em Atualizar dados."}
                         {l.status === "erro" && <span className="text-amber-400">Não veio da Meta: {l.mensagem}</span>}
+                        {l.status === "repetida" && l.mensagem}
                         {l.status === "sem_instagram" && `Sem Instagram conectado${l.gasto > 0 ? ` · investiu ${real.format(l.gasto)}` : ""}.`}
                       </td>
                     )}

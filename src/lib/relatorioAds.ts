@@ -133,14 +133,20 @@ function totaisDe(linha: LinhaInsightRelatorio | undefined): TotaisAds {
 /** A Meta limita os insights do Instagram a 30 dias por chamada; períodos maiores somam janelas
  * consecutivas. Os totais de curtidas, visualizações etc. somam certo; o alcance, em períodos
  * longos, pode contar a mesma pessoa em mais de uma janela (o relatório avisa). */
-async function insightsInstagramEmJanelas(igId: string, pageId: string | null, dias: number): Promise<InsightsInstagramRelatorio> {
+async function insightsInstagramEmJanelas(igId: string, pageId: string | null, desde: string): Promise<InsightsInstagramRelatorio> {
   const total: InsightsInstagramRelatorio = { metricas: {}, novosSeguidores: null, erros: [] };
-  for (let fim = 0; fim < dias; fim += 30) {
-    const janela = Math.min(30, dias - fim);
+  // Mesmo recorte dos anúncios (do início do primeiro dia, horário de SP, até agora): sem isso o
+  // Instagram contava "últimas N×24h" e os anúncios "N dias fechados", e a diferença (= orgânico)
+  // saía distorcida em até um dia.
+  let restante = (Date.now() - new Date(`${desde}T00:00:00-03:00`).getTime()) / 86_400_000;
+  for (let fim = 0; restante > 0.01; ) {
+    const janela = Math.min(30, restante);
     const parcial = await obterInsightsInstagramRelatorio(igId, pageId, janela, fim, fim === 0);
     for (const [k, v] of Object.entries(parcial.metricas)) total.metricas[k] = (total.metricas[k] ?? 0) + v;
     if (fim === 0) total.novosSeguidores = parcial.novosSeguidores;
     for (const e of parcial.erros) if (!total.erros.includes(e)) total.erros.push(e);
+    fim += janela;
+    restante -= janela;
   }
   return total;
 }
@@ -229,7 +235,7 @@ export async function gerarRelatorioAds(contaId: string, dias: number, comOrgani
       obterInsightsRelatorio(adAccountId, { nivel: "account", desde, ate: hoje, porDia: true }),
       obterInsightsRelatorio(adAccountId, { nivel: "campaign", desde, ate: hoje }),
       conta.instagram_business_id
-        ? insightsInstagramEmJanelas(conta.instagram_business_id, (conta.page_id as string | null) ?? null, dias)
+        ? insightsInstagramEmJanelas(conta.instagram_business_id, (conta.page_id as string | null) ?? null, desde)
         : Promise.resolve(null),
       conta.instagram_business_id
         ? listarPostsInstagramDesde(conta.instagram_business_id, Math.floor(new Date(`${desde}T00:00:00-03:00`).getTime() / 1000))
