@@ -102,14 +102,23 @@ export async function obterRelatorioPostagens(): Promise<UnidadeRelatorioPostage
     }
   }
 
-  const storiesPorConta = new Map<string, Map<string, number>>();
+  // Contas que usam o mesmo Instagram compartilham os stories (cada story fica gravado em uma delas só).
+  const grupoDaConta = new Map<string, string>();
+  for (const { conta } of unidades) {
+    grupoDaConta.set(conta.id as string, (conta.instagram_business_id as string | null) ?? (conta.id as string));
+  }
+  const storiesPorGrupo = new Map<string, Map<string, number>>();
   let primeiroDiaComRegistro: string | null = null;
   for (const linha of storiesLinhas) {
     if (primeiroDiaComRegistro === null || linha.dia < primeiroDiaComRegistro) primeiroDiaComRegistro = linha.dia;
-    const porDia = storiesPorConta.get(linha.conta_id) ?? new Map<string, number>();
+    const grupo = grupoDaConta.get(linha.conta_id) ?? linha.conta_id;
+    const porDia = storiesPorGrupo.get(grupo) ?? new Map<string, number>();
     porDia.set(linha.dia, (porDia.get(linha.dia) ?? 0) + 1);
-    storiesPorConta.set(linha.conta_id, porDia);
+    storiesPorGrupo.set(grupo, porDia);
   }
+  const storiesPorConta = {
+    get: (contaId: string) => storiesPorGrupo.get(grupoDaConta.get(contaId) ?? contaId),
+  };
 
   // Cache do resultado do dia por conta (ver DiaBruto acima) — só é reaproveitado quando a
   // unidade já tinha post confirmado de HOJE numa chamada anterior, hoje mesmo.
