@@ -1,7 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { lerAmbiente } from "@/lib/ambiente";
+import { comContaMeta } from "@/lib/meta/conexao";
 import { gerarRelatorioAds } from "@/lib/relatorioAds";
+import { completarHistoricoSeguidores } from "@/lib/seguidoresHistorico";
 import { enxugar, listarContasDaRede, PERIODOS_SAUDE_REDE } from "@/lib/saudeRede";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +29,12 @@ export async function POST(request: NextRequest) {
     await supabase
       .from("smartads_saude_rede_cache")
       .upsert({ conta_id: contaId, dias, dados: enxugar(relatorio), erro: null, calculado_em: new Date().toISOString() });
+    // Aproveita pra completar o histórico de seguidores dessa conta (não derruba a atualização se falhar).
+    const conta = contas.find((c) => c.contaId === contaId);
+    if (conta?.instagramId) {
+      const { data: pg } = await supabase.from("smartads_contas_meta").select("page_id").eq("id", contaId).maybeSingle();
+      await comContaMeta(contaId, () => completarHistoricoSeguidores(contaId, conta.instagramId!, (pg?.page_id as string | null) ?? null)).catch(() => 0);
+    }
     return NextResponse.json({ ok: true });
   } catch (erro) {
     const mensagem = erro instanceof Error ? erro.message.slice(0, 300) : "Falha ao buscar na Meta.";

@@ -471,6 +471,33 @@ export async function obterInsightsInstagramRelatorio(
   return { metricas, novosSeguidores, erros };
 }
 
+/** Novos seguidores dia a dia dos últimos 30 dias (limite da Meta pra essa métrica). Cada item é o
+ * ganho do dia `dia` (AAAA-MM-DD, dia civil da conta). Usa o token da conexão e, se a Meta recusar,
+ * o token da Página — mesmo caminho dos outros insights do Instagram. */
+export async function obterSerieSeguidoresInstagram(
+  instagramBusinessId: string,
+  pageId: string | null
+): Promise<Array<{ fimIso: string; valor: number }>> {
+  const fim = Date.now();
+  const query = {
+    metric: "follower_count",
+    period: "day",
+    since: Math.floor((fim - JANELA_MAXIMA_MS) / 1000),
+    until: Math.floor(fim / 1000),
+  };
+  let dados: { data: LinhaInsightInstagram[] };
+  try {
+    dados = await chamar<{ data: LinhaInsightInstagram[] }>(`${instagramBusinessId}/insights`, { query });
+  } catch (primeiro) {
+    if (!pageId) throw primeiro;
+    const tokenPagina = await obterTokenDePagina(pageId).catch(() => null);
+    if (!tokenPagina) throw primeiro;
+    dados = await chamar<{ data: LinhaInsightInstagram[] }>(`${instagramBusinessId}/insights`, { query, tokenExplicito: tokenPagina });
+  }
+  const valores = dados.data.find((l) => l.name === "follower_count")?.values ?? [];
+  return valores.filter((v) => v.end_time).map((v) => ({ fimIso: v.end_time as string, valor: Number(v.value) || 0 }));
+}
+
 /** Token de acesso da própria Página — contas que migraram pra "nova experiência de Páginas" da
  * Meta exigem token de Página (não o token de usuário comum) pra ler o feed de posts dela
  * (achado em 13/09/2026: "é necessário um token de acesso à Página para esta ligação na nova
