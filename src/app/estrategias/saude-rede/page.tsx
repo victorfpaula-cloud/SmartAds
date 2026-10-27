@@ -3,6 +3,7 @@ import Link from "next/link";
 import { exigirAmbiente } from "@/lib/ambiente";
 import { carregarSaudeRede, PERIODOS_SAUDE_REDE, type ParteOrganicoTrafego, type ResumoRede } from "@/lib/saudeRede";
 import { formatarDiaExibicao } from "@/lib/tempoSaoPaulo";
+import { carregarHistoricoSeguidores, type GanhoSeguidores } from "@/lib/seguidoresHistorico";
 import BotaoAtualizarSaude from "./BotaoAtualizarSaude";
 
 export const dynamic = "force-dynamic";
@@ -58,10 +59,35 @@ function Barras({ serie }: { serie: ResumoRede["serieDiaria"] }) {
   );
 }
 
+
+function notaGanho(g: GanhoSeguidores): string {
+  if (g.ganho === null) return "sem leitura";
+  return g.completo ? "no período" : g.desde ? `desde ${formatarDiaExibicao(g.desde)} (histórico curto)` : "";
+}
+
+function BarrasSeguidores({ serie }: { serie: Array<{ dia: string; total: number }> }) {
+  if (serie.length < 2) return <p className="text-xs text-neutral-500">Precisa de pelo menos 2 dias de leitura para o gráfico.</p>;
+  const min = Math.min(...serie.map((s) => s.total));
+  const max = Math.max(...serie.map((s) => s.total));
+  const faixa = Math.max(max - min, 1);
+  return (
+    <div>
+      <p className="text-[11px] font-semibold text-neutral-500">
+        Total de seguidores da rede, dia a dia ({n0.format(min)} → {n0.format(max)})
+      </p>
+      <div className="mt-2 flex h-24 items-end gap-[2px]">
+        {serie.map((s) => (
+          <div key={s.dia} className="flex-1 rounded-sm bg-emerald-400/70" style={{ height: `${10 + ((s.total - min) / faixa) * 90}%` }} title={`${formatarDiaExibicao(s.dia)}: ${n0.format(s.total)}`} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default async function SaudeDaRedePage({ searchParams }: { searchParams: { dias?: string } }) {
   const ambiente = await exigirAmbiente("franquia");
   const dias = PERIODOS_SAUDE_REDE.find((p) => String(p.dias) === searchParams.dias)?.dias ?? 30;
-  const r = await carregarSaudeRede(ambiente.id, dias);
+  const [r, hist] = await Promise.all([carregarSaudeRede(ambiente.id, dias), carregarHistoricoSeguidores(ambiente.id)]);
   const linhas = [...r.linhas].sort((a, b) => (b.alcance ?? -1) - (a.alcance ?? -1));
   const maxAlcance = Math.max(...linhas.map((l) => l.alcance ?? 0), 1);
   const semDados = r.linhas.filter((l) => l.status === "sem_dados").length;
@@ -150,6 +176,64 @@ export default async function SaudeDaRedePage({ searchParams }: { searchParams: 
               <Barras serie={r.serieDiaria} />
               {r.serieDiaria.length === 0 && <p className="text-xs text-neutral-500">Sem evolução diária de anúncios nesse período.</p>}
             </div>
+          </>
+        )}
+
+
+        <h2 className="mt-8 text-sm font-semibold text-neutral-300">Seguidores — histórico da rede</h2>
+        <p className="mt-1 text-xs text-neutral-500">
+          A Meta só informa novos seguidores dos últimos 30 dias. Por isso o SmartAds guarda o total de cada Instagram todo dia (e
+          reconstruiu os últimos 30 dias na primeira leitura) — assim dá para comparar períodos maiores, e o histórico só cresce.
+        </p>
+        {hist.total === null ? (
+          <p className="cartao-vidro mt-3 px-5 py-6 text-sm text-neutral-400">Sem leituras ainda. Clique em Atualizar dados — o histórico começa na hora.</p>
+        ) : (
+          <>
+            <div className="mt-3 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+              <Kpi rotulo="Seguidores hoje" valor={compacto(hist.total)} nota={hist.primeiroDia ? `histórico desde ${formatarDiaExibicao(hist.primeiroDia)}` : undefined} />
+              {hist.ganhos.map((g) => (
+                <Kpi key={g.dias} rotulo={`Em ${g.dias} dias`} valor={g.ganho === null ? "—" : `${g.ganho >= 0 ? "+" : ""}${n0.format(g.ganho)}`} nota={notaGanho(g)} />
+              ))}
+            </div>
+            <div className="cartao-vidro mt-3 p-4">
+              <BarrasSeguidores serie={hist.serie} />
+            </div>
+            <div className="cartao-vidro mt-3 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[560px] text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-white/10 text-xs uppercase tracking-wide text-neutral-500">
+                      <th className="px-4 py-3 font-medium">Unidade</th>
+                      <th className="px-4 py-3 font-medium">Hoje</th>
+                      <th className="px-4 py-3 font-medium">7 dias</th>
+                      <th className="px-4 py-3 font-medium">30 dias</th>
+                      <th className="px-4 py-3 font-medium">90 dias</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {hist.porUnidade.map((u) => (
+                      <tr key={u.unidade}>
+                        <td className="px-4 py-2.5 text-neutral-100">{u.unidade}</td>
+                        <td className="px-4 py-2.5 text-neutral-300">{u.total !== null ? compacto(u.total) : "—"}</td>
+                        {[7, 30, 90].map((d) => {
+                          const g = u.ganhos[d];
+                          return (
+                            <td key={d} className="px-4 py-2.5 text-neutral-300" title={notaGanho(g)}>
+                              {g.ganho === null ? "—" : `${g.ganho >= 0 ? "+" : ""}${n0.format(g.ganho)}`}
+                              {g.ganho !== null && !g.completo && <span className="text-neutral-600"> *</span>}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <p className="mt-2 text-[11px] text-neutral-600">
+              * histórico ainda mais curto que o período — o número vale desde a primeira leitura. Ganho líquido (entradas menos quem deixou de seguir).
+              Dias reconstruídos são aproximados; as leituras diárias daqui para frente são exatas.
+            </p>
           </>
         )}
 

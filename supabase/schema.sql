@@ -840,3 +840,6 @@ create table if not exists smartads_saude_rede_cache (
   primary key (conta_id, dias)
 );
 alter table smartads_saude_rede_cache enable row level security;
+
+-- Histórico de seguidores: leituras reais (cron) e dias reconstruídos a partir dos ganhos diários da Meta.
+alter table smartads_seguidores_snapshot add column if not exists origem text not null default 'leitura';
