@@ -829,3 +829,14 @@ alter table smartads_contas_meta add column if not exists boost_tipo_entrega tex
 alter table smartads_contas_meta add column if not exists boost_posts_por_dia integer not null default 1;
 alter table smartads_boost_rede_regras add column if not exists conta_id uuid references smartads_contas_meta(id) on delete cascade;
 create index if not exists smartads_boost_rede_regras_conta_idx on smartads_boost_rede_regras(conta_id);
+
+-- Saúde da rede: último relatório (enxuto) de cada conta por período (7/15/30 dias), atualizado pelo botão.
+create table if not exists smartads_saude_rede_cache (
+  conta_id uuid not null references smartads_contas_meta(id) on delete cascade,
+  dias integer not null,
+  dados jsonb,
+  erro text,
+  calculado_em timestamptz not null default now(),
+  primary key (conta_id, dias)
+);
+alter table smartads_saude_rede_cache enable row level security;

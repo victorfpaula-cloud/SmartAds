@@ -28,6 +28,7 @@ function menuDoAmbiente(a: Ambiente): ItemMenu[] {
         icone: "campanhas",
         tambem: ["/campanhas/conta", "/campanhas/nova", "/estrategias/campanhas-mae", "/estrategias/moldes", "/estrategias/planos", "/estrategias/calendario"],
       },
+      { href: "/estrategias/saude-rede", label: "Saúde da rede", icone: "saude" },
       { href: "/estrategias/postagens", label: "Radar de posts", icone: "radar" },
       { href: "/boost", label: "Unidades", icone: "unidades", tambem: ["/delivery", "/publicos", "/estrategias/semaforo", "/estrategias/diagnostico"] },
       { href: "/financeiro", label: "Financeiro", icone: "financeiro", tambem: ["/financeiro/investimentos"] },

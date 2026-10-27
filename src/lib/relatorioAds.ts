@@ -74,7 +74,14 @@ export interface DadosRelatorioAds {
   };
   totais: TotaisAds;
   /** Números da conta do Instagram no período; novosSeguidores é só dos últimos 30 dias (limite da Meta). */
-  instagram: { novosSeguidores: number | null; alcance: number | null; visitasPerfil: number | null } | null;
+  instagram: {
+    novosSeguidores: number | null;
+    alcance: number | null;
+    visitasPerfil: number | null;
+    /** Seguidores agora e posts publicados no período (usados na Saúde da rede). */
+    seguidores: number | null;
+    postsPublicados: number | null;
+  } | null;
   /** Só vem quando o relatório é pedido com a chave de orgânico ligada. */
   organico: ItemOrganico[] | null;
   serieDiaria: DiaRelatorioAds[];
@@ -298,6 +305,8 @@ export async function gerarRelatorioAds(contaId: string, dias: number, comOrgani
         novosSeguidores,
         alcance: ig?.metricas.reach ?? null,
         visitasPerfil: ig?.metricas.profile_views ?? null,
+        seguidores: seguidoresAgora,
+        postsPublicados: posts ? posts.length : null,
       };
       if (dias > 30 && ig && ig.metricas.reach !== undefined) {
         avisos.push("Alcance do Instagram em períodos longos soma janelas de 30 dias, então pode repetir a mesma pessoa.");
