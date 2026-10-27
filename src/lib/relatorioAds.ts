@@ -55,8 +55,11 @@ export interface ItemOrganico {
   total: number | null;
   /** De onde veio o total: insights da conta, ou soma dos posts publicados no período. */
   origem: "conta" | "posts" | null;
-  /** Parte atribuída aos anúncios; null quando a Meta não informa esse número pelos anúncios. */
+  /** Parte atribuída aos anúncios NO INSTAGRAM, nunca maior que o total; null quando a Meta não informa. */
   trafego: number | null;
+  /** O que os anúncios do Instagram informaram antes de limitar ao total (se maior, o total lido do
+   * Instagram ficou abaixo do que os anúncios dizem ter entregue — ver aviso do relatório). */
+  trafegoLido: number | null;
   /** total − tráfego (nunca negativo); null quando não dá pra separar. */
   organico: number | null;
 }
@@ -73,6 +76,11 @@ export interface DadosRelatorioAds {
     instagramUsername: string | null;
   };
   totais: TotaisAds;
+  /** Só a parte dos anúncios que rodou no Instagram (a base da divisão orgânico × tráfego). null quando
+   * a Meta não devolveu a divisão por plataforma. */
+  totaisInstagram: TotaisAds | null;
+  /** Gasto e alcance por onde os anúncios rodaram (instagram, facebook...). */
+  plataformas: Array<{ plataforma: string; gasto: number; alcance: number; impressoes: number }>;
   /** Números da conta do Instagram no período; novosSeguidores é só dos últimos 30 dias (limite da Meta). */
   instagram: {
     novosSeguidores: number | null;
@@ -168,20 +176,22 @@ function montarOrganico(
     ["saves", "salvamentos", "Salvamentos", t.salvamentos, null],
     ["profile_views", "visitas", "Visitas ao perfil", t.visitasPerfilAnuncios, null],
   ];
-  return definicoes.map(([metrica, chave, rotulo, trafego, dosPosts]) => {
+  return definicoes.map(([metrica, chave, rotulo, trafegoLido, dosPosts]) => {
     const daConta = ig[metrica];
     const total = daConta !== undefined ? daConta : dosPosts;
     const origem: ItemOrganico["origem"] = daConta !== undefined ? "conta" : dosPosts !== null ? "posts" : null;
-    // Se os anúncios trouxeram mais do que o total lido, o total está incompleto (ex.: posts mais
-    // antigos que a janela) — nunca mostra orgânico negativo nem total menor que o tráfego.
-    const totalAjustado = total !== null && trafego !== null ? Math.max(total, trafego) : total;
+    // O Instagram informa o total (orgânico + anúncios) e os anúncios informam a parte deles; o
+    // orgânico é a diferença. Se os anúncios disserem ter entregue mais do que o total lido, limita ao
+    // total — assim orgânico + tráfego sempre fecha com o total mostrado.
+    const trafego = trafegoLido === null ? null : total === null ? trafegoLido : Math.min(trafegoLido, total);
     return {
       chave,
       rotulo,
-      total: totalAjustado,
+      total,
       origem,
       trafego,
-      organico: totalAjustado === null || trafego === null ? null : Math.max(totalAjustado - trafego, 0),
+      trafegoLido,
+      organico: total === null || trafego === null ? null : Math.max(total - trafego, 0),
     };
   });
 }
@@ -230,10 +240,11 @@ export async function gerarRelatorioAds(contaId: string, dias: number, comOrgani
   const avisos: string[] = [];
 
   return comContaMeta(contaId, async () => {
-    const [totalAtual, porDia, porCampanha, igInsights, igPosts, igResumo] = await Promise.allSettled([
+    const [totalAtual, porDia, porCampanha, porPlataforma, igInsights, igPosts, igResumo] = await Promise.allSettled([
       obterInsightsRelatorio(adAccountId, { nivel: "account", desde, ate: hoje }),
       obterInsightsRelatorio(adAccountId, { nivel: "account", desde, ate: hoje, porDia: true }),
       obterInsightsRelatorio(adAccountId, { nivel: "campaign", desde, ate: hoje }),
+      obterInsightsRelatorio(adAccountId, { nivel: "account", desde, ate: hoje, breakdownPlataforma: true }),
       conta.instagram_business_id
         ? insightsInstagramEmJanelas(conta.instagram_business_id, (conta.page_id as string | null) ?? null, desde)
         : Promise.resolve(null),
@@ -343,12 +354,40 @@ export async function gerarRelatorioAds(contaId: string, dias: number, comOrgani
     }
 
     const totaisAtuais = totaisDe(totalAtual.value[0]);
+    // Anúncios que rodaram no Instagram × em outras plataformas (Facebook etc.): o total do Instagram só
+    // inclui o que rodou nele, então a divisão orgânico × tráfego usa só essa parte.
+    let totaisInstagram: TotaisAds | null = null;
+    let plataformas: DadosRelatorioAds["plataformas"] = [];
+    if (porPlataforma.status === "fulfilled") {
+      plataformas = porPlataforma.value
+        .filter((l) => l.publisher_platform)
+        .map((l) => ({
+          plataforma: l.publisher_platform as string,
+          gasto: num(l.spend),
+          alcance: num(l.reach),
+          impressoes: num(l.impressions),
+        }))
+        .sort((a, b) => b.gasto - a.gasto);
+      totaisInstagram = totaisDe(porPlataforma.value.find((l) => l.publisher_platform === "instagram"));
+      const fora = plataformas.filter((p) => p.plataforma !== "instagram" && p.gasto > 0);
+      if (fora.length > 0) {
+        avisos.push(
+          `Parte do investimento rodou fora do Instagram (${fora.map((p) => `${p.plataforma}: R$ ${p.gasto.toFixed(2).replace(".", ",")}`).join(", ")}) — a divisão orgânico × tráfego usa só o que rodou no Instagram.`
+        );
+      }
+    } else {
+      avisos.push("Não deu pra separar os anúncios por plataforma; a divisão orgânico × tráfego usa o total dos anúncios.");
+    }
     let organico: ItemOrganico[] | null = null;
     if (comOrganico) {
       if (!conta.instagram_business_id) {
         avisos.push("Essa conta não tem Instagram conectado, então não dá pra separar o orgânico.");
       } else {
-        organico = montarOrganico(ig?.metricas ?? {}, postsPeriodo, totaisAtuais);
+        organico = montarOrganico(ig?.metricas ?? {}, postsPeriodo, totaisInstagram ?? totaisAtuais);
+        const limitados = organico.filter((i) => i.trafegoLido !== null && i.trafego !== null && i.trafegoLido > i.trafego);
+        if (limitados.length > 0) {
+          avisos.push(`Em ${limitados.map((i) => i.rotulo.toLowerCase()).join(", ")} os anúncios informam mais do que o total lido do Instagram; o tráfego foi limitado ao total.`);
+        }
         if (organico.some((i) => i.origem === "posts")) {
           avisos.push("Curtidas e comentários do orgânico foram somados dos posts publicados no período.");
         }
@@ -371,6 +410,8 @@ export async function gerarRelatorioAds(contaId: string, dias: number, comOrgani
         instagramUsername: conta.instagram_username ?? null,
       },
       totais: totaisAtuais,
+      totaisInstagram,
+      plataformas,
       organico,
       instagram,
       serieDiaria,

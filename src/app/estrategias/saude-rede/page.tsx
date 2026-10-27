@@ -15,7 +15,7 @@ const compacto = (v: number) => (v >= 10_000 ? new Intl.NumberFormat("pt-BR", { 
 const dataHora = (iso: string) =>
   new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
 
-function Divisao({ parte }: { parte: ParteOrganicoTrafego | null }) {
+function Divisao({ parte, unidadesComIg }: { parte: ParteOrganicoTrafego | null; unidadesComIg: number }) {
   if (!parte || parte.total <= 0) return <p className="mt-2 text-[11px] text-neutral-600">Orgânico × tráfego: a Meta não separou.</p>;
   const pctTrafego = Math.round((parte.trafego / parte.total) * 100);
   return (
@@ -27,6 +27,12 @@ function Divisao({ parte }: { parte: ParteOrganicoTrafego | null }) {
       <p className="mt-1 text-[11px] text-neutral-500">
         <span className="text-emerald-300">{compacto(parte.organico)} orgânico</span> · <span className="text-sky-300">{compacto(parte.trafego)} tráfego ({pctTrafego}%)</span>
       </p>
+      {(parte.unidades < unidadesComIg || parte.limitadas > 0) && (
+        <p className="mt-0.5 text-[10.5px] text-neutral-600">
+          Divisão de {compacto(parte.total)} em {parte.unidades} de {unidadesComIg} unidades
+          {parte.limitadas > 0 ? ` · em ${parte.limitadas} os anúncios informam mais que o total do Instagram (limitado ao total)` : ""}.
+        </p>
+      )}
     </div>
   );
 }
@@ -90,6 +96,7 @@ export default async function SaudeDaRedePage({ searchParams }: { searchParams: 
   const [r, hist] = await Promise.all([carregarSaudeRede(ambiente.id, dias), carregarHistoricoSeguidores(ambiente.id)]);
   const linhas = [...r.linhas].sort((a, b) => (b.alcance ?? -1) - (a.alcance ?? -1));
   const maxAlcance = Math.max(...linhas.map((l) => l.alcance ?? 0), 1);
+  const unidadesIg = r.linhas.filter((l) => l.status === "ok").length;
   const semDados = r.linhas.filter((l) => l.status === "sem_dados").length;
   const unidadesContadas = r.unidadesTotal - r.linhas.filter((l) => l.status === "repetida").length;
   const comErro = r.linhas.filter((l) => l.status === "erro");
@@ -138,17 +145,17 @@ export default async function SaudeDaRedePage({ searchParams }: { searchParams: 
             <h2 className="mt-8 text-sm font-semibold text-neutral-300">Instagram da rede (orgânico + tráfego)</h2>
             <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <Kpi rotulo="Alcance" valor={compacto(r.alcance)} nota="soma das unidades — a mesma pessoa pode estar em mais de uma">
-                <Divisao parte={r.divisao.alcance} />
+                <Divisao parte={r.divisao.alcance} unidadesComIg={unidadesIg} />
               </Kpi>
               <Kpi rotulo="Visualizações" valor={compacto(r.visualizacoes)} nota="vezes que o conteúdo foi visto">
-                <Divisao parte={r.divisao.visualizacoes} />
+                <Divisao parte={r.divisao.visualizacoes} unidadesComIg={unidadesIg} />
               </Kpi>
               <Kpi
                 rotulo="Interações"
                 valor={compacto(r.interacoes)}
                 nota={`${compacto(r.curtidas)} curtidas · ${compacto(r.comentarios)} comentários · ${compacto(r.compartilhamentos)} compart. · ${compacto(r.salvamentos)} salvos`}
               >
-                <Divisao parte={r.divisao.interacoes} />
+                <Divisao parte={r.divisao.interacoes} unidadesComIg={unidadesIg} />
               </Kpi>
               <Kpi rotulo="Novos seguidores" valor={`+${n0.format(r.novosSeguidores)}`} nota={`${compacto(r.seguidores)} seguidores somando todas as unidades`} />
               <Kpi rotulo="Visitas ao perfil" valor={compacto(r.visitasPerfil)} />
@@ -167,8 +174,8 @@ export default async function SaudeDaRedePage({ searchParams }: { searchParams: 
 
             <h2 className="mt-8 text-sm font-semibold text-neutral-300">Anúncios (tráfego pago)</h2>
             <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <Kpi rotulo="Investido" valor={real.format(r.anuncios.gasto)} nota={`${r.anuncios.unidadesInvestindo} de ${r.unidadesComDados} unidades investiram`} />
-              <Kpi rotulo="Alcance pago" valor={compacto(r.anuncios.alcance)} nota={r.anuncios.custoPorMilAlcancados !== null ? `${real.format(r.anuncios.custoPorMilAlcancados)} a cada mil alcançados` : undefined} />
+              <Kpi rotulo="Investido" valor={real.format(r.anuncios.gasto)} nota={`${r.anuncios.unidadesInvestindo} de ${r.unidadesComDados} unidades investiram${r.anuncios.gastoForaInstagram > 0 ? ` · ${real.format(r.anuncios.gastoForaInstagram)} rodou fora do Instagram` : ""}`} />
+              <Kpi rotulo="Alcance pago" valor={compacto(r.anuncios.alcance)} nota={[r.anuncios.alcanceInstagram !== r.anuncios.alcance ? `${compacto(r.anuncios.alcanceInstagram)} no Instagram` : null, r.anuncios.custoPorMilAlcancados !== null ? `${real.format(r.anuncios.custoPorMilAlcancados)} a cada mil` : null].filter(Boolean).join(" · ") || undefined} />
               <Kpi rotulo="Engajamento pago" valor={compacto(r.anuncios.engajamentos)} nota={r.anuncios.custoPorEngajamento !== null ? `${real.format(r.anuncios.custoPorEngajamento)} por engajamento` : undefined} />
               <Kpi rotulo="Cliques no link" valor={compacto(r.anuncios.cliquesNoLink)} nota={r.anuncios.cpm !== null ? `CPM ${real.format(r.anuncios.cpm)}` : undefined} />
             </div>
