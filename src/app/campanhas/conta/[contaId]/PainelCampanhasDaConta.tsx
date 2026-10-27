@@ -209,6 +209,11 @@ export default function PainelCampanhasDaConta({
 
   async function alternarStatus(campanha: Campanha) {
     const pausada = campanha.effective_status !== "ACTIVE";
+    // Desligar é o que mexe com anúncio no ar: confirma antes (ligar também, por causa do gasto).
+    const pergunta = pausada
+      ? `Ativar a campanha "${campanha.name}"? Ela volta a gastar o orçamento no Gerenciador de Anúncios.`
+      : `Pausar a campanha "${campanha.name}"? Ela para de veicular agora, também no Gerenciador de Anúncios.`;
+    if (!window.confirm(pergunta)) return;
     setExecutando(campanha.id);
     const resposta = await fetch("/api/campanhas/acao", {
       method: "POST",
@@ -299,8 +304,8 @@ export default function PainelCampanhasDaConta({
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-neutral-500">
-          “Gasto no mês” é só o mês atual; “Gasto total” é o acumulado desde que a campanha começou. Clique no status pra
-          pausar/ativar — os outros estados (análise, problema, encerrada) só mudam direto no
+          “Gasto no mês” é só o mês atual; “Gasto total” é o acumulado desde que a campanha começou. Use a chavinha pra
+          pausar/ativar (vale direto no Gerenciador de Anúncios) — os outros estados (análise, problema, encerrada) só mudam direto no
           Gerenciador de Anúncios.
         </p>
         {escondidas > 0 && (
@@ -351,13 +356,28 @@ export default function PainelCampanhasDaConta({
                   </td>
                   <td className="px-4 py-3">
                     {status.clicavel ? (
-                      <button
-                        onClick={() => alternarStatus(campanha)}
-                        disabled={executando === campanha.id}
-                        className={`rounded-full px-2.5 py-1 text-xs font-semibold ${status.cor}`}
-                      >
-                        {status.rotulo}
-                      </button>
+                      <div className="flex items-center gap-2.5">
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={campanha.effective_status === "ACTIVE"}
+                          aria-label={campanha.effective_status === "ACTIVE" ? `Pausar ${campanha.name}` : `Ativar ${campanha.name}`}
+                          onClick={() => alternarStatus(campanha)}
+                          disabled={executando === campanha.id}
+                          className={`relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50 ${
+                            campanha.effective_status === "ACTIVE" ? "bg-ok" : "bg-white/20"
+                          }`}
+                        >
+                          <span
+                            className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${
+                              campanha.effective_status === "ACTIVE" ? "left-[22px]" : "left-0.5"
+                            }`}
+                          />
+                        </button>
+                        <span className={`text-xs font-semibold ${campanha.effective_status === "ACTIVE" ? "text-ok" : "text-neutral-400"}`}>
+                          {executando === campanha.id ? "Aplicando…" : status.rotulo}
+                        </span>
+                      </div>
                     ) : (
                       <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${status.cor}`}>
                         {status.rotulo}
