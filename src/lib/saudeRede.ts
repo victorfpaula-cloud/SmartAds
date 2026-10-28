@@ -7,6 +7,9 @@ export const PERIODOS_SAUDE_REDE = [
   { dias: 30, rotulo: "Mês", detalhe: "30 dias" },
 ] as const;
 
+/** Somado a `dias` na chave do cache pra guardar o período ANTERIOR (ex.: 1007 = os 7 dias antes dos últimos 7). */
+export const OFFSET_ANTERIOR = 1000;
+
 export interface ContaDaRede {
   contaId: string;
   unidade: string;
@@ -130,7 +133,8 @@ const item = (d: Omit<DadosRelatorioAds, "campanhas">, chave: string): ItemOrgan
   d.organico?.find((i) => i.chave === chave);
 
 /** Lê o cache da Saúde da rede e soma tudo. Nada aqui chama a Meta — os números vêm do botão Atualizar. */
-export async function carregarSaudeRede(empresaId: string, dias: number): Promise<ResumoRede> {
+export async function carregarSaudeRede(empresaId: string, dias: number, anterior = false): Promise<ResumoRede> {
+  const chaveDias = anterior ? dias + OFFSET_ANTERIOR : dias;
   const contas = await listarContasDaRede(empresaId);
   const repetidas = contasRepetidas(contas);
   const { data: cache } =
@@ -138,7 +142,7 @@ export async function carregarSaudeRede(empresaId: string, dias: number): Promis
       ? await criarClienteAdmin()
           .from("smartads_saude_rede_cache")
           .select("conta_id, dados, erro, calculado_em")
-          .eq("dias", dias)
+          .eq("dias", chaveDias)
           .in("conta_id", contas.map((c) => c.contaId))
       : { data: [] as any[] };
   const porConta = new Map((cache ?? []).map((l: any) => [l.conta_id as string, l]));

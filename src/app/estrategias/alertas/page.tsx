@@ -1,7 +1,7 @@
 import Cabecalho from "@/components/Cabecalho";
 import Link from "next/link";
 import { exigirAmbiente } from "@/lib/ambiente";
-import { gerarAlertas, ROTULO_CATEGORIA, type Alerta, type SeveridadeAlerta } from "@/lib/alertas";
+import { gerarAlertas, gerarAlertasConexao, ROTULO_CATEGORIA, type Alerta, type SeveridadeAlerta } from "@/lib/alertas";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +13,9 @@ const GRUPOS: Array<{ sev: SeveridadeAlerta; titulo: string; classe: string; pon
 
 export default async function AlertasPage() {
   const ambiente = await exigirAmbiente("franquia");
-  const alertas = await gerarAlertas(ambiente.id);
+  const [doAmbiente, conexao] = await Promise.all([gerarAlertas(ambiente.id), gerarAlertasConexao()]);
+  const ordem = { critico: 0, atencao: 1, info: 2 } as const;
+  const alertas = [...conexao, ...doAmbiente].sort((a, b) => ordem[a.severidade] - ordem[b.severidade]);
   const porUnidade = (lista: Alerta[]) => [...new Set(lista.map((a) => a.unidade))].length;
 
   return (

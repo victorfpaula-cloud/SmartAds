@@ -4,7 +4,7 @@ import { lerAmbiente } from "@/lib/ambiente";
 import { comContaMeta } from "@/lib/meta/conexao";
 import { gerarRelatorioAds } from "@/lib/relatorioAds";
 import { completarHistoricoSeguidores } from "@/lib/seguidoresHistorico";
-import { enxugar, listarContasDaRede, PERIODOS_SAUDE_REDE } from "@/lib/saudeRede";
+import { enxugar, listarContasDaRede, OFFSET_ANTERIOR, PERIODOS_SAUDE_REDE } from "@/lib/saudeRede";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -15,6 +15,9 @@ export async function POST(request: NextRequest) {
   const corpo = await request.json().catch(() => null);
   const contaId = typeof corpo?.contaId === "string" ? corpo.contaId : "";
   const dias = Number(corpo?.dias);
+  // "anterior": o período de mesmo tamanho imediatamente antes (guardado com dias + 1000 na chave).
+  const anterior = corpo?.anterior === true;
+  const chaveDias = anterior ? dias + OFFSET_ANTERIOR : dias;
   if (!contaId || !PERIODOS_SAUDE_REDE.some((p) => p.dias === dias)) {
     return NextResponse.json({ erro: "Conta ou período inválido." }, { status: 400 });
   }
@@ -25,13 +28,13 @@ export async function POST(request: NextRequest) {
 
   const supabase = criarClienteAdmin();
   try {
-    const relatorio = await gerarRelatorioAds(contaId, dias, true);
+    const relatorio = await gerarRelatorioAds(contaId, dias, true, anterior ? { terminaDiasAtras: dias } : {});
     await supabase
       .from("smartads_saude_rede_cache")
-      .upsert({ conta_id: contaId, dias, dados: enxugar(relatorio), erro: null, calculado_em: new Date().toISOString() });
-    // Aproveita pra completar o histórico de seguidores dessa conta (não derruba a atualização se falhar).
+      .upsert({ conta_id: contaId, dias: chaveDias, dados: enxugar(relatorio), erro: null, calculado_em: new Date().toISOString() });
+    // Aproveita pra completar o histórico (só na leitura do período atual) de seguidores dessa conta (não derruba a atualização se falhar).
     const conta = contas.find((c) => c.contaId === contaId);
-    if (conta?.instagramId) {
+    if (!anterior && conta?.instagramId) {
       const { data: pg } = await supabase.from("smartads_contas_meta").select("page_id").eq("id", contaId).maybeSingle();
       await comContaMeta(contaId, () => completarHistoricoSeguidores(contaId, conta.instagramId!, (pg?.page_id as string | null) ?? null)).catch(() => 0);
     }
@@ -40,7 +43,7 @@ export async function POST(request: NextRequest) {
     const mensagem = erro instanceof Error ? erro.message.slice(0, 300) : "Falha ao buscar na Meta.";
     await supabase
       .from("smartads_saude_rede_cache")
-      .upsert({ conta_id: contaId, dias, erro: mensagem });  // mantém os números antigos, se houver
+      .upsert({ conta_id: contaId, dias: chaveDias, erro: mensagem });  // mantém os números antigos, se houver
     return NextResponse.json({ erro: mensagem }, { status: 502 });
   }
 }

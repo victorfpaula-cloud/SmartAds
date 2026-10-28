@@ -21,6 +21,7 @@ interface LinhaCache {
   objetivo: string | null;
   orcamento_diario_centavos: number | null;
   vitalicio: boolean;
+  fim_em: string | null;
 }
 
 /** Recalcula o snapshot de TODAS as campanhas ativas das unidades de franquia — só é chamado pelo
@@ -96,6 +97,7 @@ export async function recalcularCampanhasRede(): Promise<{ contasVerificadas: nu
         objective?: string;
         daily_budget?: string;
         lifetime_budget?: string;
+        stop_time?: string;
       }> = [];
       let after: string | undefined;
 
@@ -138,6 +140,7 @@ export async function recalcularCampanhasRede(): Promise<{ contasVerificadas: nu
           objetivo: campanha.objective ?? null,
           orcamento_diario_centavos: campanha.daily_budget ? Number(campanha.daily_budget) : null,
           vitalicio: !campanha.daily_budget && !!campanha.lifetime_budget,
+          fim_em: campanha.stop_time ?? null,
         });
         linhasPorConta.set(conta.id, linhas);
       }

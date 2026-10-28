@@ -57,7 +57,15 @@ export function montarKpis(dados: DadosRelatorioAds): { destaque: CartaoKpi[]; e
   };
 }
 
-export async function baixarPdfRelatorioAds(dados: DadosRelatorioAds): Promise<void> {
+export interface OpcoesPdfRelatorio {
+  /** Texto do período no cabeçalho (ex.: "Setembro de 2026"); padrão "Últimos N dias". */
+  rotuloPeriodo?: string;
+  /** Título pequeno acima do nome da unidade; padrão "SmartAds · Relatório de anúncios". */
+  titulo?: string;
+}
+
+/** Monta o PDF (funciona no navegador e no servidor). */
+export async function montarPdfRelatorioAds(dados: DadosRelatorioAds, opcoes: OpcoesPdfRelatorio = {}) {
   const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const L = doc.internal.pageSize.getWidth();
@@ -112,7 +120,7 @@ export async function baixarPdfRelatorioAds(dados: DadosRelatorioAds): Promise<v
 
   // Cabeçalho
   cartao(M, y, W, 74);
-  texto("SmartAds · Relatório de anúncios", M + 16, y + 20, 8.5, COR.acento, true);
+  texto(opcoes.titulo ?? "SmartAds · Relatório de anúncios", M + 16, y + 20, 8.5, COR.acento, true);
   texto(dados.conta.clienteNome ? `${dados.conta.clienteNome} — ${dados.conta.contaNome}` : dados.conta.contaNome, M + 16, y + 42, 15, COR.texto, true);
   const sub = [
     dados.conta.instagramUsername ? `@${dados.conta.instagramUsername}` : null,
@@ -122,7 +130,7 @@ export async function baixarPdfRelatorioAds(dados: DadosRelatorioAds): Promise<v
     .filter(Boolean)
     .join("  ·  ");
   texto(sub, M + 16, y + 58, 8.5, COR.suave);
-  texto(`Últimos ${dados.periodo.dias} dias`, L - M - 16, y + 42, 11, COR.texto, true, "right");
+  texto(opcoes.rotuloPeriodo ?? `Últimos ${dados.periodo.dias} dias`, L - M - 16, y + 42, 11, COR.texto, true, "right");
   texto(`${formatarDiaExibicao(dados.periodo.desde)} a ${formatarDiaExibicao(dados.periodo.ate)}`, L - M - 16, y + 58, 8.5, COR.suave, false, "right");
   y += 90;
 
@@ -273,6 +281,15 @@ export async function baixarPdfRelatorioAds(dados: DadosRelatorioAds): Promise<v
     texto(`${p}/${paginas}`, L - M, A - 20, 7, COR.fraco, false, "right");
   }
 
+  return doc;
+}
+
+export function nomeArquivoRelatorio(dados: DadosRelatorioAds, sufixo: string): string {
   const slug = (dados.conta.clienteNome || dados.conta.contaNome).toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  doc.save(`relatorio-ads-${slug}-${dados.periodo.dias}d.pdf`);
+  return `relatorio-ads-${slug}-${sufixo}.pdf`;
+}
+
+export async function baixarPdfRelatorioAds(dados: DadosRelatorioAds): Promise<void> {
+  const doc = await montarPdfRelatorioAds(dados);
+  doc.save(nomeArquivoRelatorio(dados, `${dados.periodo.dias}d`));
 }

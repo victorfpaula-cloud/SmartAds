@@ -132,3 +132,19 @@ export async function carregarHistoricoSeguidores(empresaId: string): Promise<Hi
     }),
   };
 }
+
+/** Novos seguidores entre dois dias (inclusive), pela diferença das leituras guardadas: total na manhã
+ * do dia seguinte a `ate` menos o total na manhã de `desde`. null se faltar leitura nas pontas. */
+export async function ganhoSeguidoresEntre(contaId: string, desde: string, ate: string): Promise<number | null> {
+  const { data } = await criarClienteAdmin()
+    .from("smartads_seguidores_snapshot")
+    .select("dia, seguidores")
+    .eq("conta_id", contaId)
+    .gte("dia", desde)
+    .lte("dia", adicionarDias(ate, 2))
+    .order("dia", { ascending: true });
+  const linhas = data ?? [];
+  const inicio = linhas.find((l) => l.dia >= desde && l.dia <= adicionarDias(desde, 1));
+  const fim = [...linhas].reverse().find((l) => l.dia > ate && l.dia <= adicionarDias(ate, 2));
+  return inicio && fim ? fim.seguidores - inicio.seguidores : null;
+}

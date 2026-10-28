@@ -37,11 +37,25 @@ function Divisao({ parte, unidadesComIg }: { parte: ParteOrganicoTrafego | null;
   );
 }
 
-function Kpi({ rotulo, valor, nota, children }: { rotulo: string; valor: string; nota?: string; children?: React.ReactNode }) {
+function Delta({ atual, anterior, neutro = false }: { atual: number; anterior: number | null; neutro?: boolean }) {
+  if (anterior === null || anterior <= 0) return null;
+  const pct = ((atual - anterior) / anterior) * 100;
+  if (Math.abs(pct) < 0.5) return <p className="mt-0.5 text-[11px] text-neutral-500">igual ao período anterior</p>;
+  const subiu = pct > 0;
+  const cor = neutro ? "text-neutral-400" : subiu ? "text-ok" : "text-danger";
+  return (
+    <p className={`mt-0.5 text-[11px] font-semibold ${cor}`}>
+      {subiu ? "▲" : "▼"} {n0.format(Math.abs(pct))}% <span className="font-normal text-neutral-500">vs período anterior</span>
+    </p>
+  );
+}
+
+function Kpi({ rotulo, valor, nota, children, delta }: { rotulo: string; valor: string; nota?: string; children?: React.ReactNode; delta?: React.ReactNode }) {
   return (
     <div className="cartao-vidro p-4">
       <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">{rotulo}</p>
       <p className="mt-1 font-display text-2xl font-bold text-neutral-100">{valor}</p>
+      {delta}
       {nota && <p className="mt-0.5 text-[11.5px] text-neutral-500">{nota}</p>}
       {children}
     </div>
@@ -93,7 +107,14 @@ function BarrasSeguidores({ serie }: { serie: Array<{ dia: string; total: number
 export default async function SaudeDaRedePage({ searchParams }: { searchParams: { dias?: string } }) {
   const ambiente = await exigirAmbiente("franquia");
   const dias = PERIODOS_SAUDE_REDE.find((p) => String(p.dias) === searchParams.dias)?.dias ?? 30;
-  const [r, hist] = await Promise.all([carregarSaudeRede(ambiente.id, dias), carregarHistoricoSeguidores(ambiente.id)]);
+  const [r, hist, ant] = await Promise.all([
+    carregarSaudeRede(ambiente.id, dias),
+    carregarHistoricoSeguidores(ambiente.id),
+    carregarSaudeRede(ambiente.id, dias, true),
+  ]);
+  // Só compara quando as mesmas unidades têm dados nos dois períodos (senão a diferença seria só de cobertura).
+  const comparavel = ant.unidadesComDados > 0 && ant.unidadesComDados === r.unidadesComDados;
+  const a = comparavel ? ant : null;
   const linhas = [...r.linhas].sort((a, b) => (b.alcance ?? -1) - (a.alcance ?? -1));
   const maxAlcance = Math.max(...linhas.map((l) => l.alcance ?? 0), 1);
   const unidadesIg = r.linhas.filter((l) => l.status === "ok").length;
@@ -113,7 +134,7 @@ export default async function SaudeDaRedePage({ searchParams }: { searchParams: 
               que os anúncios estão entregando. Os números ficam guardados — clique em Atualizar para buscar de novo na Meta.
             </p>
             <p className="mt-1 text-[11px] text-neutral-600">
-              {r.atualizadoEm ? `Dados de ${dataHora(r.atualizadoEm)} · ${r.unidadesComDados} de ${unidadesContadas} unidades` : "Ainda sem dados nesse período."}
+              {r.atualizadoEm ? `Dados de ${dataHora(r.atualizadoEm)} · ${r.unidadesComDados} de ${unidadesContadas} unidades${comparavel ? "" : " · atualize os dados para ver a comparação com o período anterior"}` : "Ainda sem dados nesse período."}
             </p>
           </div>
           <BotaoAtualizarSaude key={dias} contaIds={r.linhas.filter((l) => l.status !== "repetida").map((l) => l.contaId)} dias={dias} />
@@ -144,21 +165,22 @@ export default async function SaudeDaRedePage({ searchParams }: { searchParams: 
           <>
             <h2 className="mt-8 text-sm font-semibold text-neutral-300">Instagram da rede (orgânico + tráfego)</h2>
             <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <Kpi rotulo="Alcance" valor={compacto(r.alcance)} nota="soma das unidades — a mesma pessoa pode estar em mais de uma">
+              <Kpi rotulo="Alcance" valor={compacto(r.alcance)} delta={<Delta atual={r.alcance} anterior={a ? a.alcance : null} />} nota="soma das unidades — a mesma pessoa pode estar em mais de uma">
                 <Divisao parte={r.divisao.alcance} unidadesComIg={unidadesIg} />
               </Kpi>
-              <Kpi rotulo="Visualizações" valor={compacto(r.visualizacoes)} nota="vezes que o conteúdo foi visto">
+              <Kpi rotulo="Visualizações" valor={compacto(r.visualizacoes)} delta={<Delta atual={r.visualizacoes} anterior={a ? a.visualizacoes : null} />} nota="vezes que o conteúdo foi visto">
                 <Divisao parte={r.divisao.visualizacoes} unidadesComIg={unidadesIg} />
               </Kpi>
               <Kpi
                 rotulo="Interações"
                 valor={compacto(r.interacoes)}
+                delta={<Delta atual={r.interacoes} anterior={a ? a.interacoes : null} />}
                 nota={`${compacto(r.curtidas)} curtidas · ${compacto(r.comentarios)} comentários · ${compacto(r.compartilhamentos)} compart. · ${compacto(r.salvamentos)} salvos`}
               >
                 <Divisao parte={r.divisao.interacoes} unidadesComIg={unidadesIg} />
               </Kpi>
-              <Kpi rotulo="Novos seguidores" valor={`+${n0.format(r.novosSeguidores)}`} nota={`${compacto(r.seguidores)} seguidores somando todas as unidades`} />
-              <Kpi rotulo="Visitas ao perfil" valor={compacto(r.visitasPerfil)} />
+              <Kpi rotulo="Novos seguidores" valor={`+${n0.format(r.novosSeguidores)}`} delta={<Delta atual={r.novosSeguidores} anterior={a ? a.novosSeguidores : null} />} nota={`${compacto(r.seguidores)} seguidores somando todas as unidades`} />
+              <Kpi rotulo="Visitas ao perfil" valor={compacto(r.visitasPerfil)} delta={<Delta atual={r.visitasPerfil} anterior={a ? a.visitasPerfil : null} />} />
               <Kpi
                 rotulo="Posts publicados"
                 valor={n0.format(r.posts)}
@@ -174,8 +196,8 @@ export default async function SaudeDaRedePage({ searchParams }: { searchParams: 
 
             <h2 className="mt-8 text-sm font-semibold text-neutral-300">Anúncios (tráfego pago)</h2>
             <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <Kpi rotulo="Investido" valor={real.format(r.anuncios.gasto)} nota={`${r.anuncios.unidadesInvestindo} de ${r.unidadesComDados} unidades investiram${r.anuncios.gastoForaInstagram > 0 ? ` · ${real.format(r.anuncios.gastoForaInstagram)} rodou fora do Instagram` : ""}`} />
-              <Kpi rotulo="Alcance pago" valor={compacto(r.anuncios.alcance)} nota={[r.anuncios.alcanceInstagram !== r.anuncios.alcance ? `${compacto(r.anuncios.alcanceInstagram)} no Instagram` : null, r.anuncios.custoPorMilAlcancados !== null ? `${real.format(r.anuncios.custoPorMilAlcancados)} a cada mil` : null].filter(Boolean).join(" · ") || undefined} />
+              <Kpi rotulo="Investido" valor={real.format(r.anuncios.gasto)} delta={<Delta atual={r.anuncios.gasto} anterior={a ? a.anuncios.gasto : null} neutro />} nota={`${r.anuncios.unidadesInvestindo} de ${r.unidadesComDados} unidades investiram${r.anuncios.gastoForaInstagram > 0 ? ` · ${real.format(r.anuncios.gastoForaInstagram)} rodou fora do Instagram` : ""}`} />
+              <Kpi rotulo="Alcance pago" valor={compacto(r.anuncios.alcance)} delta={<Delta atual={r.anuncios.alcance} anterior={a ? a.anuncios.alcance : null} />} nota={[r.anuncios.alcanceInstagram !== r.anuncios.alcance ? `${compacto(r.anuncios.alcanceInstagram)} no Instagram` : null, r.anuncios.custoPorMilAlcancados !== null ? `${real.format(r.anuncios.custoPorMilAlcancados)} a cada mil` : null].filter(Boolean).join(" · ") || undefined} />
               <Kpi rotulo="Engajamento pago" valor={compacto(r.anuncios.engajamentos)} nota={r.anuncios.custoPorEngajamento !== null ? `${real.format(r.anuncios.custoPorEngajamento)} por engajamento` : undefined} />
               <Kpi rotulo="Cliques no link" valor={compacto(r.anuncios.cliquesNoLink)} nota={r.anuncios.cpm !== null ? `CPM ${real.format(r.anuncios.cpm)}` : undefined} />
             </div>

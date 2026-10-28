@@ -5,7 +5,7 @@ import { Resend } from "resend";
  * em teste). Lança se não estiver configurado — quem chama decide se trata como erro fatal
  * (cron) ou silencioso (nunca é o caso aqui: sem e-mail configurado, o relatório simplesmente não
  * pode ser enviado, e isso deve aparecer no log do cron, não ser engolido). */
-export async function enviarEmail(params: { destinatario: string; assunto: string; html: string }) {
+export async function enviarEmail(params: { destinatario: string | string[]; assunto: string; html: string; anexos?: Array<{ nome: string; conteudo: Buffer }> }) {
   const apiKey = process.env.RESEND_API_KEY;
   const remetente = process.env.RESEND_FROM_EMAIL;
   if (!apiKey || !remetente) {
@@ -18,6 +18,7 @@ export async function enviarEmail(params: { destinatario: string; assunto: strin
     to: params.destinatario,
     subject: params.assunto,
     html: params.html,
+    ...(params.anexos?.length ? { attachments: params.anexos.map((a) => ({ filename: a.nome, content: a.conteudo })) } : {}),
   });
 
   if (error) throw new Error(error.message);

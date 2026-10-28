@@ -854,3 +854,17 @@ alter table smartads_financeiro_cache add column if not exists saldo_calculado_e
 -- Aportes: o que a Meta mandou junto da recarga (pra achar o valor líquido) e o valor creditado depois de impostos.
 alter table smartads_investimentos add column if not exists meta_dados jsonb;
 alter table smartads_investimentos add column if not exists valor_creditado_centavos integer;
+
+-- Relatório mensal por unidade (PDF por e-mail), alertas de campanha terminando e comparação de período.
+alter table smartads_clientes add column if not exists email_relatorio text;
+alter table smartads_campanhas_rede_cache add column if not exists fim_em timestamptz;
+create table if not exists smartads_relatorio_mensal_envios (
+  id uuid primary key default gen_random_uuid(),
+  cliente_id uuid not null references smartads_clientes(id) on delete cascade,
+  mes text not null,
+  destinatario text not null,
+  enviado_em timestamptz not null default now(),
+  erro text
+);
+create index if not exists smartads_relatorio_mensal_envios_idx on smartads_relatorio_mensal_envios(cliente_id, mes);
+alter table smartads_relatorio_mensal_envios enable row level security;
