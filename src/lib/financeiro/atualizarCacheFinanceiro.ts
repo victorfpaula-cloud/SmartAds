@@ -121,6 +121,7 @@ export async function atualizarCacheFinanceiroDaConta(
               valor_centavos: r.valorCentavos,
               origem: "meta",
               meta_event_key: r.chave,
+              meta_dados: r.extra,
             }))
           );
           if (erroInsert) throw new Error(`Não gravei as recargas: ${erroInsert.message}`);
@@ -129,6 +130,21 @@ export async function atualizarCacheFinanceiroDaConta(
       }
     } catch (e) {
       movRecarga = { totalFundingCentavos: 0, erro: e instanceof Error ? e.message : String(e) };
+    }
+    // Guarda o que a Meta mandou em cada recarga recente (ex.: se informa o valor creditado depois de
+    // impostos). Só preenche linhas que ainda não têm esses dados; não mexe em totais.
+    try {
+      const recentes = await listarRecargasDesde(metaAdAccountId, new Date(agora.getTime() - 6 * 86_400_000));
+      for (const r of recentes) {
+        await supabase
+          .from("smartads_investimentos")
+          .update({ meta_dados: r.extra })
+          .eq("conta_id", contaId)
+          .eq("meta_event_key", r.chave)
+          .is("meta_dados", null);
+      }
+    } catch {
+      /* captura é só um extra */
     }
     const recargaMesCentavos = movRecarga.erro
       ? mesmoMes

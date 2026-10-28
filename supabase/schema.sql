@@ -850,3 +850,7 @@ alter table smartads_financeiro_cache add column if not exists recarga_contada_d
 alter table smartads_financeiro_cache add column if not exists recarga_calculada_em timestamptz;
 alter table smartads_financeiro_cache add column if not exists gasto_mes_ref text;
 alter table smartads_financeiro_cache add column if not exists saldo_calculado_em timestamptz;
+
+-- Aportes: o que a Meta mandou junto da recarga (pra achar o valor líquido) e o valor creditado depois de impostos.
+alter table smartads_investimentos add column if not exists meta_dados jsonb;
+alter table smartads_investimentos add column if not exists valor_creditado_centavos integer;

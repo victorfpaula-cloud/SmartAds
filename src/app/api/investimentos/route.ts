@@ -39,3 +39,16 @@ export async function DELETE(request: NextRequest) {
   if (!count) return NextResponse.json({ erro: "Esse aporte veio da Meta e não pode ser apagado." }, { status: 409 });
   return NextResponse.json({ ok: true });
 }
+
+/** Informa (ou limpa) quanto de um aporte realmente caiu de crédito depois de impostos/taxas. */
+export async function PATCH(request: NextRequest) {
+  const c = await request.json().catch(() => null);
+  const id = typeof c?.id === "string" ? c.id : "";
+  const creditado = c?.valorCreditadoCentavos === null ? null : Math.round(Number(c?.valorCreditadoCentavos));
+  if (!id || (creditado !== null && (!Number.isFinite(creditado) || creditado <= 0))) {
+    return NextResponse.json({ erro: "Informe o aporte e um valor maior que zero (ou vazio pra limpar)." }, { status: 400 });
+  }
+  const { error } = await criarClienteAdmin().from("smartads_investimentos").update({ valor_creditado_centavos: creditado }).eq("id", id);
+  if (error) return NextResponse.json({ erro: error.message }, { status: 400 });
+  return NextResponse.json({ ok: true });
+}
