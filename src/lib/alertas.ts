@@ -5,7 +5,7 @@ import { calcularPrevisaoSaldo } from "@/lib/financeiro/previsaoSaldo";
 import { diaEmSaoPaulo } from "@/lib/tempoSaoPaulo";
 
 export type SeveridadeAlerta = "critico" | "atencao" | "info";
-export type CategoriaAlerta = "saldo" | "conta" | "boost" | "dados" | "investimento" | "posts";
+export type CategoriaAlerta = "saldo" | "conta" | "boost" | "dados" | "investimento" | "posts" | "campanhas" | "desempenho" | "conexao";
 
 export interface Alerta {
   id: string;
@@ -25,6 +25,9 @@ export const ROTULO_CATEGORIA: Record<CategoriaAlerta, string> = {
   dados: "Dados",
   investimento: "Investimento do mês",
   posts: "Postagens",
+  campanhas: "Campanhas",
+  desempenho: "Desempenho",
+  conexao: "Conexão com a Meta",
 };
 
 const reais = (c: number) => `R$ ${(c / 100).toFixed(2).replace(".", ",").replace(/\B(?=(\d{3})+(?!\d))/g, ".")}`;
@@ -132,6 +135,63 @@ export async function gerarAlertas(empresaId: string, agora = new Date()): Promi
     }
   }
 
+  // Campanhas ativas: terminando em breve e ativas sem gastar (do cache das campanhas da rede, 2x/dia)
+  const { data: ativasCache } = await supabase
+    .from("smartads_campanhas_rede_cache")
+    .select("conta_id, nome, fim_em")
+    .in("conta_id", idsComIg);
+  const agoraMs = agora.getTime();
+  const porContaCamp = new Map<string, Array<{ nome: string; fim_em: string | null }>>();
+  for (const l of ativasCache ?? []) porContaCamp.set(l.conta_id, [...(porContaCamp.get(l.conta_id) ?? []), l]);
+  for (const [contaId, lista] of porContaCamp) {
+    const c = porId.get(contaId);
+    if (!c) continue;
+    const terminando = lista
+      .filter((x) => x.fim_em && new Date(x.fim_em).getTime() > agoraMs && new Date(x.fim_em).getTime() - agoraMs <= 2 * 86_400_000)
+      .sort((a, b) => (a.fim_em ?? "").localeCompare(b.fim_em ?? ""));
+    if (terminando.length > 0) {
+      const quando = (iso: string) => {
+        const h = (new Date(iso).getTime() - agoraMs) / 3_600_000;
+        return h < 24 ? "em menos de 1 dia" : `em ${Math.round(h / 24)} dias`;
+      };
+      add({
+        severidade: "atencao", categoria: "campanhas", unidade: c.clienteNome,
+        titulo: `${terminando.length} campanha${terminando.length !== 1 ? "s" : ""} terminando`,
+        detalhe: terminando.slice(0, 3).map((x) => `${x.nome.replace(/^🤖\s*/, "")} (${quando(x.fim_em as string)})`).join("; "),
+        href: `/campanhas/conta/${c.contaId}`,
+      }, c);
+    }
+    const semSaldo = c.saldoDisponivelCentavos !== null && c.saldoDisponivelCentavos <= 0 && c.contaPrePaga !== false;
+    if (!c.erro && !semSaldo && c.mediaDiariaCentavos === 0 && c.gasto7diasCentavos === 0 && c.statusConta === 1) {
+      add({ severidade: "atencao", categoria: "campanhas", unidade: c.clienteNome, titulo: "Campanhas ativas, mas sem gasto há 7 dias", detalhe: `${lista.length} campanha${lista.length !== 1 ? "s" : ""} ativa${lista.length !== 1 ? "s" : ""} sem entregar — pode ser anúncio reprovado, público pequeno ou orçamento zerado.`, href: `/campanhas/conta/${c.contaId}` }, c);
+    }
+  }
+
+  // Queda forte de alcance do Instagram: última semana contra a semana anterior (Saúde da rede)
+  const { data: semanas } = await supabase
+    .from("smartads_saude_rede_cache")
+    .select("conta_id, dias, dados, calculado_em")
+    .in("conta_id", idsComIg)
+    .in("dias", [7, 1007])
+    .not("dados", "is", null);
+  const alcancePorConta = new Map<string, { atual?: number; anterior?: number; recente: boolean }>();
+  for (const l of semanas ?? []) {
+    const alc = (l.dados as any)?.instagram?.alcance;
+    if (typeof alc !== "number") continue;
+    const x = alcancePorConta.get(l.conta_id) ?? { recente: true };
+    if (l.dias === 7) x.atual = alc; else x.anterior = alc;
+    if (agoraMs - new Date(l.calculado_em).getTime() > 4 * 86_400_000) x.recente = false;
+    alcancePorConta.set(l.conta_id, x);
+  }
+  for (const [contaId, x] of alcancePorConta) {
+    const c = porId.get(contaId);
+    if (!c || !x.recente || x.atual === undefined || x.anterior === undefined || x.anterior < 1000) continue;
+    const queda = ((x.anterior - x.atual) / x.anterior) * 100;
+    if (queda >= 40) {
+      add({ severidade: "atencao", categoria: "desempenho", unidade: c.clienteNome, titulo: `Alcance caiu ${Math.round(queda)}% na semana`, detalhe: `${x.atual.toLocaleString("pt-BR")} contra ${x.anterior.toLocaleString("pt-BR")} na semana anterior (Instagram, orgânico + tráfego).`, href: "/estrategias/saude-rede?dias=7" }, c);
+    }
+  }
+
   void mes;
   return alertas.sort((a, b) => ORDEM[a.severidade] - ORDEM[b.severidade] || a.unidade.localeCompare(b.unidade));
 }
@@ -152,4 +212,27 @@ export function alertasEmHtml(alertas: Alerta[], titulo = "Alertas da rede"): st
     })
     .join("");
   return `<div style="margin-bottom:28px;padding:16px;border-radius:8px;background:#f8fafc;border:1px solid #e2e8f0"><h2 style="font-size:15px;margin:0 0 4px">${titulo}</h2>${grupos}</div>`;
+}
+
+/** Conexões com a Meta (login que dá acesso às contas): caída ou perto de vencer. Separado porque a
+ * conexão é da agência inteira, não de uma empresa — vale mostrar/enviar uma vez só. */
+export async function gerarAlertasConexao(agora = new Date()): Promise<Alerta[]> {
+  const { data } = await criarClienteAdmin()
+    .from("smartads_meta_conexoes")
+    .select("id, meta_user_nome, conectado, token_expira_em, ultimo_erro");
+  const alertas: Alerta[] = [];
+  for (const c of data ?? []) {
+    const nome = c.meta_user_nome ?? "Login da Meta";
+    if (!c.conectado) {
+      alertas.push({ id: `conexao:${c.id}:caiu`, severidade: "critico", categoria: "conexao", unidade: nome, titulo: "Conexão com a Meta desconectada", detalhe: (c.ultimo_erro ?? "Reconecte em Contas e conexões pra voltar a ler e criar campanhas.").toString().slice(0, 160), href: "/contas" });
+      continue;
+    }
+    if (c.token_expira_em) {
+      const dias = (new Date(c.token_expira_em).getTime() - agora.getTime()) / 86_400_000;
+      if (dias < 7) {
+        alertas.push({ id: `conexao:${c.id}:vence`, severidade: dias < 3 ? "critico" : "atencao", categoria: "conexao", unidade: nome, titulo: dias <= 0 ? "Acesso à Meta venceu" : `Acesso à Meta vence em ${Math.ceil(dias)} dia${Math.ceil(dias) !== 1 ? "s" : ""}`, detalhe: "O app renova sozinho quando consegue; se não renovar, reconecte em Contas e conexões.", href: "/contas" });
+      }
+    }
+  }
+  return alertas;
 }

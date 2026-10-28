@@ -1,5 +1,6 @@
 "use client";
 
+import EmailRelatorioMensal from "./EmailRelatorioMensal";
 import { useEffect, useMemo, useState } from "react";
 import { Sparkle, Buildings, Storefront, Lightning } from "@phosphor-icons/react";
 import ModalBoostAutomatico from "@/components/ModalBoostAutomatico";
@@ -33,6 +34,7 @@ interface Cliente {
   nome: string;
   ativo: boolean;
   empresa_id: string;
+  email_relatorio?: string | null;
   smartads_empresas: Empresa | null;
   smartads_contas_meta: ContaMeta[];
 }
@@ -316,6 +318,8 @@ export default function PainelContas({
                     + Conta de anúncio
                   </button>
                 </div>
+
+                <EmailRelatorioMensal clienteId={cliente.id} inicial={cliente.email_relatorio ?? null} />
 
                 {cliente.smartads_contas_meta.some((c) => c.ativo !== false) && (
                   <div className="mt-3 flex flex-col gap-1.5">

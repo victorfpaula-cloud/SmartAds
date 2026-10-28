@@ -17,15 +17,18 @@ export default function BotaoAtualizarSaude({ contaIds, dias }: { contaIds: stri
     setFalhas(0);
     let erros = 0;
     for (let i = 0; i < contaIds.length; i++) {
-      try {
-        const r = await fetch("/api/saude-rede", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ contaId: contaIds[i], dias }),
-        });
-        if (!r.ok) erros++;
-      } catch {
-        erros++;
+      // Período atual e, na sequência, o anterior (pra comparar).
+      for (const anterior of [false, true]) {
+        try {
+          const r = await fetch("/api/saude-rede", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ contaId: contaIds[i], dias, anterior }),
+          });
+          if (!r.ok) erros++;
+        } catch {
+          erros++;
+        }
       }
       setFeitas(i + 1);
       setFalhas(erros);

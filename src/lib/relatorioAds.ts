@@ -7,6 +7,7 @@ import {
   type InsightsInstagramRelatorio,
   type LinhaInsightRelatorio,
 } from "@/lib/meta/api";
+import { ganhoSeguidoresEntre } from "@/lib/seguidoresHistorico";
 import { comContaMeta } from "@/lib/meta/conexao";
 import { adicionarDias, diaEmSaoPaulo, formatarDiaExibicao } from "@/lib/tempoSaoPaulo";
 
@@ -141,17 +142,26 @@ function totaisDe(linha: LinhaInsightRelatorio | undefined): TotaisAds {
 /** A Meta limita os insights do Instagram a 30 dias por chamada; períodos maiores somam janelas
  * consecutivas. Os totais de curtidas, visualizações etc. somam certo; o alcance, em períodos
  * longos, pode contar a mesma pessoa em mais de uma janela (o relatório avisa). */
-async function insightsInstagramEmJanelas(igId: string, pageId: string | null, desde: string): Promise<InsightsInstagramRelatorio> {
+async function insightsInstagramEmJanelas(
+  igId: string,
+  pageId: string | null,
+  desde: string,
+  /** Último dia do período; sem isso vai até agora. */
+  ate?: string
+): Promise<InsightsInstagramRelatorio> {
   const total: InsightsInstagramRelatorio = { metricas: {}, novosSeguidores: null, erros: [] };
-  // Mesmo recorte dos anúncios (do início do primeiro dia, horário de SP, até agora): sem isso o
-  // Instagram contava "últimas N×24h" e os anúncios "N dias fechados", e a diferença (= orgânico)
-  // saía distorcida em até um dia.
-  let restante = (Date.now() - new Date(`${desde}T00:00:00-03:00`).getTime()) / 86_400_000;
-  for (let fim = 0; restante > 0.01; ) {
+  const DIA = 86_400_000;
+  // Mesmo recorte dos anúncios (do início do primeiro dia, horário de SP, até o fim do último dia ou agora):
+  // sem isso o Instagram contava "últimas N×24h" e os anúncios "N dias fechados", e o orgânico saía distorcido.
+  const fimMs = ate ? Math.min(new Date(`${ate}T23:59:59-03:00`).getTime() + 1000, Date.now()) : Date.now();
+  let restante = (fimMs - new Date(`${desde}T00:00:00-03:00`).getTime()) / DIA;
+  let fim = (Date.now() - fimMs) / DIA; // quantos dias atrás termina a janela atual
+  const primeiraJanela = fim;
+  while (restante > 0.01) {
     const janela = Math.min(30, restante);
-    const parcial = await obterInsightsInstagramRelatorio(igId, pageId, janela, fim, fim === 0);
+    const parcial = await obterInsightsInstagramRelatorio(igId, pageId, janela, fim, fim === primeiraJanela);
     for (const [k, v] of Object.entries(parcial.metricas)) total.metricas[k] = (total.metricas[k] ?? 0) + v;
-    if (fim === 0) total.novosSeguidores = parcial.novosSeguidores;
+    if (fim === primeiraJanela) total.novosSeguidores = parcial.novosSeguidores;
     for (const e of parcial.erros) if (!total.erros.includes(e)) total.erros.push(e);
     fim += janela;
     restante -= janela;
@@ -223,7 +233,13 @@ async function ganhoDeSeguidoresPorLeituras(
 /** Relatório de tráfego (anúncios) de UMA conta no período — só números de resultado: alcance,
  * engajamento, cliques e visitas ao perfil, mais o investimento. Cada bloco que falha na Meta vira
  * um aviso em vez de derrubar o relatório inteiro; só os totais do período são obrigatórios. */
-export async function gerarRelatorioAds(contaId: string, dias: number, comOrganico = false): Promise<DadosRelatorioAds> {
+export async function gerarRelatorioAds(
+  contaId: string,
+  dias: number,
+  comOrganico = false,
+  /** Termina o período N dias atrás (ex.: 1 = até ontem; dias=7 + 7 = a semana anterior). */
+  opcoes: { terminaDiasAtras?: number } = {}
+): Promise<DadosRelatorioAds> {
   const supabase = criarClienteAdmin();
   const { data: conta, error } = await supabase
     .from("smartads_contas_meta")
@@ -234,7 +250,9 @@ export async function gerarRelatorioAds(contaId: string, dias: number, comOrgani
     .single();
   if (error || !conta) throw new Error("Conta não encontrada.");
 
-  const hoje = diaEmSaoPaulo(new Date().toISOString());
+  const hojeReal = diaEmSaoPaulo(new Date().toISOString());
+  const deslocado = (opcoes.terminaDiasAtras ?? 0) > 0;
+  const hoje = adicionarDias(hojeReal, -(opcoes.terminaDiasAtras ?? 0)); // último dia do período
   const desde = adicionarDias(hoje, -(dias - 1));
   const adAccountId = conta.meta_ad_account_id as string;
   const avisos: string[] = [];
@@ -246,7 +264,7 @@ export async function gerarRelatorioAds(contaId: string, dias: number, comOrgani
       obterInsightsRelatorio(adAccountId, { nivel: "campaign", desde, ate: hoje }),
       obterInsightsRelatorio(adAccountId, { nivel: "account", desde, ate: hoje, breakdownPlataforma: true }),
       conta.instagram_business_id
-        ? insightsInstagramEmJanelas(conta.instagram_business_id, (conta.page_id as string | null) ?? null, desde)
+        ? insightsInstagramEmJanelas(conta.instagram_business_id, (conta.page_id as string | null) ?? null, desde, deslocado ? hoje : undefined)
         : Promise.resolve(null),
       conta.instagram_business_id
         ? listarPostsInstagramDesde(conta.instagram_business_id, Math.floor(new Date(`${desde}T00:00:00-03:00`).getTime() / 1000))
@@ -289,7 +307,8 @@ export async function gerarRelatorioAds(contaId: string, dias: number, comOrgani
         : [];
 
     const ig = igInsights.status === "fulfilled" ? igInsights.value : null;
-    const posts = igPosts.status === "fulfilled" ? igPosts.value : null;
+    const fimPeriodoMs = deslocado ? new Date(`${hoje}T23:59:59-03:00`).getTime() : Infinity;
+    const posts = igPosts.status === "fulfilled" && igPosts.value ? igPosts.value.filter((p: any) => !p.timestamp || new Date(p.timestamp).getTime() <= fimPeriodoMs) : null;
     const postsPeriodo = posts
       ? {
           curtidas: posts.reduce((soma, p) => soma + (p.like_count ?? 0), 0),
@@ -301,7 +320,11 @@ export async function gerarRelatorioAds(contaId: string, dias: number, comOrgani
     let instagram: DadosRelatorioAds["instagram"] = null;
     if (conta.instagram_business_id) {
       let novosSeguidores = ig?.novosSeguidores ?? null;
-      if (novosSeguidores === null && seguidoresAgora !== null) {
+      if (deslocado) {
+        // Período já fechado: a diferença das leituras diárias guardadas é mais confiável que a janela da Meta.
+        const dosSnapshots = await ganhoSeguidoresEntre(contaId, desde, hoje).catch(() => null);
+        if (dosSnapshots !== null) novosSeguidores = dosSnapshots;
+      } else if (novosSeguidores === null && seguidoresAgora !== null) {
         try {
           const leitura = await ganhoDeSeguidoresPorLeituras(contaId, seguidoresAgora, hoje, desde);
           if (leitura) {

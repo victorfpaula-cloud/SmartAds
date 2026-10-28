@@ -1,5 +1,5 @@
 import { criarClienteAdmin } from "@/lib/supabase/admin";
-import { alertasEmHtml, gerarAlertas, type Alerta } from "@/lib/alertas";
+import { alertasEmHtml, gerarAlertas, gerarAlertasConexao, type Alerta } from "@/lib/alertas";
 import { enviarEmail } from "./resend";
 
 const DESTINATARIO_PADRAO = "victorfpaula@gmail.com";
@@ -28,6 +28,8 @@ export async function enviarAlertasDiarios(): Promise<{ enviado: boolean; motivo
       alertas: t.alertas.filter((a) => a.severidade !== "info" && a.categoria !== "investimento" && a.categoria !== "posts"),
     }))
     .filter((t) => t.alertas.length > 0);
+  const conexao = (await gerarAlertasConexao().catch(() => [])).filter((a) => a.severidade !== "info");
+  if (conexao.length > 0) importantes.unshift({ empresa: "Conexão com a Meta", alertas: conexao });
   const total = importantes.reduce((s, t) => s + t.alertas.length, 0);
   if (total === 0) return { enviado: false, motivo: "Nada urgente hoje.", total: 0 };
 

@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // jsPDF roda no servidor (relatório mensal por e-mail): fica fora do bundle pra usar a versão de Node.
+  experimental: { serverComponentsExternalPackages: ["jspdf"] },
   async headers() {
     return [
       {
