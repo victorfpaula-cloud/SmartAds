@@ -1237,9 +1237,23 @@ export async function obterResumoCampanhasAtivas(adAccountId: string): Promise<R
 /** Cada evento de dinheiro entrando/saindo da conta, com o valor já extraído do extra_data.
  * `funding_event_successful` = Pix/boleto caindo na conta; `ad_account_billing_charge` = cobrança
  * automática (quase diária) que desconta do saldo. */
+/** Lê o extra_data (JSON em texto) de uma atividade; malformado vira null em vez de derrubar a soma. */
+function lerExtraData(texto: string): Record<string, unknown> | null {
+  try {
+    const v = JSON.parse(texto);
+    return v && typeof v === "object" ? (v as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Soma o que entrou (recargas) e o que foi cobrado entre `desde` (exclusivo) e `ate` (inclusivo,
+ * padrão agora) — o limite superior evita contar duas vezes um evento que chega entre uma leitura
+ * e a próxima. Valores em texto ("1400") também são aceitos. */
 export async function somarMovimentacaoFinanceiraDesde(
   adAccountId: string,
-  desde: Date
+  desde: Date,
+  ate: Date = new Date()
 ): Promise<{ totalFundingCentavos: number; totalChargeCentavos: number }> {
   let totalFundingCentavos = 0;
   let totalChargeCentavos = 0;
@@ -1260,13 +1274,16 @@ export async function somarMovimentacaoFinanceiraDesde(
         passouDoLimite = true;
         break;
       }
+      if (new Date(item.event_time).getTime() > ate.getTime()) continue;
       if (!item.extra_data) continue;
       if (item.event_type === "funding_event_successful") {
-        const extra = JSON.parse(item.extra_data);
-        if (typeof extra.amount === "number") totalFundingCentavos += extra.amount;
+        const extra = lerExtraData(item.extra_data);
+        const valor = Number(extra?.amount);
+        if (extra && Number.isFinite(valor)) totalFundingCentavos += valor;
       } else if (item.event_type === "ad_account_billing_charge") {
-        const extra = JSON.parse(item.extra_data);
-        if (typeof extra.new_value === "number") totalChargeCentavos += extra.new_value;
+        const extra = lerExtraData(item.extra_data);
+        const valor = Number(extra?.new_value);
+        if (extra && Number.isFinite(valor)) totalChargeCentavos += valor;
       }
     }
 

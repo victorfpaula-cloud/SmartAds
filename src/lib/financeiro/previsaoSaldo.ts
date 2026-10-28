@@ -19,8 +19,13 @@ const formatoDataCurta = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", mont
 export function calcularPrevisaoSaldo(
   saldoCentavos: number | null,
   mediaDiariaCentavos: number,
-  hoje: Date = new Date()
+  hoje: Date = new Date(),
+  /** false = conta com cartão: a Meta cobra depois, não existe saldo que "acaba". */
+  prePaga: boolean | null = null
 ): PrevisaoSaldo {
+  if (saldoCentavos === null && prePaga === false) {
+    return { texto: "Cartão", detalhe: "cobrado depois, sem saldo a esgotar", dias: null, nivel: "neutro" };
+  }
   if (saldoCentavos === null) {
     return { texto: "—", detalhe: "saldo desconhecido", dias: null, nivel: "neutro" };
   }
