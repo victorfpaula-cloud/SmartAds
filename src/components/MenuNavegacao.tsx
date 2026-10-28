@@ -7,6 +7,7 @@ import {
   Megaphone,
   Binoculars,
   Heartbeat,
+  BellRinging,
   UsersThree,
   CurrencyCircleDollar,
   ChartBar,
@@ -23,6 +24,7 @@ const ICONES: Record<string, Icon> = {
   campanhas: Megaphone,
   radar: Binoculars,
   saude: Heartbeat,
+  alertas: BellRinging,
   unidades: UsersThree,
   financeiro: CurrencyCircleDollar,
   relatorios: ChartBar,
@@ -47,6 +49,7 @@ const COLUNAS: Record<number, string> = {
   6: "md:grid-cols-6",
   7: "md:grid-cols-7",
   8: "md:grid-cols-8",
+  9: "md:grid-cols-9",
 };
 
 /** Botões do menu — ícone + nome, em grade (quebra em duas linhas quando falta espaço). O ativo é o

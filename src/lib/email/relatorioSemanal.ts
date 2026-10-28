@@ -1,6 +1,8 @@
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { obterInsightsConta } from "@/lib/meta/api";
 import { enviarEmail } from "./resend";
+import { alertasEmHtml } from "@/lib/alertas";
+import { alertasDeTodasAsEmpresas } from "./alertasDiarios";
 
 function linkAprovacao(token: string, acao: "aprovar" | "rejeitar") {
   const base = process.env.NEXT_PUBLIC_APP_URL ?? "";
@@ -58,6 +60,9 @@ export async function enviarRelatorioSemanal(): Promise<{ enviado: boolean; moti
           </ul>
         </div>`
       : "";
+
+  // Alertas da semana (saldo, conta, boost, quem ainda não investiu no mês, posts parados) de cada empresa.
+  const secaoAlertas = (await alertasDeTodasAsEmpresas()).map((t) => alertasEmHtml(t.alertas, `Alertas · ${t.empresa}`)).join("");
 
   const secoes: string[] = [];
 
@@ -156,6 +161,7 @@ export async function enviarRelatorioSemanal(): Promise<{ enviado: boolean; moti
 <html><body style="font-family:-apple-system,sans-serif;color:#111;max-width:600px;margin:0 auto;padding:24px">
   <h1 style="font-size:20px;margin:0 0 4px">Relatório semanal — SmartAds</h1>
   <p style="font-size:13px;color:#888;margin:0 0 24px">Semana de ${new Date().toLocaleDateString("pt-BR")}</p>
+  ${secaoAlertas}
   ${secaoCriativosPendentes}
   ${secoes.join("")}
 </body></html>`;

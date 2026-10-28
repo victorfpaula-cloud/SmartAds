@@ -4,7 +4,6 @@ import { coletarFinanceiro, calcularPlanejamento, unicasPorContaDeAnuncio, type 
 import { Wallet, Info, ChartLine } from "@phosphor-icons/react/dist/ssr";
 import { calcularPrevisaoSaldo, type NivelPrevisao } from "@/lib/financeiro/previsaoSaldo";
 import EditarSaldo from "./EditarSaldo";
-import EditarOrcamentoMensal from "./EditarOrcamentoMensal";
 import AtualizarAgora from "./AtualizarAgora";
 import AbasFinanceiro from "@/components/AbasFinanceiro";
 import { descreverSituacaoConta, type TomSituacao } from "@/lib/financeiro/situacaoConta";
@@ -59,13 +58,14 @@ export default async function FinanceiroPage({
   const semSaldoConfigurado = contasUnicas.filter((c) => c.contaPrePaga !== false && c.saldoDisponivelCentavos === null && !c.erro).length;
   const contasComErro = contasUnicas.filter((c) => c.erro).length;
 
-  // Planejamento do mês: o orçamento mensal da unidade é o MÍNIMO a investir (ex.: R$ 500); a projeção é
-  // o gasto até hoje + o ritmo recente × os dias que faltam. Só faz sentido pra franquia.
+  // O mês por unidade: gasto até hoje e para onde o mês caminha (gasto + ritmo recente × dias que faltam).
+  // Não há valor mínimo a cumprir: cada unidade investe o que quiser; o app só avisa quem ainda não investiu.
   const planejamentoPorConta = new Map(contasUnicas.map((c) => [c.contaId, calcularPlanejamento(c)]));
-  const totalMinimo = contasUnicas.reduce((s, c) => s + c.orcamentoMensalCentavos, 0);
   const totalBoostReservado = contasUnicas.reduce((s, c) => s + (planejamentoPorConta.get(c.contaId)?.boostReservadoMensalCentavos ?? 0), 0);
   const totalProjecao = contasUnicas.reduce((s, c) => s + c.projecaoMensalCentavos, 0);
-  const unidadesAbaixoDoMinimo = contasUnicas.filter((c) => planejamentoPorConta.get(c.contaId)?.abaixoDoMinimo && !c.erro).length;
+  const totalRecarga = contasUnicas.reduce((s, c) => s + (c.recargaMesCentavos ?? 0), 0);
+  const semInvestimento = (c: ContaFinanceiro) => !c.erro && c.gastoMesCentavos !== null && (c.recargaMesCentavos ?? 0) === 0 && c.gastoMesCentavos === 0;
+  const unidadesSemInvestimento = contasUnicas.filter(semInvestimento).length;
 
   return (
     <>
@@ -162,16 +162,16 @@ export default async function FinanceiroPage({
               <div>
                 <h2 className="text-sm font-semibold text-neutral-200">O mês por unidade</h2>
                 <p className="mt-0.5 text-[11px] text-neutral-500">
-                  Mínimo a investir no mês, quanto já foi gasto e para onde o mês caminha (gasto até hoje + ritmo dos
-                  últimos dias × dias que faltam). Gastar acima do mínimo é normal; o alerta é ficar abaixo.
+                  Quanto cada unidade recarregou e gastou até hoje, e para onde o mês caminha (gasto até hoje + ritmo dos
+                  últimos dias × dias que faltam). Cada unidade investe o valor que decidir.
                 </p>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-4">
               <div>
-                <p className="text-[10.5px] font-medium uppercase tracking-wide text-neutral-500">Mínimo da rede</p>
-                <p className="mt-0.5 text-sm font-semibold text-neutral-200">{reais(totalMinimo)}</p>
+                <p className="text-[10.5px] font-medium uppercase tracking-wide text-neutral-500">Recarregado no mês</p>
+                <p className="mt-0.5 text-sm font-semibold text-neutral-200">{reais(totalRecarga)}</p>
               </div>
               <div>
                 <p className="text-[10.5px] font-medium uppercase tracking-wide text-neutral-500">Gasto até hoje</p>
@@ -183,9 +183,9 @@ export default async function FinanceiroPage({
                 <p className="text-[10px] text-neutral-500">teto do boost: {reais(totalBoostReservado)}</p>
               </div>
               <div>
-                <p className="text-[10.5px] font-medium uppercase tracking-wide text-neutral-500">Unidades abaixo do mínimo</p>
-                <p className={`mt-0.5 text-sm font-semibold ${unidadesAbaixoDoMinimo > 0 ? "text-amber-400" : "text-ok"}`}>
-                  {unidadesAbaixoDoMinimo} de {contasUnicas.length}
+                <p className="text-[10.5px] font-medium uppercase tracking-wide text-neutral-500">Sem investimento no mês</p>
+                <p className={`mt-0.5 text-sm font-semibold ${unidadesSemInvestimento > 0 ? "text-amber-400" : "text-ok"}`}>
+                  {unidadesSemInvestimento} de {contasUnicas.length}
                 </p>
               </div>
             </div>
@@ -195,44 +195,30 @@ export default async function FinanceiroPage({
                 <thead>
                   <tr className="border-b border-white/10 text-xs uppercase tracking-wide text-neutral-500">
                     <th className="px-4 py-3 font-medium">Unidade</th>
-                    <th className="px-4 py-3 font-medium">Mínimo do mês</th>
+                    <th className="px-4 py-3 font-medium">Recarregado</th>
                     <th className="px-4 py-3 font-medium">Gasto até hoje</th>
                     <th className="px-4 py-3 font-medium">Projeção do mês</th>
-                    <th className="px-4 py-3 font-medium">Situação</th>
+                    <th className="px-4 py-3 font-medium">Saldo acaba em</th>
                     <th className="px-4 py-3 font-medium">Teto do boost</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
                   {contasUnicas.map((conta) => {
                     const p = planejamentoPorConta.get(conta.contaId)!;
+                    const prev = calcularPrevisaoSaldo(conta.saldoDisponivelCentavos, conta.mediaDiariaCentavos, new Date(), conta.contaPrePaga);
                     return (
                       <tr key={conta.contaId}>
                         <td className="px-4 py-3">
                           <p className="font-medium text-neutral-100">{conta.clienteNome}</p>
                           <p className="text-[10.5px] text-neutral-600">{conta.contaNome}</p>
                         </td>
-                        <td className="px-4 py-3">
-                          <p className="text-neutral-300">{reais(conta.orcamentoMensalCentavos)}</p>
-                          <EditarOrcamentoMensal
-                            contaId={conta.contaId}
-                            orcamentoAtualCentavos={conta.orcamentoMensalCentavos}
-                          />
-                        </td>
                         <td className="px-4 py-3 text-neutral-300">
-                          {conta.gastoMesCentavos !== null ? reais(conta.gastoMesCentavos) : "—"}
+                          {conta.recargaMesCentavos !== null ? reais(conta.recargaMesCentavos) : "—"}
+                          {semInvestimento(conta) && <p className="text-[10px] font-semibold text-amber-400">sem investimento</p>}
                         </td>
+                        <td className="px-4 py-3 text-neutral-300">{conta.gastoMesCentavos !== null ? reais(conta.gastoMesCentavos) : "—"}</td>
                         <td className="px-4 py-3 text-neutral-300">{conta.erro ? "—" : reais(conta.projecaoMensalCentavos)}</td>
-                        <td className="px-4 py-3">
-                          {conta.erro ? (
-                            <span className="text-xs font-semibold text-amber-400">Sem leitura</span>
-                          ) : p.abaixoDoMinimo ? (
-                            <span className="text-xs font-semibold text-amber-400">
-                              Abaixo do mínimo (faltam ~{reais(p.faltaParaMinimoCentavos)})
-                            </span>
-                          ) : (
-                            <span className="text-xs font-semibold text-ok">No caminho</span>
-                          )}
-                        </td>
+                        <td className={`px-4 py-3 text-sm font-medium ${TOM_PREVISAO[prev.nivel]}`}>{prev.texto}</td>
                         <td className="px-4 py-3 text-neutral-300">
                           {conta.boostAutomaticoAtivo ? reais(p.boostReservadoMensalCentavos) : "Boost desligado"}
                         </td>
@@ -243,8 +229,9 @@ export default async function FinanceiroPage({
               </table>
             </div>
             <p className="border-t border-white/10 px-4 py-2.5 text-[10.5px] text-neutral-500">
-              “Teto do boost” é o máximo que o boost automático poderia gastar no mês (um boost novo todo dia, até o limite de
-              posts por dia da conta) — não é gasto real. Contas que dividem a mesma conta de anúncio aparecem uma vez.
+              “Recarregado” é o que a unidade pagou nas recargas deste mês (a Meta registra o valor pago; o que cai de crédito é
+              menor por causa dos impostos). “Teto do boost” é o máximo que o boost automático poderia gastar no mês, não o gasto
+              real. Contas que dividem a mesma conta de anúncio aparecem uma vez.
             </p>
           </section>
         )}
@@ -303,7 +290,7 @@ export default async function FinanceiroPage({
                         previsao={calcularPrevisaoSaldo(conta.saldoDisponivelCentavos, conta.mediaDiariaCentavos, new Date(), conta.contaPrePaga)}
                       />
                     </div>
-                    {apenasRede && <MinimoDoMes conta={conta} />}
+                    {apenasRede && <ResumoDoMes conta={conta} />}
                     <EditarSaldo contaId={conta.contaId} saldoAtualCentavos={conta.saldoDisponivelCentavos} />
                   </div>
                 )}
@@ -337,34 +324,22 @@ function SituacaoChip({ conta }: { conta: ContaFinanceiro }) {
 
 const formatoDiaMes = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", timeZone: "UTC" });
 
-/** Quanto a unidade recarregou e gastou neste mês frente ao mínimo combinado (o orçamento mensal
- * da conta). A recarga vem de um ledger diário (a Meta só guarda ~6 dias de atividades), então diz
- * desde quando está contando. */
-function MinimoDoMes({ conta }: { conta: ContaFinanceiro }) {
-  const minimo = conta.orcamentoMensalCentavos;
+/** Quanto a unidade recarregou e gastou neste mês. A recarga vem de um ledger diário (a Meta só guarda
+ * ~6 dias de atividades), então diz desde quando está contando. */
+function ResumoDoMes({ conta }: { conta: ContaFinanceiro }) {
   const recarga = conta.recargaMesCentavos;
-  const pct = recarga !== null && minimo > 0 ? Math.min(100, Math.round((recarga / minimo) * 100)) : null;
   const desde = conta.recargaContadaDesde ? formatoDiaMes.format(new Date(`${conta.recargaContadaDesde}T00:00:00Z`)) : null;
   return (
     <div className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2.5">
       <div className="flex flex-wrap items-baseline justify-between gap-2 text-[11.5px]">
         <span className="text-neutral-400">
-          Recarregado no mês:{" "}
-          <span className="font-semibold text-neutral-100">{recarga !== null ? reais(recarga) : "—"}</span>
-          <span className="text-neutral-500"> de {reais(minimo)} (mínimo)</span>
+          Recarregado no mês: <span className="font-semibold text-neutral-100">{recarga !== null ? reais(recarga) : "—"}</span>
         </span>
         <span className="text-neutral-400">
           Gasto no mês:{" "}
-          <span className="font-semibold text-neutral-100">
-            {conta.gastoMesCentavos !== null ? reais(conta.gastoMesCentavos) : "—"}
-          </span>
+          <span className="font-semibold text-neutral-100">{conta.gastoMesCentavos !== null ? reais(conta.gastoMesCentavos) : "—"}</span>
         </span>
       </div>
-      {pct !== null && (
-        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
-          <div className={`h-full ${pct >= 100 ? "bg-ok" : "bg-accent"}`} style={{ width: `${pct}%` }} />
-        </div>
-      )}
       <p className="mt-1.5 text-[10px] text-neutral-500">
         {conta.recargaErro
           ? `Não consegui ler as recargas na Meta: ${conta.recargaErro}`

@@ -17,20 +17,19 @@ const paraCentavos = (t: string) => {
 const hojeISO = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
 
 export default function PainelInvestimentos({ resumo }: { resumo: ResumoInvestimentos }) {
-  const unidades = [...resumo.unidades].sort(
-    (a, b) => a.investidoCentavos / (a.combinadoCentavos || 1) - b.investidoCentavos / (b.combinadoCentavos || 1)
-  );
-  const totalCombinado = resumo.unidades.reduce((t, u) => t + u.combinadoCentavos, 0);
+  // Quem não colocou nada vem primeiro; depois do menor pro maior valor investido.
+  const unidades = [...resumo.unidades].sort((a, b) => a.investidoCentavos - b.investidoCentavos);
+  const totalPago = resumo.unidades.reduce((t, u) => t + u.pagoCentavos, 0);
   const totalInvestido = resumo.unidades.reduce((t, u) => t + u.investidoCentavos, 0);
-  const cumpriram = resumo.unidades.filter((u) => u.investidoCentavos >= u.combinadoCentavos && u.combinadoCentavos > 0).length;
+  const comAporte = resumo.unidades.filter((u) => u.aportes.length > 0).length;
 
   return (
     <div className="mt-5 flex flex-col gap-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Resumo rotulo="Combinado no mês" valor={reais(totalCombinado)} />
-        <Resumo rotulo="Investido" valor={reais(totalInvestido)} />
-        <Resumo rotulo="Falta investir" valor={reais(Math.max(totalCombinado - totalInvestido, 0))} />
-        <Resumo rotulo="Unidades em dia" valor={`${cumpriram} de ${resumo.unidades.length}`} />
+        <Resumo rotulo="Pago em recargas" valor={reais(totalPago)} />
+        <Resumo rotulo="Creditado (depois de impostos)" valor={reais(totalInvestido)} />
+        <Resumo rotulo="Unidades com aporte" valor={`${comAporte} de ${resumo.unidades.length}`} />
+        <Resumo rotulo="Sem aporte no mês" valor={String(resumo.unidades.length - comAporte)} />
       </div>
 
       {resumo.mesAtual && (
@@ -61,8 +60,6 @@ function Resumo({ rotulo, valor }: { rotulo: string; valor: string }) {
 function CartaoUnidade({ u, mes }: { u: InvestimentoUnidade; mes: string }) {
   const router = useRouter();
   const [aberto, setAberto] = useState(false);
-  const pct = u.combinadoCentavos > 0 ? Math.min(100, Math.round((u.investidoCentavos / u.combinadoCentavos) * 100)) : 0;
-  const completo = u.investidoCentavos >= u.combinadoCentavos && u.combinadoCentavos > 0;
 
   return (
     <div className="cartao-vidro overflow-hidden">
@@ -75,15 +72,15 @@ function CartaoUnidade({ u, mes }: { u: InvestimentoUnidade; mes: string }) {
           <div className="flex shrink-0 items-center gap-2 text-right">
             <div>
               <p className="text-sm font-bold text-neutral-100">
-                {reais(u.investidoCentavos)} <span className="text-xs font-normal text-neutral-500">de {reais(u.combinadoCentavos)}</span>
+                {reais(u.investidoCentavos)}{" "}
+                <span className="text-xs font-normal text-neutral-500">
+                  {u.aportes.length} aporte{u.aportes.length !== 1 ? "s" : ""}
+                  {u.pagoCentavos !== u.investidoCentavos ? ` · pagou ${reais(u.pagoCentavos)}` : ""}
+                </span>
               </p>
-              {u.combinadoEspecial && <p className="text-[10px] font-semibold text-accent-strong">combinado especial do mês</p>}
             </div>
             <CaretDown size={14} className={`text-neutral-500 transition ${aberto ? "rotate-180" : ""}`} />
           </div>
-        </div>
-        <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
-          <div className={`h-full ${completo ? "bg-ok" : "bg-accent"}`} style={{ width: `${pct}%` }} />
         </div>
         {u.sugestoes.length > 0 && (
           <ul className="flex flex-col gap-1">
@@ -112,7 +109,6 @@ function Detalhe({ u, mes, onMudou }: { u: InvestimentoUnidade; mes: string; onM
   const [data, setData] = useState(hojeISO().startsWith(mes) ? hojeISO() : `${mes}-01`);
   const [valor, setValor] = useState("");
   const [obs, setObs] = useState("");
-  const [combinado, setCombinado] = useState((u.combinadoCentavos / 100).toFixed(2).replace(".", ","));
   const [msg, setMsg] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
 
@@ -134,46 +130,9 @@ function Detalhe({ u, mes, onMudou }: { u: InvestimentoUnidade; mes: string; onM
     onMudou();
   }
 
-  async function salvarCombinado(restaurar = false) {
-    const c = restaurar ? null : paraCentavos(combinado);
-    if (!restaurar && c === null) return setMsg("Valor inválido.");
-    setOcupado(true);
-    setMsg(null);
-    const r = await fetch("/api/investimentos/meta", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contaId: u.contaId, mes, valorCentavos: c }),
-    });
-    setOcupado(false);
-    if (!r.ok) return setMsg("Falha ao salvar o combinado.");
-    onMudou();
-  }
-
   return (
     <div className="flex flex-col gap-5 border-t border-white/10 px-5 py-4">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <p className="text-xs font-semibold text-neutral-400">Combinado deste mês (R$)</p>
-          <div className="mt-1 flex gap-2">
-            <input value={combinado} onChange={(e) => setCombinado(e.target.value)} inputMode="decimal" className={campo} />
-            <button
-              onClick={() => salvarCombinado()}
-              disabled={ocupado}
-              className="h-9 shrink-0 rounded-lg bg-white/[0.08] px-3 text-xs font-semibold text-neutral-100 hover:bg-white/15 disabled:opacity-40"
-            >
-              Salvar
-            </button>
-          </div>
-          <p className="mt-1 text-[11px] text-neutral-500">
-            Padrão da unidade: {reais(u.padraoMensalCentavos)}/mês.{" "}
-            {u.combinadoEspecial && (
-              <button onClick={() => salvarCombinado(true)} className="font-semibold text-accent-strong hover:underline">
-                Voltar ao padrão
-              </button>
-            )}
-          </p>
-        </div>
-
+      <div className="grid gap-4">
         <div>
           <p className="text-xs font-semibold text-neutral-400">Lançar um aporte</p>
           <div className="mt-1 grid grid-cols-1 gap-2 sm:grid-cols-2">

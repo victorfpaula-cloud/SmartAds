@@ -59,34 +59,18 @@ export function unicasPorContaDeAnuncio(contas: ContaFinanceiro[]): ContaFinance
 export interface PlanejamentoConta {
   /** Teto do que o boost pode gastar no mês: custo de um boost × posts por dia × dias do mês. */
   boostReservadoMensalCentavos: number;
-  /** Mínimo combinado menos o teto do boost (negativo = o boost sozinho já passa do mínimo). */
-  sobraParaExtrasCentavos: number;
-  /** Quanto falta a projeção chegar ao mínimo combinado (0 quando já chega). */
-  faltaParaMinimoCentavos: number;
-  /** Projeção do mês abaixo do mínimo combinado. */
-  abaixoDoMinimo: boolean;
 }
 
-/** Planejamento do mês por conta, em cima do que já está no cache (sem bater na Meta). O orçamento
- * mensal da unidade é um MÍNIMO a investir (ex.: R$ 500), não um teto — gastar mais que isso é ok; o
- * alerta é a projeção ficar abaixo. "Boost reservado" é um teto: assume um boost novo todo dia, com o
- * limite de posts por dia configurado na conta (10 = "todos" conta como 3, pra não inflar). */
+/** Planejamento do mês por conta, em cima do que já está no cache (sem bater na Meta). "Boost reservado"
+ * é um teto: assume um boost novo todo dia, com o limite de posts por dia configurado na conta (10 =
+ * "todos" conta como 3, pra não inflar). */
 export function calcularPlanejamento(conta: ContaFinanceiro, hoje: Date = new Date()): PlanejamentoConta {
   const { diasNoMes } = diasRestantesNoMes(hoje);
-
   // Cada boost é uma campanha de `orçamento diário × duração` (3 ou 7 dias) por campanha criada no post.
   const orcamentoDiarioBoost = conta.boostAutomaticoAtivo ? conta.boostOrcamentoDiarioCentavos ?? 0 : 0;
   const custoPorBoost = orcamentoDiarioBoost * (conta.boostDuracaoDias || 3) * (conta.boostCampanhasPorPost || 1);
   const postsPorDia = Math.min(conta.boostPostsPorDia || 1, 3);
-  const boostReservadoMensalCentavos = custoPorBoost * postsPorDia * diasNoMes;
-  const falta = Math.max(0, conta.orcamentoMensalCentavos - conta.projecaoMensalCentavos);
-
-  return {
-    boostReservadoMensalCentavos,
-    sobraParaExtrasCentavos: conta.orcamentoMensalCentavos - boostReservadoMensalCentavos,
-    faltaParaMinimoCentavos: falta,
-    abaixoDoMinimo: falta > 0,
-  };
+  return { boostReservadoMensalCentavos: custoPorBoost * postsPorDia * diasNoMes };
 }
 
 /** Junta o financeiro de cada conta ativa: saldo (disponível ou fatura em aberto, ver
