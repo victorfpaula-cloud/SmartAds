@@ -10,7 +10,7 @@ export interface AporteUnidade {
 }
 
 export interface SugestaoInvestimento {
-  tom: "ok" | "atencao" | "critico";
+  tom: "ok" | "neutro" | "atencao" | "critico";
   texto: string;
 }
 
@@ -29,6 +29,11 @@ export interface InvestimentoUnidade {
   /** Gasto real do mês (só o mês corrente tem; meses passados ficam null). */
   gastoMesCentavos: number | null;
   saldoCentavos: number | null;
+  /** Projeção de fechamento do mês e ritmo diário, do mesmo cache do Financeiro. */
+  projecaoMesCentavos: number | null;
+  mediaDiariaCentavos: number | null;
+  /** Só conta pré-paga fica sem campanhas quando o saldo acaba; cartão é cobrado depois. */
+  prePaga: boolean | null;
   sugestoes: SugestaoInvestimento[];
 }
 
@@ -45,38 +50,41 @@ export function gerarSugestoes(u: Omit<InvestimentoUnidade, "sugestoes">, mes: s
   const sugestoes: SugestaoInvestimento[] = [];
   const ehMesAtual = mes === mesAtualEmSaoPaulo(hoje);
   const faltaCombinado = u.combinadoCentavos - u.investidoCentavos;
+  const [ano, m] = mes.split("-").map(Number);
+  const diasNoMes = new Date(Date.UTC(ano, m, 0)).getUTCDate();
+  const diaDoMes = Number(new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", day: "2-digit" }).format(hoje));
+  const diasRestantes = ehMesAtual ? Math.max(0, diasNoMes - diaDoMes) : 0;
 
   if (u.investidoCentavos >= u.combinadoCentavos && u.combinadoCentavos > 0) {
     sugestoes.push({ tom: "ok", texto: "Combinado do mês cumprido." });
   } else if (faltaCombinado > 0) {
+    // Mês passado sem completar é falha; mês corrente só vira alerta na última semana (antes disso é só andamento).
+    const tom: SugestaoInvestimento["tom"] = !ehMesAtual ? "critico" : diasRestantes <= 7 ? "atencao" : "neutro";
     sugestoes.push({
-      tom: ehMesAtual ? "atencao" : "critico",
-      texto: `Faltam ${reais(faltaCombinado)} pra completar o combinado de ${reais(u.combinadoCentavos)}.`,
+      tom,
+      texto: ehMesAtual
+        ? `Investido ${reais(u.investidoCentavos)} de ${reais(u.combinadoCentavos)} — faltam ${reais(faltaCombinado)} até o dia ${diasNoMes}.`
+        : `Faltaram ${reais(faltaCombinado)} pra completar o combinado de ${reais(u.combinadoCentavos)}.`,
     });
   }
 
   if (ehMesAtual) {
-    const [ano, m] = mes.split("-").map(Number);
-    const diasNoMes = new Date(ano, m, 0).getDate();
-    const diaDoMes = Number(new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", day: "2-digit" }).format(hoje));
-    const diasRestantes = Math.max(0, diasNoMes - diaDoMes);
-
-    if (u.gastoMesCentavos !== null && diaDoMes >= 5) {
-      const ritmo = Math.round((u.gastoMesCentavos / diaDoMes) * diasNoMes);
-      if (ritmo > u.combinadoCentavos * 1.1) {
+    // O combinado é um valor mínimo a investir: gastar acima dele não é problema, só vale saber.
+    if (u.projecaoMesCentavos !== null && diaDoMes >= 5 && u.projecaoMesCentavos > u.combinadoCentavos * 1.1) {
+      sugestoes.push({
+        tom: "neutro",
+        texto: `No ritmo atual o gasto fecha o mês em ~${reais(u.projecaoMesCentavos)}, acima do combinado (${reais(u.combinadoCentavos)}).`,
+      });
+    }
+    // Saldo que não cobre o resto do mês: só faz sentido em conta pré-paga (cartão não "fica sem saldo").
+    if (u.prePaga !== false && u.saldoCentavos !== null && u.mediaDiariaCentavos !== null && u.mediaDiariaCentavos > 0 && diasRestantes > 0) {
+      const aindaVaiGastar = Math.round(u.mediaDiariaCentavos * diasRestantes);
+      const saldo = Math.max(u.saldoCentavos, 0);
+      if (aindaVaiGastar > saldo) {
         sugestoes.push({
-          tom: "atencao",
-          texto: `No ritmo atual o gasto fecha o mês em ~${reais(ritmo)}, acima do combinado (${reais(u.combinadoCentavos)}). Vale ajustar o combinado ou reduzir o ritmo.`,
+          tom: "critico",
+          texto: `No ritmo dos últimos dias, o saldo (${reais(saldo)}) não cobre o resto do mês: faltam ~${reais(aindaVaiGastar - saldo)} pra as campanhas não pararem.`,
         });
-      }
-      if (u.saldoCentavos !== null && diasRestantes > 0) {
-        const aindaVaiGastar = Math.round((u.gastoMesCentavos / diaDoMes) * diasRestantes);
-        if (aindaVaiGastar > u.saldoCentavos) {
-          sugestoes.push({
-            tom: "critico",
-            texto: `O saldo (${reais(Math.max(u.saldoCentavos, 0))}) não cobre o resto do mês: recarregar ~${reais(aindaVaiGastar - Math.max(u.saldoCentavos, 0))} evita as campanhas pararem.`,
-          });
-        }
       }
     }
   }
@@ -115,7 +123,7 @@ export async function carregarInvestimentos(mes: string, empresaId?: string): Pr
     supabase.from("smartads_meta_mensal").select("conta_id, valor_centavos").eq("mes", mes).in("conta_id", ids),
     supabase
       .from("smartads_financeiro_cache")
-      .select("conta_id, saldo_disponivel_centavos, gasto_mes_centavos, conta_pre_paga")
+      .select("conta_id, saldo_disponivel_centavos, gasto_mes_centavos, gasto_mes_ref, projecao_mensal_centavos, media_diaria_centavos, conta_pre_paga")
       .in("conta_id", ids),
   ]);
 
@@ -143,8 +151,11 @@ export async function carregarInvestimentos(mes: string, empresaId?: string): Pr
         origem: a.origem as "meta" | "manual",
         observacao: a.observacao ?? null,
       })),
-      gastoMesCentavos: mesAtual ? fin?.gasto_mes_centavos ?? null : null,
+      gastoMesCentavos: mesAtual && fin?.gasto_mes_ref === mes ? fin?.gasto_mes_centavos ?? null : null,
       saldoCentavos: fin?.saldo_disponivel_centavos ?? null,
+      projecaoMesCentavos: mesAtual && fin?.gasto_mes_ref === mes ? fin?.projecao_mensal_centavos ?? null : null,
+      mediaDiariaCentavos: mesAtual ? fin?.media_diaria_centavos ?? null : null,
+      prePaga: fin?.conta_pre_paga ?? null,
     };
     unidades.push({ ...base, sugestoes: gerarSugestoes(base, mes) });
   }

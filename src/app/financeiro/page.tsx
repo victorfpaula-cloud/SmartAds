@@ -1,5 +1,4 @@
 import Cabecalho from "@/components/Cabecalho";
-import Link from "next/link";
 import { empresaDaPagina, lerAmbiente } from "@/lib/ambiente";
 import { coletarFinanceiro, calcularPlanejamento, unicasPorContaDeAnuncio, type ContaFinanceiro } from "@/lib/financeiro/coletarFinanceiro";
 import { Wallet, Info, ChartLine } from "@phosphor-icons/react/dist/ssr";
@@ -11,8 +10,6 @@ import AbasFinanceiro from "@/components/AbasFinanceiro";
 import { descreverSituacaoConta, type TomSituacao } from "@/lib/financeiro/situacaoConta";
 
 export const dynamic = "force-dynamic";
-
-const FILTRO_REDE = "franquia";
 
 const formatoReal = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 function reais(centavos: number) {
@@ -31,7 +28,7 @@ function formatarAtualizacao(iso: string | null): string {
 export default async function FinanceiroPage({
   searchParams,
 }: {
-  searchParams: { rede?: string; empresa?: string };
+  searchParams: { empresa?: string };
 }) {
   const ambiente = await lerAmbiente();
   const empresaId = await empresaDaPagina(searchParams.empresa);
@@ -43,30 +40,32 @@ export default async function FinanceiroPage({
 
   // Totais contam cada conta de anúncio da Meta uma vez só (duas contas locais podem apontar pra mesma).
   const contasUnicas = unicasPorContaDeAnuncio(contas);
-  const totalSaldoDisponivel = contasUnicas.reduce((s, c) => s + (c.saldoDisponivelCentavos ?? 0), 0);
+  const contasComSaldo = contasUnicas.filter((c) => c.saldoDisponivelCentavos !== null);
+  const totalSaldoDisponivel = contasComSaldo.reduce((s, c) => s + (c.saldoDisponivelCentavos ?? 0), 0);
+  const contasSemSaldoConhecido = contasUnicas.length - contasComSaldo.length;
   const totalGasto7d = contasUnicas.reduce((s, c) => s + c.gasto7diasCentavos, 0);
-  const totalGastoMes = contasUnicas.reduce((s, c) => s + (c.gastoMesCentavos ?? 0), 0);
+  const contasComGastoMes = contasUnicas.filter((c) => c.gastoMesCentavos !== null);
+  const totalGastoMes = contasComGastoMes.reduce((s, c) => s + (c.gastoMesCentavos ?? 0), 0);
   const contasComProblema = contasUnicas.filter((c) => {
     const status = descreverSituacaoConta(c.statusConta, c.motivoDesativacao);
     return status.tom === "critico" || status.tom === "atencao";
   });
   // Contas cujo saldo acaba em até 7 dias (ou já zerou) no ritmo atual de gasto.
   const contasSaldoAcabando = contasUnicas.filter((c) => {
-    const previsao = calcularPrevisaoSaldo(c.saldoDisponivelCentavos, c.mediaDiariaCentavos);
+    const previsao = calcularPrevisaoSaldo(c.saldoDisponivelCentavos, c.mediaDiariaCentavos, new Date(), c.contaPrePaga);
     return previsao.dias !== null && previsao.dias <= 7;
   }).length;
-  const semSaldoConfigurado = contas.filter((c) => c.saldoDisponivelCentavos === null && !c.erro).length;
+  // Conta pré-paga cujo saldo a Meta não mostrou: aí vale digitar (conta com cartão não tem saldo).
+  const semSaldoConfigurado = contasUnicas.filter((c) => c.contaPrePaga !== false && c.saldoDisponivelCentavos === null && !c.erro).length;
+  const contasComErro = contasUnicas.filter((c) => c.erro).length;
 
-  // Planejamento (orçamento mensal x reservado pro boost x sobra pra campanhas extras) só faz
-  // sentido pra rede de franquia — é onde existe o teto combinado (ex: R$500/unidade).
-  const planejamentoPorConta = new Map(contas.map((c) => [c.contaId, calcularPlanejamento(c)]));
-  const totalOrcamentoMensal = contasUnicas.reduce((s, c) => s + c.orcamentoMensalCentavos, 0);
-  const totalBoostReservado = contasUnicas.reduce(
-    (s, c) => s + (planejamentoPorConta.get(c.contaId)?.boostReservadoMensalCentavos ?? 0),
-    0
-  );
+  // Planejamento do mês: o orçamento mensal da unidade é o MÍNIMO a investir (ex.: R$ 500); a projeção é
+  // o gasto até hoje + o ritmo recente × os dias que faltam. Só faz sentido pra franquia.
+  const planejamentoPorConta = new Map(contasUnicas.map((c) => [c.contaId, calcularPlanejamento(c)]));
+  const totalMinimo = contasUnicas.reduce((s, c) => s + c.orcamentoMensalCentavos, 0);
+  const totalBoostReservado = contasUnicas.reduce((s, c) => s + (planejamentoPorConta.get(c.contaId)?.boostReservadoMensalCentavos ?? 0), 0);
   const totalProjecao = contasUnicas.reduce((s, c) => s + c.projecaoMensalCentavos, 0);
-  const unidadesEstourando = contasUnicas.filter((c) => planejamentoPorConta.get(c.contaId)?.estourou).length;
+  const unidadesAbaixoDoMinimo = contasUnicas.filter((c) => planejamentoPorConta.get(c.contaId)?.abaixoDoMinimo && !c.erro).length;
 
   return (
     <>
@@ -111,18 +110,16 @@ export default async function FinanceiroPage({
         <div className="cartao-vidro mt-4 flex items-start gap-2.5 border border-white/10 px-4 py-3 text-xs text-neutral-400">
           <Info size={15} className="mt-0.5 shrink-0 text-neutral-500" />
           <p>
-            O saldo vem da forma de pagamento da conta na Meta — o mesmo texto que o Gerenciador mostra
-            (ex.: "Saldo disponível (R$ 115,81)"), atualizado 1x por dia. Conta com cartão não tem
-            saldo pra ler: nela vale o valor que você digitar, que o cron ajusta sozinho com o que
-            entrar e sair desde então.
+            Contas pré-pagas: o saldo vem da forma de pagamento na Meta (o mesmo texto do Gerenciador, ex.:
+            "Saldo disponível (R$ 115,81)"), atualizado 1x por dia. Contas com cartão não têm saldo — a Meta cobra
+            depois. A projeção do mês é o gasto até hoje mais o ritmo dos últimos dias vezes os dias que faltam.
           </p>
         </div>
 
         {semSaldoConfigurado > 0 && (
           <div className="cartao-vidro mt-3 border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-xs text-amber-200">
-            {semSaldoConfigurado} conta{semSaldoConfigurado !== 1 ? "s" : ""} ainda sem saldo
-            configurado — abra o Gerenciador de Anúncios, veja o valor em "Fundos" e digite abaixo,
-            em cada conta.
+            {semSaldoConfigurado} conta{semSaldoConfigurado !== 1 ? "s" : ""} pré-paga{semSaldoConfigurado !== 1 ? "s" : ""} sem saldo
+            lido — abra o Gerenciador de Anúncios, veja o valor em "Fundos" e digite abaixo, em cada conta.
           </div>
         )}
 
@@ -130,6 +127,11 @@ export default async function FinanceiroPage({
           <div className="cartao-vidro px-4 py-3.5">
             <p className="text-[11px] font-medium uppercase tracking-wide text-neutral-500">Saldo disponível (total)</p>
             <p className="mt-1 text-lg font-bold text-neutral-100">{reais(totalSaldoDisponivel)}</p>
+            {contasSemSaldoConhecido > 0 && (
+              <p className="mt-0.5 text-[10.5px] text-neutral-500">
+                só das {contasComSaldo.length} contas com saldo ({contasSemSaldoConhecido} sem saldo — cartão ou não lido)
+              </p>
+            )}
           </div>
           <div className="cartao-vidro px-4 py-3.5">
             <p className="text-[11px] font-medium uppercase tracking-wide text-neutral-500">Gasto últimos 7 dias</p>
@@ -138,62 +140,70 @@ export default async function FinanceiroPage({
           <div className="cartao-vidro px-4 py-3.5">
             <p className="text-[11px] font-medium uppercase tracking-wide text-neutral-500">Gasto no mês</p>
             <p className="mt-1 text-lg font-bold text-neutral-100">{reais(totalGastoMes)}</p>
+            {contasComGastoMes.length < contasUnicas.length && (
+              <p className="mt-0.5 text-[10.5px] text-neutral-500">
+                {contasUnicas.length - contasComGastoMes.length} conta(s) sem leitura do mês
+              </p>
+            )}
           </div>
           <div className="cartao-vidro px-4 py-3.5">
             <p className="text-[11px] font-medium uppercase tracking-wide text-neutral-500">Saldo acabando (até 7 dias)</p>
             <p className={`mt-1 text-lg font-bold ${contasSaldoAcabando > 0 ? "text-danger" : "text-ok"}`}>
               {contasSaldoAcabando} {contasSaldoAcabando === 1 ? "conta" : "contas"}
             </p>
+            {contasComErro > 0 && <p className="mt-0.5 text-[10.5px] text-amber-400">{contasComErro} com erro de leitura</p>}
           </div>
         </div>
 
-        {apenasRede && contas.length > 0 && (
+        {apenasRede && contasUnicas.length > 0 && (
           <section className="cartao-vidro mt-6 overflow-hidden">
             <div className="flex items-center gap-2.5 border-b border-white/10 px-5 py-3.5">
               <ChartLine size={16} className="shrink-0 text-neutral-400" />
               <div>
-                <h2 className="text-sm font-semibold text-neutral-200">Planejamento</h2>
+                <h2 className="text-sm font-semibold text-neutral-200">O mês por unidade</h2>
                 <p className="mt-0.5 text-[11px] text-neutral-500">
-                  Estimativa a partir do orçamento diário do boost já configurado — não é gasto real
-                  campanha por campanha.
+                  Mínimo a investir no mês, quanto já foi gasto e para onde o mês caminha (gasto até hoje + ritmo dos
+                  últimos dias × dias que faltam). Gastar acima do mínimo é normal; o alerta é ficar abaixo.
                 </p>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-4">
               <div>
-                <p className="text-[10.5px] font-medium uppercase tracking-wide text-neutral-500">Orçamento mensal (rede)</p>
-                <p className="mt-0.5 text-sm font-semibold text-neutral-200">{reais(totalOrcamentoMensal)}</p>
+                <p className="text-[10.5px] font-medium uppercase tracking-wide text-neutral-500">Mínimo da rede</p>
+                <p className="mt-0.5 text-sm font-semibold text-neutral-200">{reais(totalMinimo)}</p>
               </div>
               <div>
-                <p className="text-[10.5px] font-medium uppercase tracking-wide text-neutral-500">Reservado pro boost</p>
-                <p className="mt-0.5 text-sm font-semibold text-neutral-200">{reais(totalBoostReservado)}</p>
+                <p className="text-[10.5px] font-medium uppercase tracking-wide text-neutral-500">Gasto até hoje</p>
+                <p className="mt-0.5 text-sm font-semibold text-neutral-200">{reais(totalGastoMes)}</p>
               </div>
               <div>
-                <p className="text-[10.5px] font-medium uppercase tracking-wide text-neutral-500">Projeção total do mês</p>
+                <p className="text-[10.5px] font-medium uppercase tracking-wide text-neutral-500">Projeção do mês</p>
                 <p className="mt-0.5 text-sm font-semibold text-neutral-200">{reais(totalProjecao)}</p>
+                <p className="text-[10px] text-neutral-500">teto do boost: {reais(totalBoostReservado)}</p>
               </div>
               <div>
-                <p className="text-[10.5px] font-medium uppercase tracking-wide text-neutral-500">Unidades estourando o teto</p>
-                <p className={`mt-0.5 text-sm font-semibold ${unidadesEstourando > 0 ? "text-danger" : "text-ok"}`}>
-                  {unidadesEstourando}
+                <p className="text-[10.5px] font-medium uppercase tracking-wide text-neutral-500">Unidades abaixo do mínimo</p>
+                <p className={`mt-0.5 text-sm font-semibold ${unidadesAbaixoDoMinimo > 0 ? "text-amber-400" : "text-ok"}`}>
+                  {unidadesAbaixoDoMinimo} de {contasUnicas.length}
                 </p>
               </div>
             </div>
 
             <div className="overflow-x-auto border-t border-white/10">
-              <table className="w-full min-w-[680px] text-left text-sm">
+              <table className="w-full min-w-[760px] text-left text-sm">
                 <thead>
                   <tr className="border-b border-white/10 text-xs uppercase tracking-wide text-neutral-500">
                     <th className="px-4 py-3 font-medium">Unidade</th>
-                    <th className="px-4 py-3 font-medium">Orçamento mensal</th>
-                    <th className="px-4 py-3 font-medium">Reservado pro boost</th>
-                    <th className="px-4 py-3 font-medium">Sobra pra extras</th>
-                    <th className="px-4 py-3 font-medium">Projeção total</th>
+                    <th className="px-4 py-3 font-medium">Mínimo do mês</th>
+                    <th className="px-4 py-3 font-medium">Gasto até hoje</th>
+                    <th className="px-4 py-3 font-medium">Projeção do mês</th>
+                    <th className="px-4 py-3 font-medium">Situação</th>
+                    <th className="px-4 py-3 font-medium">Teto do boost</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {contas.map((conta) => {
+                  {contasUnicas.map((conta) => {
                     const p = planejamentoPorConta.get(conta.contaId)!;
                     return (
                       <tr key={conta.contaId}>
@@ -209,14 +219,22 @@ export default async function FinanceiroPage({
                           />
                         </td>
                         <td className="px-4 py-3 text-neutral-300">
+                          {conta.gastoMesCentavos !== null ? reais(conta.gastoMesCentavos) : "—"}
+                        </td>
+                        <td className="px-4 py-3 text-neutral-300">{conta.erro ? "—" : reais(conta.projecaoMensalCentavos)}</td>
+                        <td className="px-4 py-3">
+                          {conta.erro ? (
+                            <span className="text-xs font-semibold text-amber-400">Sem leitura</span>
+                          ) : p.abaixoDoMinimo ? (
+                            <span className="text-xs font-semibold text-amber-400">
+                              Abaixo do mínimo (faltam ~{reais(p.faltaParaMinimoCentavos)})
+                            </span>
+                          ) : (
+                            <span className="text-xs font-semibold text-ok">No caminho</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-neutral-300">
                           {conta.boostAutomaticoAtivo ? reais(p.boostReservadoMensalCentavos) : "Boost desligado"}
-                        </td>
-                        <td className={`px-4 py-3 ${p.sobraParaExtrasCentavos < 0 ? "text-danger" : "text-neutral-300"}`}>
-                          {reais(p.sobraParaExtrasCentavos)}
-                        </td>
-                        <td className={`px-4 py-3 font-medium ${p.estourou ? "text-danger" : "text-neutral-300"}`}>
-                          {reais(conta.projecaoMensalCentavos)}
-                          {p.estourou && <span className="ml-1.5 text-[10px] font-semibold uppercase">Estourando</span>}
                         </td>
                       </tr>
                     );
@@ -224,6 +242,10 @@ export default async function FinanceiroPage({
                 </tbody>
               </table>
             </div>
+            <p className="border-t border-white/10 px-4 py-2.5 text-[10.5px] text-neutral-500">
+              “Teto do boost” é o máximo que o boost automático poderia gastar no mês (um boost novo todo dia, até o limite de
+              posts por dia da conta) — não é gasto real. Contas que dividem a mesma conta de anúncio aparecem uma vez.
+            </p>
           </section>
         )}
 
@@ -278,10 +300,10 @@ export default async function FinanceiroPage({
                       <Metrica rotulo="Média diária" valor={reais(conta.mediaDiariaCentavos)} />
                       <Metrica rotulo="Projeção mensal" valor={reais(conta.projecaoMensalCentavos)} />
                       <PrevisaoDoSaldo
-                        previsao={calcularPrevisaoSaldo(conta.saldoDisponivelCentavos, conta.mediaDiariaCentavos)}
+                        previsao={calcularPrevisaoSaldo(conta.saldoDisponivelCentavos, conta.mediaDiariaCentavos, new Date(), conta.contaPrePaga)}
                       />
                     </div>
-                    <MinimoDoMes conta={conta} />
+                    {apenasRede && <MinimoDoMes conta={conta} />}
                     <EditarSaldo contaId={conta.contaId} saldoAtualCentavos={conta.saldoDisponivelCentavos} />
                   </div>
                 )}

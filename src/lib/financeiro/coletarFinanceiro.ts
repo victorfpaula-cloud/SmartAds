@@ -1,5 +1,6 @@
 import { criarClienteAdmin } from "@/lib/supabase/admin";
-import { atualizarCacheFinanceiroDaConta } from "@/lib/financeiro/atualizarCacheFinanceiro";
+import { atualizarCacheFinanceiroDaConta, diasRestantesNoMes } from "@/lib/financeiro/atualizarCacheFinanceiro";
+import { diaEmSaoPaulo } from "@/lib/tempoSaoPaulo";
 
 export interface ContaFinanceiro {
   contaId: string;
@@ -32,6 +33,8 @@ export interface ContaFinanceiro {
   boostAutomaticoAtivo: boolean;
   boostOrcamentoDiarioCentavos: number | null;
   boostDuracaoDias: number;
+  /** Quantos posts por dia o boost pode turbinar (1 a 10; 10 = todos). */
+  boostPostsPorDia: number;
   /** 1 (engajamento ou alcance) ou 2 (as duas campanhas no mesmo post). */
   boostCampanhasPorPost: number;
 }
@@ -39,45 +42,50 @@ export interface ContaFinanceiro {
 /** Duas contas locais podem apontar pra MESMA conta de anúncio na Meta (ex.: a conta geral da rede
  * cadastrada em dois clientes) — nos totais ela só pode contar uma vez. */
 export function unicasPorContaDeAnuncio(contas: ContaFinanceiro[]): ContaFinanceiro[] {
-  const vistas = new Set<string>();
-  return contas.filter((c) => {
-    if (vistas.has(c.metaAdAccountId)) return false;
-    vistas.add(c.metaAdAccountId);
-    return true;
-  });
+  // Entre duas contas locais da mesma conta de anúncio, fica a que tem mais informação (saldo conhecido,
+  // sem erro, leitura mais recente) — não simplesmente a primeira da lista.
+  const nota = (c: ContaFinanceiro) =>
+    (c.saldoDisponivelCentavos !== null ? 4 : 0) + (c.erro ? 0 : 2) + (c.atualizadoEm ? 1 : 0);
+  const melhor = new Map<string, ContaFinanceiro>();
+  for (const c of contas) {
+    const atual = melhor.get(c.metaAdAccountId);
+    if (!atual || nota(c) > nota(atual) || (nota(c) === nota(atual) && (c.atualizadoEm ?? "") > (atual.atualizadoEm ?? ""))) {
+      melhor.set(c.metaAdAccountId, c);
+    }
+  }
+  return contas.filter((c) => melhor.get(c.metaAdAccountId) === c);
 }
 
 export interface PlanejamentoConta {
+  /** Teto do que o boost pode gastar no mês: custo de um boost × posts por dia × dias do mês. */
   boostReservadoMensalCentavos: number;
-  boostGastoEstimadoCentavos: number;
+  /** Mínimo combinado menos o teto do boost (negativo = o boost sozinho já passa do mínimo). */
   sobraParaExtrasCentavos: number;
-  gastoExtraProjetadoCentavos: number;
-  estourou: boolean;
+  /** Quanto falta a projeção chegar ao mínimo combinado (0 quando já chega). */
+  faltaParaMinimoCentavos: number;
+  /** Projeção do mês abaixo do mínimo combinado. */
+  abaixoDoMinimo: boolean;
 }
 
-/** Estimativa de planejamento mensal por conta — puxa do que já existe (orçamento diário do boost
- * já configurado, projeção mensal já cacheada pelo Financeiro), sem bater na Meta de novo nem
- * precisar separar "gasto de boost" de "gasto extra" campanha por campanha. "Reservado pro boost"
- * é o orçamento diário × dias do MÊS INTEIRO (teto, não o já gasto); "gasto estimado" usa só os
- * dias já decorridos. Pura o bastante pra ser a mesma fonte tanto da linha por unidade quanto do
- * resumo agregado da rede (ver /financeiro?rede=franquia). */
+/** Planejamento do mês por conta, em cima do que já está no cache (sem bater na Meta). O orçamento
+ * mensal da unidade é um MÍNIMO a investir (ex.: R$ 500), não um teto — gastar mais que isso é ok; o
+ * alerta é a projeção ficar abaixo. "Boost reservado" é um teto: assume um boost novo todo dia, com o
+ * limite de posts por dia configurado na conta (10 = "todos" conta como 3, pra não inflar). */
 export function calcularPlanejamento(conta: ContaFinanceiro, hoje: Date = new Date()): PlanejamentoConta {
-  const diasNoMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate();
-  const diaDoMes = hoje.getDate();
+  const { diasNoMes } = diasRestantesNoMes(hoje);
 
-  // Cada boost é uma campanha de `orçamento diário × duração` (3 ou 7 dias), e um boost novo sai
-  // por dia de post — então o custo de UM boost é orçamento × duração, e o mês inteiro é isso × dias.
+  // Cada boost é uma campanha de `orçamento diário × duração` (3 ou 7 dias) por campanha criada no post.
   const orcamentoDiarioBoost = conta.boostAutomaticoAtivo ? conta.boostOrcamentoDiarioCentavos ?? 0 : 0;
   const custoPorBoost = orcamentoDiarioBoost * (conta.boostDuracaoDias || 3) * (conta.boostCampanhasPorPost || 1);
-  const boostReservadoMensalCentavos = custoPorBoost * diasNoMes;
-  const boostGastoEstimadoCentavos = custoPorBoost * diaDoMes;
+  const postsPorDia = Math.min(conta.boostPostsPorDia || 1, 3);
+  const boostReservadoMensalCentavos = custoPorBoost * postsPorDia * diasNoMes;
+  const falta = Math.max(0, conta.orcamentoMensalCentavos - conta.projecaoMensalCentavos);
 
   return {
     boostReservadoMensalCentavos,
-    boostGastoEstimadoCentavos,
     sobraParaExtrasCentavos: conta.orcamentoMensalCentavos - boostReservadoMensalCentavos,
-    gastoExtraProjetadoCentavos: Math.max(0, conta.projecaoMensalCentavos - boostReservadoMensalCentavos),
-    estourou: conta.projecaoMensalCentavos > conta.orcamentoMensalCentavos,
+    faltaParaMinimoCentavos: falta,
+    abaixoDoMinimo: falta > 0,
   };
 }
 
@@ -103,7 +111,7 @@ export async function coletarFinanceiro(empresaId?: string): Promise<ContaFinanc
     supabase
       .from("smartads_financeiro_cache")
       .select(
-        "conta_id, saldo_disponivel_centavos, fatura_em_aberto_centavos, fonte_pagamento_texto, gasto_7d_centavos, media_diaria_centavos, projecao_mensal_centavos, erro, calculado_em, status_conta, motivo_desativacao, conta_pre_paga, gasto_mes_centavos, recarga_mes_centavos, recarga_contada_desde, recarga_erro"
+        "conta_id, saldo_disponivel_centavos, fatura_em_aberto_centavos, fonte_pagamento_texto, gasto_7d_centavos, media_diaria_centavos, projecao_mensal_centavos, erro, calculado_em, status_conta, motivo_desativacao, conta_pre_paga, gasto_mes_centavos, gasto_mes_ref, recarga_mes_centavos, recarga_mes_ref, recarga_contada_desde, recarga_erro"
       ),
   ]);
 
@@ -114,6 +122,7 @@ export async function coletarFinanceiro(empresaId?: string): Promise<ContaFinanc
   );
 
   const cachePorConta = new Map((cache ?? []).map((linha) => [linha.conta_id, linha]));
+  const mesAtualSP = diaEmSaoPaulo(new Date().toISOString()).slice(0, 7);
 
   // Investimento planejado ainda não iniciado: soma, por conta, de investimento_total_centavos *
   // percentual_orcamento/100 de cada etapa de Plano de Execução que ainda não terminou.
@@ -172,6 +181,8 @@ export async function coletarFinanceiro(empresaId?: string): Promise<ContaFinanc
           motivo_desativacao: resultado.motivoDesativacao,
           conta_pre_paga: resultado.contaPrePaga,
           gasto_mes_centavos: resultado.gastoMesCentavos,
+          gasto_mes_ref: resultado.gastoMesCentavos !== null ? mesAtualSP : null,
+          recarga_mes_ref: mesAtualSP,
           recarga_mes_centavos: resultado.recargaMesCentavos,
           recarga_contada_desde: resultado.recargaContadaDesde,
           recarga_erro: resultado.recargaErro,
@@ -205,14 +216,16 @@ export async function coletarFinanceiro(empresaId?: string): Promise<ContaFinanc
         statusConta: linhaCache.status_conta ?? null,
         motivoDesativacao: linhaCache.motivo_desativacao ?? null,
         contaPrePaga: linhaCache.conta_pre_paga ?? null,
-        gastoMesCentavos: linhaCache.gasto_mes_centavos ?? null,
-        recargaMesCentavos: linhaCache.recarga_mes_centavos ?? null,
+        // Número de mês só vale se for do mês corrente (entre a virada do mês e o cron, ainda é o do mês passado).
+        gastoMesCentavos: linhaCache.gasto_mes_ref === mesAtualSP ? linhaCache.gasto_mes_centavos ?? null : null,
+        recargaMesCentavos: linhaCache.recarga_mes_ref === mesAtualSP ? linhaCache.recarga_mes_centavos ?? null : null,
         recargaContadaDesde: linhaCache.recarga_contada_desde ?? null,
         recargaErro: linhaCache.recarga_erro ?? null,
         orcamentoMensalCentavos: conta.orcamento_mensal_centavos ?? 50000,
         boostAutomaticoAtivo: Boolean(conta.boost_automatico_ativo),
         boostOrcamentoDiarioCentavos: conta.boost_automatico_orcamento_centavos ?? null,
         boostDuracaoDias: conta.boost_automatico_duracao_dias ?? 3,
+        boostPostsPorDia: conta.boost_posts_por_dia ?? 1,
         boostCampanhasPorPost: conta.boost_tipo_entrega === "ambos" ? 2 : 1,
       };
     })

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { reaisDigitadosParaCentavos } from "@/lib/valorEmReais";
 import { useRouter } from "next/navigation";
 import { Trash, CaretDown, CheckCircle, WarningCircle } from "@phosphor-icons/react";
 import type { InvestimentoUnidade, ResumoInvestimentos } from "@/lib/investimentos";
@@ -10,8 +11,8 @@ const formatoReal = new Intl.NumberFormat("pt-BR", { style: "currency", currency
 const reais = (c: number) => formatoReal.format(c / 100);
 const dataBR = (iso: string) => iso.split("-").reverse().join("/");
 const paraCentavos = (t: string) => {
-  const n = Math.round(parseFloat(t.replace(",", ".")) * 100);
-  return Number.isFinite(n) && n >= 0 ? n : null;
+  const n = reaisDigitadosParaCentavos(t);
+  return n !== null && n >= 0 ? n : null;
 };
 const hojeISO = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
 
@@ -90,10 +91,10 @@ function CartaoUnidade({ u, mes }: { u: InvestimentoUnidade; mes: string }) {
               <li
                 key={i}
                 className={`flex items-start gap-1.5 text-[11.5px] ${
-                  s.tom === "ok" ? "text-ok" : s.tom === "atencao" ? "text-amber-400" : "text-danger"
+                  s.tom === "ok" ? "text-ok" : s.tom === "neutro" ? "text-neutral-400" : s.tom === "atencao" ? "text-amber-400" : "text-danger"
                 }`}
               >
-                {s.tom === "ok" ? <CheckCircle size={13} weight="fill" className="mt-px shrink-0" /> : <WarningCircle size={13} weight="fill" className="mt-px shrink-0" />}
+                {s.tom === "ok" || s.tom === "neutro" ? <CheckCircle size={13} weight="fill" className="mt-px shrink-0" /> : <WarningCircle size={13} weight="fill" className="mt-px shrink-0" />}
                 {s.texto}
               </li>
             ))}

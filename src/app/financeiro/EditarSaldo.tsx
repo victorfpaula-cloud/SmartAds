@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { reaisDigitadosParaCentavos } from "@/lib/valorEmReais";
 import { useRouter } from "next/navigation";
 import { PencilSimple } from "@phosphor-icons/react";
 
@@ -23,8 +24,8 @@ export default function EditarSaldo({
 
   async function salvar(evento: FormEvent) {
     evento.preventDefault();
-    const centavos = Math.round(parseFloat(valor.replace(",", ".")) * 100);
-    if (!Number.isFinite(centavos)) {
+    const centavos = reaisDigitadosParaCentavos(valor);
+    if (centavos === null || centavos < 0) {
       setErro("Valor inválido.");
       return;
     }

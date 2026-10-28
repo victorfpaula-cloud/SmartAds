@@ -843,3 +843,10 @@ alter table smartads_saude_rede_cache enable row level security;
 
 -- Histórico de seguidores: leituras reais (cron) e dias reconstruídos a partir dos ganhos diários da Meta.
 alter table smartads_seguidores_snapshot add column if not exists origem text not null default 'leitura';
+
+-- Financeiro: colunas que o código já usava (recarga) e novas (referência do mês do gasto, data do saldo próprio).
+alter table smartads_financeiro_cache add column if not exists recarga_mes_ref text;
+alter table smartads_financeiro_cache add column if not exists recarga_contada_desde date;
+alter table smartads_financeiro_cache add column if not exists recarga_calculada_em timestamptz;
+alter table smartads_financeiro_cache add column if not exists gasto_mes_ref text;
+alter table smartads_financeiro_cache add column if not exists saldo_calculado_em timestamptz;
