@@ -1299,6 +1299,19 @@ export interface RecargaMeta {
   chave: string;
   quando: string; // ISO
   valorCentavos: number;
+  /** Campos simples (número/texto) que a Meta mandou junto no evento — guardados pra descobrir se ela
+   * informa o valor creditado depois de impostos/taxas. */
+  extra: Record<string, string | number | boolean>;
+}
+
+/** Só campos simples e curtos do extra_data (sem objetos aninhados), pra guardar no banco com segurança. */
+function extraSimples(extra: Record<string, unknown>): Record<string, string | number | boolean> {
+  const saida: Record<string, string | number | boolean> = {};
+  for (const [k, v] of Object.entries(extra)) {
+    if (typeof v === "number" || typeof v === "boolean") saida[k] = v;
+    else if (typeof v === "string" && v.length <= 120) saida[k] = v;
+  }
+  return saida;
 }
 
 /** Recargas (funding_event_successful) da conta desde `desde`, uma a uma — a Meta só guarda ~6 dias
@@ -1322,7 +1335,7 @@ export async function listarRecargasDesde(adAccountId: string, desde: Date): Pro
       try {
         const extra = JSON.parse(item.extra_data);
         if (typeof extra.amount === "number" && extra.amount > 0) {
-          recargas.push({ chave: `${item.event_time}|${extra.amount}`, quando: item.event_time, valorCentavos: extra.amount });
+          recargas.push({ chave: `${item.event_time}|${extra.amount}`, quando: item.event_time, valorCentavos: extra.amount, extra: extraSimples(extra) });
         }
       } catch {
         /* extra_data ilegível — ignora o evento */

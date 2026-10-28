@@ -4,7 +4,10 @@ import { mesAtualEmSaoPaulo } from "@/lib/tempoSaoPaulo";
 export interface AporteUnidade {
   id: string;
   data: string; // AAAA-MM-DD
+  /** O que a unidade pagou (a recarga que a Meta registra, ou o valor lançado à mão). */
   valorCentavos: number;
+  /** O que caiu de crédito na conta depois de impostos/taxas, quando informado (null = igual ao pago). */
+  valorCreditadoCentavos: number | null;
   origem: "meta" | "manual";
   observacao: string | null;
 }
@@ -24,7 +27,10 @@ export interface InvestimentoUnidade {
   /** Combinado DESTE mês — o padrão, ou um valor específico só pra esse mês. */
   combinadoCentavos: number;
   combinadoEspecial: boolean;
+  /** Soma do que foi creditado (quando informado) ou pago (quando não). */
   investidoCentavos: number;
+  /** Soma do que foi pago, sem descontar impostos/taxas. */
+  pagoCentavos: number;
   aportes: AporteUnidade[];
   /** Gasto real do mês (só o mês corrente tem; meses passados ficam null). */
   gastoMesCentavos: number | null;
@@ -115,7 +121,7 @@ export async function carregarInvestimentos(mes: string, empresaId?: string): Pr
   const [{ data: aportes }, { data: metas }, { data: financeiro }] = await Promise.all([
     supabase
       .from("smartads_investimentos")
-      .select("id, conta_id, data, valor_centavos, origem, observacao")
+      .select("id, conta_id, data, valor_centavos, valor_creditado_centavos, origem, observacao")
       .in("conta_id", ids)
       .gte("data", inicio)
       .lt("data", proximoMes)
@@ -143,11 +149,13 @@ export async function carregarInvestimentos(mes: string, empresaId?: string): Pr
       padraoMensalCentavos: padrao as number,
       combinadoCentavos: combinado as number,
       combinadoEspecial: Boolean(meta),
-      investidoCentavos: lista.reduce((t, a) => t + a.valor_centavos, 0),
+      investidoCentavos: lista.reduce((t, a) => t + (a.valor_creditado_centavos ?? a.valor_centavos), 0),
+      pagoCentavos: lista.reduce((t, a) => t + a.valor_centavos, 0),
       aportes: lista.map((a) => ({
         id: a.id,
         data: a.data,
         valorCentavos: a.valor_centavos,
+        valorCreditadoCentavos: a.valor_creditado_centavos ?? null,
         origem: a.origem as "meta" | "manual",
         observacao: a.observacao ?? null,
       })),

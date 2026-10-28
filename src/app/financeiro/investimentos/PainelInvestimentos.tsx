@@ -199,26 +199,7 @@ function Detalhe({ u, mes, onMudou }: { u: InvestimentoUnidade; mes: string; onM
         ) : (
           <ul className="mt-1.5 divide-y divide-white/5 rounded-lg border border-white/10">
             {u.aportes.map((a) => (
-              <li key={a.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
-                <span className="text-neutral-400">{dataBR(a.data)}</span>
-                <span className="font-semibold text-neutral-100">{reais(a.valorCentavos)}</span>
-                <span className="min-w-0 flex-1 truncate text-[11px] text-neutral-500">
-                  {a.origem === "meta" ? "Recarga registrada pela Meta" : a.observacao || "Lançado à mão"}
-                </span>
-                {a.origem === "manual" && (
-                  <button
-                    onClick={async () => {
-                      if (!window.confirm("Apagar esse aporte?")) return;
-                      const r = await fetch(`/api/investimentos?id=${a.id}`, { method: "DELETE" });
-                      if (r.ok) onMudou();
-                    }}
-                    aria-label="Apagar aporte"
-                    className="text-neutral-500 hover:text-danger"
-                  >
-                    <Trash size={14} />
-                  </button>
-                )}
-              </li>
+              <Aporte key={a.id} a={a} onMudou={onMudou} />
             ))}
           </ul>
         )}
@@ -235,5 +216,85 @@ function Detalhe({ u, mes, onMudou }: { u: InvestimentoUnidade; mes: string; onM
         )}
       </div>
     </div>
+  );
+}
+
+/** Uma linha de aporte: o que foi pago e, se informado, o que realmente caiu de crédito (depois de impostos). */
+function Aporte({ a, onMudou }: { a: InvestimentoUnidade["aportes"][number]; onMudou: () => void }) {
+  const [editando, setEditando] = useState(false);
+  const [valor, setValor] = useState(a.valorCreditadoCentavos !== null ? (a.valorCreditadoCentavos / 100).toFixed(2).replace(".", ",") : "");
+  const [erro, setErro] = useState<string | null>(null);
+
+  async function salvar(limpar = false) {
+    const c = limpar ? null : paraCentavos(valor);
+    if (!limpar && (c === null || c <= 0)) return setErro("Valor inválido.");
+    const r = await fetch("/api/investimentos", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: a.id, valorCreditadoCentavos: c }),
+    });
+    if (!r.ok) return setErro("Falha ao salvar.");
+    setEditando(false);
+    setErro(null);
+    onMudou();
+  }
+
+  return (
+    <li className="px-3 py-2 text-sm">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-neutral-400">{dataBR(a.data)}</span>
+        <span className="font-semibold text-neutral-100">
+          {reais(a.valorCentavos)}
+          <span className="font-normal text-neutral-500"> pago</span>
+        </span>
+        <span className="min-w-0 flex-1 truncate text-[11px] text-neutral-500">
+          {a.valorCreditadoCentavos !== null ? (
+            <span className="text-neutral-300">
+              → {reais(a.valorCreditadoCentavos)} creditado (impostos e taxas: {reais(Math.max(a.valorCentavos - a.valorCreditadoCentavos, 0))})
+            </span>
+          ) : a.origem === "meta" ? (
+            "Recarga registrada pela Meta"
+          ) : (
+            a.observacao || "Lançado à mão"
+          )}
+        </span>
+        <button onClick={() => setEditando(!editando)} className="shrink-0 text-[11px] font-semibold text-accent-strong hover:underline">
+          {a.valorCreditadoCentavos !== null ? "Editar crédito" : "Informar crédito"}
+        </button>
+        {a.origem === "manual" && (
+          <button
+            onClick={async () => {
+              if (!window.confirm("Apagar esse aporte?")) return;
+              const r = await fetch(`/api/investimentos?id=${a.id}`, { method: "DELETE" });
+              if (r.ok) onMudou();
+            }}
+            aria-label="Apagar aporte"
+            className="text-neutral-500 hover:text-danger"
+          >
+            <Trash size={14} />
+          </button>
+        )}
+      </div>
+      {editando && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <input
+            value={valor}
+            onChange={(e) => setValor(e.target.value)}
+            inputMode="decimal"
+            placeholder="Quanto caiu de crédito (R$)"
+            className="h-8 w-52 rounded-lg border border-white/14 bg-ink-850 px-2.5 text-xs text-neutral-100"
+          />
+          <button onClick={() => salvar()} className="h-8 rounded-lg bg-white/[0.08] px-3 text-xs font-semibold text-neutral-100 hover:bg-white/15">
+            Salvar
+          </button>
+          {a.valorCreditadoCentavos !== null && (
+            <button onClick={() => salvar(true)} className="text-xs text-neutral-400 hover:text-neutral-200">
+              Usar o valor pago
+            </button>
+          )}
+          {erro && <span className="text-xs text-danger">{erro}</span>}
+        </div>
+      )}
+    </li>
   );
 }
