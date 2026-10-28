@@ -55,33 +55,18 @@ const reais = (c: number) => `R$ ${(c / 100).toFixed(2).replace(".", ",").replac
 export function gerarSugestoes(u: Omit<InvestimentoUnidade, "sugestoes">, mes: string, hoje = new Date()): SugestaoInvestimento[] {
   const sugestoes: SugestaoInvestimento[] = [];
   const ehMesAtual = mes === mesAtualEmSaoPaulo(hoje);
-  const faltaCombinado = u.combinadoCentavos - u.investidoCentavos;
   const [ano, m] = mes.split("-").map(Number);
   const diasNoMes = new Date(Date.UTC(ano, m, 0)).getUTCDate();
   const diaDoMes = Number(new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", day: "2-digit" }).format(hoje));
   const diasRestantes = ehMesAtual ? Math.max(0, diasNoMes - diaDoMes) : 0;
 
-  if (u.investidoCentavos >= u.combinadoCentavos && u.combinadoCentavos > 0) {
-    sugestoes.push({ tom: "ok", texto: "Combinado do mês cumprido." });
-  } else if (faltaCombinado > 0) {
-    // Mês passado sem completar é falha; mês corrente só vira alerta na última semana (antes disso é só andamento).
-    const tom: SugestaoInvestimento["tom"] = !ehMesAtual ? "critico" : diasRestantes <= 7 ? "atencao" : "neutro";
-    sugestoes.push({
-      tom,
-      texto: ehMesAtual
-        ? `Investido ${reais(u.investidoCentavos)} de ${reais(u.combinadoCentavos)} — faltam ${reais(faltaCombinado)} até o dia ${diasNoMes}.`
-        : `Faltaram ${reais(faltaCombinado)} pra completar o combinado de ${reais(u.combinadoCentavos)}.`,
-    });
+  // Sem valor mínimo a cumprir: o aviso é só quando a unidade não colocou nada neste mês.
+  if (u.aportes.length === 0) {
+    const tom: SugestaoInvestimento["tom"] = !ehMesAtual ? "atencao" : diaDoMes >= 20 ? "atencao" : "neutro";
+    sugestoes.push({ tom, texto: ehMesAtual ? "Ainda sem nenhum aporte neste mês." : "Nenhum aporte neste mês." });
   }
 
   if (ehMesAtual) {
-    // O combinado é um valor mínimo a investir: gastar acima dele não é problema, só vale saber.
-    if (u.projecaoMesCentavos !== null && diaDoMes >= 5 && u.projecaoMesCentavos > u.combinadoCentavos * 1.1) {
-      sugestoes.push({
-        tom: "neutro",
-        texto: `No ritmo atual o gasto fecha o mês em ~${reais(u.projecaoMesCentavos)}, acima do combinado (${reais(u.combinadoCentavos)}).`,
-      });
-    }
     // Saldo que não cobre o resto do mês: só faz sentido em conta pré-paga (cartão não "fica sem saldo").
     if (u.prePaga !== false && u.saldoCentavos !== null && u.mediaDiariaCentavos !== null && u.mediaDiariaCentavos > 0 && diasRestantes > 0) {
       const aindaVaiGastar = Math.round(u.mediaDiariaCentavos * diasRestantes);
