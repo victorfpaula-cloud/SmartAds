@@ -11,6 +11,8 @@ import {
   type DiaRelatorioPostagem,
   type ComparativoRede,
 } from "@/lib/relatorioPostagens";
+import BotaoBaixarDetalhe from "./BotaoBaixarDetalhe";
+import type { DadosDetalheRadar } from "@/lib/radarDetalhePdf";
 import { WarningCircle, InstagramLogo } from "@phosphor-icons/react/dist/ssr";
 
 export const dynamic = "force-dynamic";
@@ -40,6 +42,42 @@ export default async function DetalhePostagensPage({ params }: { params: Promise
   const statsStories = calcularEstatisticasStories(unidades);
   const stats = statsStories.porConta.get(unidade.contaId);
 
+  // O mesmo que a tela mostra, em formato simples pro PDF.
+  const textoStories = (q: number, tem: boolean) => (q > 0 ? `${q} ${q === 1 ? "story" : "stories"}` : tem ? "0 stories" : "—");
+  const dadosPdf: DadosDetalheRadar = {
+    unidade: unidade.clienteNome,
+    instagram: unidade.instagramUsername ?? null,
+    geradoEm: new Date().toISOString(),
+    resumo: unidade.instagramVinculado
+      ? [
+          {
+            selo: ROTULO_COMPARATIVO[comparativo],
+            midia: "Feed / Reels",
+            texto: `${unidade.totalPostagens} ${unidade.totalPostagens === 1 ? "postagem" : "postagens"} em 30 dias`,
+          },
+          {
+            selo: ROTULO_COMPARATIVO[stats?.comparativo ?? "sem_base"],
+            midia: "Stories",
+            texto: `${descricaoTotalStories(stats?.total ?? 0, statsStories.diasDeColeta)}${
+              stats?.mediaDia != null ? ` · média ${formatarMediaStories(stats.mediaDia)}/dia` : ""
+            }`,
+          },
+        ]
+      : [],
+    dias: unidade.dias.map((dia) =>
+      dia.diasSemPostarDestaque !== null
+        ? { dia: dia.diaExibicao, tipo: "alerta" as const, posts: [], stories: "", alerta: `atenção: ${dia.diasSemPostarDestaque} dias sem postar` }
+        : dia.horasPost.length > 0
+          ? {
+              dia: dia.diaExibicao,
+              tipo: "post" as const,
+              posts: dia.horasPost.map((h, i) => `${dia.horasPost.length > 1 ? `Post ${i + 1} · ` : "OK · "}${h}`),
+              stories: textoStories(dia.storiesPostados, dia.temRegistroStories),
+            }
+          : { dia: dia.diaExibicao, tipo: "vazio" as const, posts: [], stories: textoStories(dia.storiesPostados, dia.temRegistroStories) }
+    ),
+  };
+
   const metade = Math.ceil(unidade.dias.length / 2);
   const colunas = [unidade.dias.slice(0, metade), unidade.dias.slice(metade)];
 
@@ -52,12 +90,15 @@ export default async function DetalhePostagensPage({ params }: { params: Promise
         </Link>
 
         <div className="mt-1">
+          <div className="flex flex-wrap items-start justify-between gap-3">
           <h1 className="font-display text-2xl font-bold">
             {unidade.clienteNome}
             {unidade.instagramUsername && (
               <span className="ml-2 align-middle text-sm font-normal text-neutral-500">@{unidade.instagramUsername}</span>
             )}
           </h1>
+          {unidade.instagramVinculado && <BotaoBaixarDetalhe dados={dadosPdf} />}
+          </div>
           {unidade.instagramVinculado && (
             // Subcard discreto: selo de saúde à esquerda (coluna fixa, pros textos alinharem) e
             // "mídia · números" na frente — feed/Reels numa linha, stories na outra.
