@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { gerarRelatoriosDoMes, enviarRelatorioMensalDaUnidade, mesDoRelatorio } from "@/lib/relatorioMensal";
+import { gerarRelatoriosDoMes, enviarRelatorioMensalDaUnidade, mesDoRelatorio, semanaDoRelatorio } from "@/lib/relatorioMensal";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -9,7 +9,8 @@ export async function GET(request: NextRequest) {
   const clienteId = request.nextUrl.searchParams.get("clienteId");
   if (!clienteId) return NextResponse.json({ erro: "Informe a unidade." }, { status: 400 });
   try {
-    const mes = mesDoRelatorio(new Date(), request.nextUrl.searchParams.get("mes") ?? undefined);
+    const semanal = request.nextUrl.searchParams.get("tipo") === "semanal";
+    const mes = semanal ? semanaDoRelatorio() : mesDoRelatorio(new Date(), request.nextUrl.searchParams.get("mes") ?? undefined);
     const { pdfs } = await gerarRelatoriosDoMes(clienteId, mes);
     if (pdfs.length === 0) return NextResponse.json({ erro: "Unidade sem conta de anúncio ativa." }, { status: 404 });
     return new NextResponse(new Uint8Array(pdfs[0].conteudo), {
@@ -26,7 +27,7 @@ export async function POST(request: NextRequest) {
   const clienteId = typeof corpo?.clienteId === "string" ? corpo.clienteId : "";
   if (!clienteId) return NextResponse.json({ erro: "Informe a unidade." }, { status: 400 });
   try {
-    const r = await enviarRelatorioMensalDaUnidade(clienteId, mesDoRelatorio());
+    const r = await enviarRelatorioMensalDaUnidade(clienteId, corpo?.tipo === "semanal" ? semanaDoRelatorio() : mesDoRelatorio());
     return NextResponse.json(r, { status: r.enviado ? 200 : 422 });
   } catch (e) {
     return NextResponse.json({ erro: e instanceof Error ? e.message : "Falha ao enviar." }, { status: 502 });

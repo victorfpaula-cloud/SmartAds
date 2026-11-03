@@ -7,7 +7,9 @@ import { adicionarDias, diaEmSaoPaulo } from "@/lib/tempoSaoPaulo";
 const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 
 export interface MesRelatorio {
-  /** AAAA-MM */
+  /** "mensal" (mês fechado) ou "semanal" (7 dias até ontem). */
+  tipo: "mensal" | "semanal";
+  /** Chave do envio: AAAA-MM no mensal, "semana-AAAA-MM-DD" (a segunda-feira do envio) no semanal. */
   mes: string;
   desde: string;
   ate: string;
@@ -28,7 +30,16 @@ export function mesDoRelatorio(hoje = new Date(), mesPedido?: string): MesRelato
   }
   const dias = new Date(Date.UTC(ano, m, 0)).getUTCDate();
   const mes = `${ano}-${String(m).padStart(2, "0")}`;
-  return { mes, desde: `${mes}-01`, ate: `${mes}-${String(dias).padStart(2, "0")}`, dias, rotulo: `${MESES[m - 1][0].toUpperCase()}${MESES[m - 1].slice(1)} de ${ano}` };
+  return { tipo: "mensal" as const, mes, desde: `${mes}-01`, ate: `${mes}-${String(dias).padStart(2, "0")}`, dias, rotulo: `${MESES[m - 1][0].toUpperCase()}${MESES[m - 1].slice(1)} de ${ano}` };
+}
+
+/** Os 7 dias até ontem (a cron roda na segunda: pega a semana que acabou de fechar). */
+export function semanaDoRelatorio(hoje = new Date()): MesRelatorio {
+  const hojeSP = diaEmSaoPaulo(hoje.toISOString());
+  const ate = adicionarDias(hojeSP, -1);
+  const desde = adicionarDias(ate, -6);
+  const curto = (d: string) => d.slice(8, 10) + "/" + d.slice(5, 7);
+  return { tipo: "semanal", mes: `semana-${hojeSP}`, desde, ate, dias: 7, rotulo: `Semana de ${curto(desde)} a ${curto(ate)}` };
 }
 
 function emailsValidos(texto: string | null | undefined): string[] {
@@ -61,7 +72,7 @@ export async function gerarRelatoriosDoMes(clienteId: string, mes: MesRelatorio)
   }
   const pdfs = [];
   for (const d of relatorios) {
-    const doc = await montarPdfRelatorioAds(d, { rotuloPeriodo: mes.rotulo, titulo: "SmartAds · Relatório mensal" });
+    const doc = await montarPdfRelatorioAds(d, { rotuloPeriodo: mes.rotulo, titulo: mes.tipo === "semanal" ? "SmartAds · Relatório semanal" : "SmartAds · Relatório mensal" });
     pdfs.push({ nome: nomeArquivoRelatorio(d, mes.mes), conteudo: Buffer.from(doc.output("arraybuffer")) });
   }
   return { cliente, relatorios, pdfs };
@@ -82,7 +93,7 @@ export async function enviarRelatorioMensalDaUnidade(clienteId: string, mes: Mes
     })
     .join("");
   const html = `<!DOCTYPE html><html><body style="font-family:-apple-system,sans-serif;color:#111;max-width:600px;margin:0 auto;padding:24px">
-  <h1 style="font-size:20px;margin:0 0 4px">Relatório mensal — ${cliente.nome}</h1>
+  <h1 style="font-size:20px;margin:0 0 4px">Relatório ${mes.tipo === "semanal" ? "semanal" : "mensal"} — ${cliente.nome}</h1>
   <p style="font-size:13px;color:#6b7280;margin:0 0 20px">${mes.rotulo} · o PDF completo (orgânico × tráfego, investimento, campanhas) está em anexo.</p>
   <table style="width:100%;border-collapse:collapse">${linhas}</table>
   <p style="font-size:11px;color:#9ca3af;margin-top:24px">Enviado pelo SmartAds.</p>
@@ -90,7 +101,7 @@ export async function enviarRelatorioMensalDaUnidade(clienteId: string, mes: Mes
 
   let erro: string | null = null;
   try {
-    await enviarEmail({ destinatario: destinatarios, assunto: `Relatório mensal ${mes.rotulo} — ${cliente.nome}`, html, anexos: pdfs });
+    await enviarEmail({ destinatario: destinatarios, assunto: `Relatório ${mes.tipo === "semanal" ? "semanal" : "mensal"} · ${mes.rotulo} — ${cliente.nome}`, html, anexos: pdfs });
   } catch (e) {
     erro = e instanceof Error ? e.message : "Falha ao enviar.";
   }
@@ -101,10 +112,13 @@ export async function enviarRelatorioMensalDaUnidade(clienteId: string, mes: Mes
 
 /** Roda pelo cron nos primeiros dias do mês: envia as unidades com e-mail cadastrado que ainda não receberam
  * o relatório do mês passado, dentro de um orçamento de tempo (o resto fica pra próxima rodada). */
-export async function enviarRelatoriosMensais(limiteMs = 42_000): Promise<{ enviados: number; pendentes: number; erros: string[] }> {
+export async function enviarRelatoriosMensais(
+  limiteMs = 42_000,
+  periodo: MesRelatorio = mesDoRelatorio()
+): Promise<{ enviados: number; pendentes: number; erros: string[] }> {
   const inicio = Date.now();
   const supabase = criarClienteAdmin();
-  const mes = mesDoRelatorio();
+  const mes = periodo;
   const { data: clientes } = await supabase
     .from("smartads_clientes")
     .select("id, nome, email_relatorio")

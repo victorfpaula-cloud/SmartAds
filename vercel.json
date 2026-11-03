@@ -34,6 +34,26 @@
       "schedule": "0 12 3 * *"
     },
     {
+      "path": "/api/cron/relatorio-semanal-unidades",
+      "schedule": "0 11 * * 1"
+    },
+    {
+      "path": "/api/cron/relatorio-semanal-unidades",
+      "schedule": "0 13 * * 1"
+    },
+    {
+      "path": "/api/cron/relatorio-semanal-unidades",
+      "schedule": "0 15 * * 1"
+    },
+    {
+      "path": "/api/cron/relatorio-semanal-unidades",
+      "schedule": "0 17 * * 1"
+    },
+    {
+      "path": "/api/cron/relatorio-semanal-unidades",
+      "schedule": "0 11 * * 2"
+    },
+    {
       "path": "/api/cron/alertas",
       "schedule": "30 11 * * *"
     },
