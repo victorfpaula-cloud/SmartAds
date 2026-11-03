@@ -263,6 +263,45 @@ export async function listarPostsInstagram(instagramBusinessId: string): Promise
   return dados.data;
 }
 
+const CAMPOS_POST = "id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count";
+
+/** Publicações do Instagram com filtro de período (timestamps Unix) e paginação — pra achar um post
+ * antigo ou de um mês específico sem ficar limitado às 30 mais recentes. */
+export async function buscarPostsInstagram(
+  instagramBusinessId: string,
+  opcoes: { desdeUnix?: number; ateUnix?: number; depois?: string; limit?: number } = {}
+): Promise<{ posts: PostInstagram[]; proximo: string | null }> {
+  const dados = await chamar<{ data: PostInstagram[]; paging?: { cursors?: { after?: string }; next?: string } }>(
+    `${instagramBusinessId}/media`,
+    {
+      query: {
+        fields: CAMPOS_POST,
+        limit: opcoes.limit ?? 30,
+        ...(opcoes.desdeUnix ? { since: opcoes.desdeUnix } : {}),
+        ...(opcoes.ateUnix ? { until: opcoes.ateUnix } : {}),
+        ...(opcoes.depois ? { after: opcoes.depois } : {}),
+      },
+    }
+  );
+  return { posts: dados.data, proximo: dados.paging?.next ? dados.paging.cursors?.after ?? null : null };
+}
+
+/** Acha uma publicação pelo link copiado do Instagram (…/p/CÓDIGO/, /reel/CÓDIGO/): percorre até
+ * ~600 publicações e compara o código do link. null se não achar (link de outra conta, ou muito antigo). */
+export async function acharPostPorLink(instagramBusinessId: string, link: string): Promise<PostInstagram | null> {
+  const codigo = link.match(/instagram\.com\/(?:[\w.]+\/)?(?:p|reels?|tv)\/([A-Za-z0-9_-]+)/i)?.[1];
+  if (!codigo) return null;
+  let depois: string | undefined;
+  for (let pagina = 0; pagina < 6; pagina++) {
+    const r = await buscarPostsInstagram(instagramBusinessId, { limit: 100, depois });
+    const achado = r.posts.find((p) => p.permalink?.includes(`/${codigo}`));
+    if (achado) return achado;
+    if (!r.proximo) return null;
+    depois = r.proximo;
+  }
+  return null;
+}
+
 export interface PostInstagramEngajamento {
   id: string;
   timestamp: string;
