@@ -26,14 +26,14 @@ export default function EmailRelatorioMensal({ clienteId, inicial }: { clienteId
     setMsg({ tipo: "ok", texto: c.emailRelatorio ? "Salvo — o relatório mensal vai pra esse e-mail." : "E-mail removido." });
   }
 
-  async function enviarAgora() {
-    if (!window.confirm("Enviar agora o relatório do mês passado pra esse e-mail?")) return;
+  async function enviarAgora(tipo: "mensal" | "semanal") {
+    if (!window.confirm(tipo === "semanal" ? "Enviar agora o relatório dos últimos 7 dias pra esse e-mail?" : "Enviar agora o relatório do mês passado pra esse e-mail?")) return;
     setOcupado("enviar");
     setMsg(null);
     const r = await fetch("/api/relatorio-mensal", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ clienteId }),
+      body: JSON.stringify({ clienteId, tipo }),
     });
     const c = await r.json().catch(() => ({}));
     setOcupado(null);
@@ -43,7 +43,7 @@ export default function EmailRelatorioMensal({ clienteId, inicial }: { clienteId
   const alterado = valor.trim() !== salvo.trim();
   return (
     <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2.5">
-      <p className="text-[11px] font-semibold text-neutral-400">E-mail do relatório mensal (PDF)</p>
+      <p className="text-[11px] font-semibold text-neutral-400">E-mail dos relatórios da unidade (PDF semanal e mensal)</p>
       <div className="mt-1.5 flex flex-wrap items-center gap-2">
         <input
           type="text"
@@ -62,24 +62,28 @@ export default function EmailRelatorioMensal({ clienteId, inicial }: { clienteId
         </button>
         {salvo && !alterado && (
           <>
-            <a
-              href={`/api/relatorio-mensal?clienteId=${clienteId}`}
-              className="h-8 rounded-lg border border-white/14 px-3 text-xs font-medium leading-8 text-neutral-300 hover:bg-white/[0.04]"
-            >
-              Baixar PDF do mês passado
-            </a>
-            <button
-              onClick={enviarAgora}
-              disabled={ocupado !== null}
-              className="h-8 rounded-lg border border-white/14 px-3 text-xs font-medium text-neutral-300 hover:bg-white/[0.04] disabled:opacity-40"
-            >
-              {ocupado === "enviar" ? "Enviando…" : "Enviar agora"}
-            </button>
+            {(["semanal", "mensal"] as const).map((tipo) => (
+              <span key={tipo} className="flex items-center gap-1.5">
+                <a
+                  href={`/api/relatorio-mensal?clienteId=${clienteId}&tipo=${tipo}`}
+                  className="h-8 rounded-lg border border-white/14 px-3 text-xs font-medium leading-8 text-neutral-300 hover:bg-white/[0.04]"
+                >
+                  PDF {tipo === "semanal" ? "7 dias" : "mês passado"}
+                </a>
+                <button
+                  onClick={() => enviarAgora(tipo)}
+                  disabled={ocupado !== null}
+                  className="h-8 rounded-lg border border-white/14 px-3 text-xs font-medium text-neutral-300 hover:bg-white/[0.04] disabled:opacity-40"
+                >
+                  {ocupado === "enviar" ? "Enviando…" : `Enviar ${tipo} agora`}
+                </button>
+              </span>
+            ))}
           </>
         )}
       </div>
       {msg && <p className={`mt-1.5 text-[11px] ${msg.tipo === "ok" ? "text-ok" : "text-danger"}`}>{msg.texto}</p>}
-      <p className="mt-1 text-[10.5px] text-neutral-600">Chega sozinho nos primeiros dias de cada mês, com o resultado do mês anterior.</p>
+      <p className="mt-1 text-[10.5px] text-neutral-600">Chega sozinho: o semanal toda segunda-feira (últimos 7 dias) e o mensal nos primeiros dias do mês (mês anterior).</p>
     </div>
   );
 }
