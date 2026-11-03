@@ -689,8 +689,9 @@ export async function listarPublicosSalvosDaMeta(adAccountId: string): Promise<P
 
 /**
  * Converte o público montado no SmartAds (localizações + interesses) pro formato `targeting` que
- * a Meta espera no conjunto de anúncios. Sempre só Instagram, nunca Facebook — decisão do produto
- * (pedido explícito em 25/09/2026: toda campanha, sem exceção). Posicionamento: feed sempre;
+ * a Meta espera no conjunto de anúncios. Instagram por padrão; o Facebook só entra quando a pessoa
+ * marca "também no Facebook" na campanha manual (`facebook`): foto/carrossel só no feed; vídeo em
+ * Stories e Reels; campanha de delivery (só Stories) só em Stories. Posicionamento no Instagram: feed sempre;
  * Reels só entra quando o criativo vem de um post de vídeo (Reels de verdade) — foto e carrossel
  * ficam só no feed, sem Stories (nenhum dos dois casos usa Stories).
  *
@@ -702,7 +703,9 @@ export async function listarPublicosSalvosDaMeta(adAccountId: string): Promise<P
 export function montarTargeting(
   publico: Publico,
   ehReels: boolean = false,
-  posicionamento?: "stories"
+  posicionamento?: "stories",
+  /** Também publica no Facebook; `video` diz qual conjunto de posicionamentos usar lá. */
+  facebook?: { video: boolean }
 ): Record<string, unknown> {
   const geoLocations: Record<string, unknown[]> & { cities?: any[]; regions?: any[]; countries?: string[]; custom_locations?: any[] } = {};
 
@@ -714,9 +717,12 @@ export function montarTargeting(
     geo_locations: geoLocations,
     age_min: publico.idadeMin ?? 18,
     age_max: publico.idadeMax ?? 65,
-    publisher_platforms: ["instagram"],
+    publisher_platforms: facebook ? ["instagram", "facebook"] : ["instagram"],
     instagram_positions:
       posicionamento === "stories" ? ["story"] : ehReels ? ["stream", "reels"] : ["stream"],
+    ...(facebook
+      ? { facebook_positions: posicionamento === "stories" ? ["story"] : facebook.video ? ["story", "facebook_reels"] : ["feed"] }
+      : {}),
     // Passou a ser obrigatório sinalizar explicitamente se o público Advantage (expansão
     // automática de público pela própria Meta) está ligado — "0" porque o SmartAds sempre
     // trabalha com o público definido manualmente na tela (localizações + interesses), sem

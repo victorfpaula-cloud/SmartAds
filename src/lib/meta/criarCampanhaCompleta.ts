@@ -30,6 +30,8 @@ export interface ParametrosCriarCampanha {
   publicoId?: string;
   /** Delivery: "stories" restringe a entrega só aos Stories do Instagram. */
   posicionamento?: "stories";
+  /** Campanha manual também no Facebook (foto/carrossel só feed; vídeo Stories e Reels). */
+  tambemNoFacebook?: boolean;
   /** Preenchido quando essa campanha nasce de uma etapa de um Plano de Execução — ao concluir com
    * sucesso, marca a etapa como 'concluida' no checklist e guarda o id da campanha criada, sem
    * precisar de um passo manual extra pra "vincular" depois. */
@@ -155,7 +157,12 @@ async function criarCampanhaCompletaComConexao(corpo: ParametrosCriarCampanha): 
     if (corpo.criativo.usarPostExistente && corpo.criativo.postSelecionadoId) {
       postExistente = await obterPostInstagram(corpo.criativo.postSelecionadoId);
     }
-    const targeting = montarTargeting(corpo.publico, postExistente?.media_type === "VIDEO", corpo.posicionamento);
+    const targeting = montarTargeting(
+      corpo.publico,
+      postExistente?.media_type === "VIDEO",
+      corpo.posicionamento,
+      corpo.tambemNoFacebook ? { video: postExistente?.media_type === "VIDEO" } : undefined
+    );
 
     const campanha = await criarCampanha(adAccountId, {
       name: nomeCampanhaFinal,
@@ -196,7 +203,11 @@ async function criarCampanhaCompletaComConexao(corpo: ParametrosCriarCampanha): 
       // Nunca recria como anúncio novo: o engajamento precisa acumular no post publicado.
       let anuncioId: string | null = null;
       let erroInstagramTexto = "";
+      // Com Facebook marcado, o anúncio precisa ser do post da PÁGINA (o criativo "direto do Instagram"
+      // só serve nos posicionamentos do Instagram) — pula a primeira tentativa.
+      if (corpo.tambemNoFacebook) erroInstagramTexto = "campanha também no Facebook: usa o post da Página";
       try {
+        if (corpo.tambemNoFacebook) throw new Error(erroInstagramTexto);
         const criativoInstagram = await criarCriativoDoPostDoInstagram(adAccountId, {
           instagramMediaId: postExistente.id,
           instagramUserId: conta.instagram_business_id,
@@ -244,7 +255,9 @@ async function criarCampanhaCompletaComConexao(corpo: ParametrosCriarCampanha): 
 
         if (!postDaPaginaId) {
           throw new Error(
-            `A Meta recusou promover direto o post do Instagram (${erroInstagramTexto}) e também não achei essa publicação na Página do Facebook (${detalheFalha}). O SmartAds nunca recria como anúncio novo (o engajamento precisa acumular no post publicado, não numa cópia).`
+            corpo.tambemNoFacebook
+              ? `Pra rodar também no Facebook o anúncio precisa ser do post da Página, e não achei essa publicação lá (${detalheFalha}) Desmarque "Também no Facebook" pra rodar só no Instagram.`
+              : `A Meta recusou promover direto o post do Instagram (${erroInstagramTexto}) e também não achei essa publicação na Página do Facebook (${detalheFalha}). O SmartAds nunca recria como anúncio novo (o engajamento precisa acumular no post publicado, não numa cópia).`
           );
         }
         const criativoPagina = await criarCriativoDoPostDaPagina(adAccountId, {

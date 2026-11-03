@@ -117,6 +117,7 @@ export default function FormularioCampanha({
         ? `${clienteNome} - Delivery ${delivery.canal === "ifood" ? "iFood" : "WhatsApp"}`
         : `${clienteNome} - ${modelo.nomeExibicao}`
   );
+  const [tambemNoFacebook, setTambemNoFacebook] = useState(false);
   const [publicando, setPublicando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -256,6 +257,7 @@ export default function FormularioCampanha({
         publicoId: modoPublico === "salvo" ? publicoSalvoId : undefined,
         planoEtapaId,
         posicionamento: delivery ? "stories" : undefined,
+        tambemNoFacebook: tambemNoFacebook || undefined,
         orcamento: {
           tipo: tipoOrcamento,
           valorCentavos,
@@ -529,6 +531,22 @@ export default function FormularioCampanha({
               </div>
             )}
 
+            <label className="flex items-start gap-2.5 rounded-lg border border-white/10 bg-white/[0.02] px-3.5 py-3">
+              <input
+                type="checkbox"
+                checked={tambemNoFacebook}
+                onChange={(e) => setTambemNoFacebook(e.target.checked)}
+                className="mt-0.5 h-4 w-4 accent-accent"
+              />
+              <span>
+                <span className="block text-sm font-medium text-neutral-200">Também publicar no Facebook</span>
+                <span className="block text-[11.5px] leading-snug text-neutral-500">
+                  Foto e carrossel: só no feed. Vídeo: Stories e Reels. No Instagram segue o padrão de sempre.
+                  {usarPostExistente && " Para publicação existente, ela precisa ter sido replicada na Página (cross-post)."}
+                </span>
+              </span>
+            </label>
+
             {usarPostExistente ? (
               <div className="flex flex-col gap-3">
                 <div className="grid gap-2 sm:grid-cols-2">
@@ -768,7 +786,7 @@ export default function FormularioCampanha({
               <dt className="text-neutral-500">Localizações</dt>
               <dd className="text-neutral-200">{publicoEfetivo.localizacoes.length}</dd>
               <dt className="text-neutral-500">Plataforma</dt>
-              <dd className="text-neutral-200">Instagram</dd>
+              <dd className="text-neutral-200">{tambemNoFacebook ? "Instagram + Facebook" : "Instagram"}</dd>
               <dt className="text-neutral-500">Criativo</dt>
               <dd className="text-neutral-200">
                 {usarPostExistente
