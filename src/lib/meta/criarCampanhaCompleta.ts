@@ -30,7 +30,7 @@ export interface ParametrosCriarCampanha {
   publicoId?: string;
   /** Delivery: "stories" restringe a entrega só aos Stories do Instagram. */
   posicionamento?: "stories";
-  /** Campanha manual também no Facebook (foto/carrossel só feed; vídeo Stories e Reels). */
+  /** Campanha manual também no Facebook (foto/carrossel só feed; vídeo feed e Reels). */
   tambemNoFacebook?: boolean;
   /** Preenchido quando essa campanha nasce de uma etapa de um Plano de Execução — ao concluir com
    * sucesso, marca a etapa como 'concluida' no checklist e guarda o id da campanha criada, sem

@@ -690,8 +690,9 @@ export async function listarPublicosSalvosDaMeta(adAccountId: string): Promise<P
 /**
  * Converte o público montado no SmartAds (localizações + interesses) pro formato `targeting` que
  * a Meta espera no conjunto de anúncios. Instagram por padrão; o Facebook só entra quando a pessoa
- * marca "também no Facebook" na campanha manual (`facebook`): foto/carrossel só no feed; vídeo em
- * Stories e Reels; campanha de delivery (só Stories) só em Stories. Posicionamento no Instagram: feed sempre;
+ * marca "também no Facebook" na campanha manual (`facebook`): foto/carrossel só no feed; vídeo (Reels) em
+ * feed e Reels, igual ao Instagram; campanha de delivery (só Stories) em Stories. A Meta não aceita
+ * Stories do Facebook sozinho — só junto com o feed do Facebook ou os Stories do Instagram. Posicionamento no Instagram: feed sempre;
  * Reels só entra quando o criativo vem de um post de vídeo (Reels de verdade) — foto e carrossel
  * ficam só no feed, sem Stories (nenhum dos dois casos usa Stories).
  *
@@ -721,7 +722,7 @@ export function montarTargeting(
     instagram_positions:
       posicionamento === "stories" ? ["story"] : ehReels ? ["stream", "reels"] : ["stream"],
     ...(facebook
-      ? { facebook_positions: posicionamento === "stories" ? ["story"] : facebook.video ? ["story", "facebook_reels"] : ["feed"] }
+      ? { facebook_positions: posicionamento === "stories" ? ["story"] : facebook.video ? ["feed", "facebook_reels"] : ["feed"] }
       : {}),
     // Passou a ser obrigatório sinalizar explicitamente se o público Advantage (expansão
     // automática de público pela própria Meta) está ligado — "0" porque o SmartAds sempre
