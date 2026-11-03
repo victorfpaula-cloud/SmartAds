@@ -541,7 +541,7 @@ export default function FormularioCampanha({
               <span>
                 <span className="block text-sm font-medium text-neutral-200">Também publicar no Facebook</span>
                 <span className="block text-[11.5px] leading-snug text-neutral-500">
-                  Foto e carrossel: só no feed. Vídeo: Stories e Reels. No Instagram segue o padrão de sempre.
+                  Foto e carrossel: só no feed. Vídeo (Reels): feed e Reels, no Facebook e no Instagram.
                   {usarPostExistente && " Para publicação existente, ela precisa ter sido replicada na Página (cross-post)."}
                 </span>
               </span>
