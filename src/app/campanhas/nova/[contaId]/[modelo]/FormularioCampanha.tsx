@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import ConstrutorDePublico from "@/components/ConstrutorDePublico";
 import type { ModeloCampanha } from "@/lib/meta/modelos";
@@ -16,6 +16,7 @@ interface PublicoSalvo {
 
 interface PostInstagram {
   id: string;
+  timestamp?: string;
   caption?: string;
   media_type: string;
   media_url?: string;
@@ -152,15 +153,52 @@ export default function FormularioCampanha({
     }
   }
 
-  useEffect(() => {
-    if (etapa === 3 && usarPostExistente && instagramBusinessId && posts.length === 0) {
-      setCarregandoPosts(true);
-      fetch(`/api/meta/posts-instagram?instagramBusinessId=${instagramBusinessId}`)
-        .then((r) => r.json())
-        .then((corpo) => setPosts(corpo.posts ?? []))
-        .finally(() => setCarregandoPosts(false));
+  // Publicações: as mais recentes, ou as de um mês, ou uma colada pelo link do Instagram.
+  const [mesPosts, setMesPosts] = useState("");
+  const [linkPost, setLinkPost] = useState("");
+  const [proximoPosts, setProximoPosts] = useState<string | null>(null);
+  const [erroPosts, setErroPosts] = useState<string | null>(null);
+  const [postsCarregados, setPostsCarregados] = useState(false);
+  const opcoesMes = useMemo(() => {
+    const hoje = new Date();
+    return Array.from({ length: 12 }, (_, i) => {
+      const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+      const valor = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const nome = d.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+      return { valor, nome: nome.charAt(0).toUpperCase() + nome.slice(1) };
+    });
+  }, []);
+
+  async function carregarPosts(opcoes: { mes?: string; link?: string; depois?: string }, acrescentar = false) {
+    if (!instagramBusinessId) return;
+    setCarregandoPosts(true);
+    setErroPosts(null);
+    const q = new URLSearchParams({ instagramBusinessId });
+    if (opcoes.mes) q.set("mes", opcoes.mes);
+    if (opcoes.link) q.set("link", opcoes.link);
+    if (opcoes.depois) q.set("depois", opcoes.depois);
+    try {
+      const r = await fetch(`/api/meta/posts-instagram?${q}`);
+      const corpo = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setErroPosts(corpo.erro ?? "Não consegui buscar as publicações.");
+        if (!acrescentar) setPosts([]);
+      } else {
+        setPosts((atual) => (acrescentar ? [...atual, ...(corpo.posts ?? [])] : corpo.posts ?? []));
+        setProximoPosts(corpo.proximo ?? null);
+        // Post achado pelo link já fica selecionado.
+        if (opcoes.link && corpo.posts?.[0]) setPostSelecionadoId(corpo.posts[0].id);
+      }
+    } finally {
+      setCarregandoPosts(false);
+      setPostsCarregados(true);
     }
-  }, [etapa, usarPostExistente, instagramBusinessId, posts.length]);
+  }
+
+  useEffect(() => {
+    if (etapa === 3 && usarPostExistente && instagramBusinessId && !postsCarregados) carregarPosts({});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [etapa, usarPostExistente, instagramBusinessId, postsCarregados]);
 
   const publicoEfetivo: Publico =
     modoPublico === "salvo"
@@ -492,29 +530,89 @@ export default function FormularioCampanha({
             )}
 
             {usarPostExistente ? (
-              carregandoPosts ? (
-                <p className="text-xs text-neutral-500">Carregando publicações…</p>
-              ) : posts.length === 0 ? (
-                <p className="text-xs text-neutral-500">Nenhuma publicação encontrada nessa conta.</p>
-              ) : (
-                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                  {posts.map((post) => (
-                    <button
-                      key={post.id}
-                      type="button"
-                      onClick={() => setPostSelecionadoId(post.id)}
-                      className={`aspect-square overflow-hidden rounded-lg border-2 ${postSelecionadoId === post.id ? "border-accent" : "border-transparent"}`}
+              <div className="flex flex-col gap-3">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div>
+                    <label className="text-xs font-semibold text-neutral-400">Buscar por mês</label>
+                    <select
+                      value={mesPosts}
+                      onChange={(e) => {
+                        setMesPosts(e.target.value);
+                        setLinkPost("");
+                        carregarPosts({ mes: e.target.value || undefined });
+                      }}
+                      className="mt-1 h-9 w-full rounded-lg border border-white/14 bg-ink-850 px-2.5 text-sm text-neutral-100"
                     >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={post.thumbnail_url || post.media_url}
-                        alt=""
-                        className="h-full w-full object-cover"
+                      <option value="">Mais recentes</option>
+                      {opcoesMes.map((o) => (
+                        <option key={o.valor} value={o.valor}>
+                          {o.nome}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-neutral-400">Ou cole o link da publicação</label>
+                    <div className="mt-1 flex gap-2">
+                      <input
+                        value={linkPost}
+                        onChange={(e) => setLinkPost(e.target.value)}
+                        placeholder="https://www.instagram.com/p/…"
+                        className="h-9 min-w-0 flex-1 rounded-lg border border-white/14 bg-ink-850 px-2.5 text-sm text-neutral-100"
                       />
-                    </button>
-                  ))}
+                      <button
+                        type="button"
+                        disabled={!linkPost.trim() || carregandoPosts}
+                        onClick={() => {
+                          setMesPosts("");
+                          carregarPosts({ link: linkPost.trim() });
+                        }}
+                        className="h-9 shrink-0 rounded-lg bg-white/[0.08] px-3 text-xs font-semibold text-neutral-100 hover:bg-white/15 disabled:opacity-40"
+                      >
+                        Buscar
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              )
+                {erroPosts && <p className="text-xs text-danger">{erroPosts}</p>}
+                {carregandoPosts && posts.length === 0 ? (
+                  <p className="text-xs text-neutral-500">Carregando publicações…</p>
+                ) : posts.length === 0 ? (
+                  <p className="text-xs text-neutral-500">Nenhuma publicação encontrada {mesPosts ? "nesse mês" : "nessa conta"}.</p>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                      {posts.map((post) => (
+                        <button
+                          key={post.id}
+                          type="button"
+                          onClick={() => setPostSelecionadoId(post.id)}
+                          title={post.caption?.slice(0, 120)}
+                          className={`relative aspect-square overflow-hidden rounded-lg border-2 ${postSelecionadoId === post.id ? "border-accent" : "border-transparent"}`}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={post.thumbnail_url || post.media_url} alt="" className="h-full w-full object-cover" />
+                          {post.timestamp && (
+                            <span className="absolute bottom-0 left-0 right-0 bg-black/60 px-1 py-0.5 text-center text-[10px] font-semibold text-white">
+                              {new Date(post.timestamp).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", timeZone: "America/Sao_Paulo" })}
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                    {proximoPosts && (
+                      <button
+                        type="button"
+                        disabled={carregandoPosts}
+                        onClick={() => carregarPosts({ mes: mesPosts || undefined, depois: proximoPosts }, true)}
+                        className="self-start rounded-lg border border-white/14 px-3 py-1.5 text-xs font-medium text-neutral-300 hover:bg-white/[0.04] disabled:opacity-40"
+                      >
+                        {carregandoPosts ? "Carregando…" : "Carregar mais publicações"}
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
             ) : (
               <>
                 {!criativoOficial && (
