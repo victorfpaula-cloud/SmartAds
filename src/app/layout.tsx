@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
+import { lerAcesso } from "@/lib/acesso";
+import ModoConsulta from "@/components/ModoConsulta";
 
 export const metadata: Metadata = {
   title: "SmartAds",
@@ -45,11 +47,12 @@ const fonteCorpo = localFont({
 // terminar de carregar, evitando um flash de tela branca na abertura (mesmo ajuste do ShoppingHub).
 const CorDeFundo = "#07080a";
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const acesso = await lerAcesso().catch(() => null);
   return (
     <html
       lang="pt-BR"
@@ -75,6 +78,7 @@ export default function RootLayout({
           }}
         >
           {children}
+          {acesso?.restrito && !acesso.podeEditar && <ModoConsulta />}
         </div>
       </body>
     </html>

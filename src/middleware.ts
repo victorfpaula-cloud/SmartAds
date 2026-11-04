@@ -136,7 +136,12 @@ async function aplicarRestricoes(
   if (ehApi) {
     if (sob(caminho, API_BLOQUEADA)) return negar();
     const leitura = request.method === "GET" || request.method === "HEAD";
-    if (!leitura && !acesso.podeEditar && !sob(caminho, API_LEITURA)) return negar();
+    if (!leitura && !acesso.podeEditar && !sob(caminho, API_LEITURA)) {
+      return NextResponse.json(
+        { erro: "Seu acesso é somente de consulta — não é possível alterar nada.", motivo: "Seu acesso é somente de consulta." },
+        { status: 403, headers: { "x-somente-consulta": "1" } }
+      );
+    }
   } else if (caminho === "/mais") {
     return NextResponse.redirect(new URL("/", request.url));
   } else if (caminho !== "/" && !sob(caminho, PAGINAS_RESTRITO)) {
