@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { SignOut, ArrowLeft, Buildings, Storefront } from "@phosphor-icons/react/dist/ssr";
 import { lerAmbiente, type Ambiente } from "@/lib/ambiente";
+import { lerAcesso } from "@/lib/acesso";
 import MenuNavegacao, { type ItemMenu } from "@/components/MenuNavegacao";
 
 // Páginas da visão geral (fora de qualquer ambiente): o menu é só o de gerenciar as contas.
-const PAGINAS_GERAIS = ["/", "/contas", "/login"];
+const PAGINAS_GERAIS = ["/", "/contas", "/login", "/admin/usuarios"];
 
 const limpar = (destino: string) => `/api/ambiente?limpar=1&ir=${encodeURIComponent(destino)}`;
 
@@ -16,6 +17,7 @@ const MENU_GERAL: ItemMenu[] = [
   { href: limpar("/financeiro"), label: "Financeiro", icone: "financeiro", tambem: ["/financeiro"] },
   { href: limpar("/relatorios"), label: "Relatórios", icone: "relatorios", tambem: ["/relatorios", "/relatorio-ads"] },
   { href: "/contas", label: "Contas e conexões", icone: "contas" },
+  { href: "/admin/usuarios", label: "Acessos", icone: "contas" },
 ];
 
 function menuDoAmbiente(a: Ambiente): ItemMenu[] {
@@ -61,8 +63,11 @@ export default async function Cabecalho({
   geralHref?: string;
   empresa?: { id: string; nome: string };
 }) {
+  const acesso = await lerAcesso();
   const ambiente = PAGINAS_GERAIS.includes(ativo) ? null : await lerAmbiente();
-  const itens = ambiente ? menuDoAmbiente(ambiente) : MENU_GERAL;
+  // Usuário restrito nunca vê o menu geral (contas, acessos) e só volta ao Início se tiver mais de uma empresa.
+  const itens = ambiente ? menuDoAmbiente(ambiente) : acesso.restrito ? [MENU_GERAL[0]] : MENU_GERAL;
+  const podeVoltar = !acesso.restrito || acesso.empresas.length > 1;
   const Icone = ambiente?.tipo === "franquia" ? Buildings : Storefront;
 
   return (
@@ -78,13 +83,15 @@ export default async function Cabecalho({
             <span className="font-display text-[15px] font-bold tracking-tight">SmartAds</span>
             {ambiente && (
               <>
-                <Link
-                  prefetch={false}
-                  href={limpar("/")}
-                  className="flex shrink-0 items-center gap-1 text-xs font-medium text-neutral-400 hover:text-neutral-200"
-                >
-                  <ArrowLeft size={13} /> Início
-                </Link>
+                {podeVoltar && (
+                  <Link
+                    prefetch={false}
+                    href={limpar("/")}
+                    className="flex shrink-0 items-center gap-1 text-xs font-medium text-neutral-400 hover:text-neutral-200"
+                  >
+                    <ArrowLeft size={13} /> Início
+                  </Link>
+                )}
                 <span className="flex min-w-0 items-center gap-1.5 rounded-full border border-accent/30 bg-accent/10 px-3 py-1 text-xs font-semibold text-accent-strong">
                   <Icone size={13} weight="fill" className="shrink-0" />
                   <span className="truncate">{ambiente.nome}</span>

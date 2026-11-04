@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Cabecalho from "@/components/Cabecalho";
 import { ArrowRight, Buildings, Storefront, WarningCircle, Lightning } from "@phosphor-icons/react/dist/ssr";
+import { lerAcesso } from "@/lib/acesso";
 import { obterEmpresasParaInicio, type EmpresaInicio } from "@/lib/inicio";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +13,9 @@ const formatoReal = new Intl.NumberFormat("pt-BR", { style: "currency", currency
  * números vêm prontos do banco (ver obterEmpresasParaInicio). O trabalho de verdade — campanhas,
  * boost, financeiro — fica dentro da central de cada empresa. */
 export default async function Home() {
-  const empresas = await obterEmpresasParaInicio();
+  const acesso = await lerAcesso();
+  const todas = await obterEmpresasParaInicio();
+  const empresas = acesso.restrito ? todas.filter((e) => acesso.empresas.includes(e.id)) : todas;
   const nomeMes = new Intl.DateTimeFormat("pt-BR", { month: "long", timeZone: "America/Sao_Paulo" }).format(new Date());
 
   return (
@@ -23,27 +26,32 @@ export default async function Home() {
           <div>
             <h1 className="font-display text-2xl font-bold">Início</h1>
             <p className="mt-1 text-sm text-neutral-400">
-              Escolha a empresa pra entrar na central dela. Pra cadastrar cliente novo ou conectar a Meta, é em
-              Contas.
+              {acesso.restrito
+                ? "Escolha a empresa pra entrar na central dela."
+                : "Escolha a empresa pra entrar na central dela. Pra cadastrar cliente novo ou conectar a Meta, é em Contas."}
             </p>
           </div>
-          <Link
-            href="/contas"
-            className="shrink-0 rounded-lg bg-accent px-3.5 py-2 text-xs font-semibold text-white hover:bg-accent-strong"
-          >
-            + Empresa ou cliente
-          </Link>
+          {!acesso.restrito && (
+            <Link
+              href="/contas"
+              className="shrink-0 rounded-lg bg-accent px-3.5 py-2 text-xs font-semibold text-white hover:bg-accent-strong"
+            >
+              + Empresa ou cliente
+            </Link>
+          )}
         </div>
 
         {empresas.length === 0 ? (
           <div className="cartao-vidro mt-6 flex flex-col items-center gap-3 px-5 py-10 text-center">
             <p className="text-sm text-neutral-400">Nenhuma empresa cadastrada ainda.</p>
-            <Link
-              href="/contas"
-              className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-strong"
-            >
-              Cadastrar a primeira
-            </Link>
+            {!acesso.restrito && (
+              <Link
+                href="/contas"
+                className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-strong"
+              >
+                Cadastrar a primeira
+              </Link>
+            )}
           </div>
         ) : (
           <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
