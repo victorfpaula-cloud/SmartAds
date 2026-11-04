@@ -65,6 +65,23 @@ export interface OpcoesPdfRelatorio {
 }
 
 /** Monta o PDF (funciona no navegador e no servidor). */
+/** Baixa a miniatura (poucos KB, só na memória — nada é gravado) pra embutir no PDF. Falha de rede ou
+ * de CORS no navegador só deixa a linha sem foto. */
+async function baixarMiniatura(url: string): Promise<{ dados: string; formato: "JPEG" | "PNG" } | null> {
+  try {
+    const r = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (!r.ok) return null;
+    const bytes = new Uint8Array(await r.arrayBuffer());
+    if (bytes.length === 0 || bytes.length > 400_000) return null;
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    const png = bytes[0] === 0x89 && bytes[1] === 0x50;
+    return { dados: `data:image/${png ? "png" : "jpeg"};base64,${btoa(bin)}`, formato: png ? "PNG" : "JPEG" };
+  } catch {
+    return null;
+  }
+}
+
 export async function montarPdfRelatorioAds(dados: DadosRelatorioAds, opcoes: OpcoesPdfRelatorio = {}) {
   const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({ unit: "pt", format: "a4" });
@@ -235,8 +252,12 @@ export async function montarPdfRelatorioAds(dados: DadosRelatorioAds, opcoes: Op
     };
     garantir(60);
     cabecalho();
-    for (const c of dados.campanhas.slice(0, 25)) {
-      if (y + 22 > A - 40) {
+    const listadas = dados.campanhas.slice(0, 25);
+    const miniaturas = await Promise.all(listadas.map((c) => (c.thumbnailUrl ? baixarMiniatura(c.thumbnailUrl) : Promise.resolve(null))));
+    for (const [idx, c] of listadas.entries()) {
+      const mini = miniaturas[idx];
+      const alturaLinha = mini || c.legenda ? 34 : 22;
+      if (y + alturaLinha > A - 40) {
         doc.addPage();
         fundo();
         y = M;
@@ -244,17 +265,32 @@ export async function montarPdfRelatorioAds(dados: DadosRelatorioAds, opcoes: Op
       }
       doc.setDrawColor(...COR.borda);
       doc.line(M, y, M + W, y);
+      const recuo = mini ? 32 : 0;
+      if (mini) {
+        try {
+          doc.addImage(mini.dados, mini.formato, colunas[0].x, y + 3, 28, 28);
+        } catch {
+          // imagem ilegível: segue sem foto
+        }
+      }
       let nome = c.nome;
       doc.setFontSize(8.5);
-      const maxNome = W * 0.4;
+      const maxNome = W * 0.4 - recuo;
       while (nome.length > 4 && doc.getTextWidth(nome) > maxNome) nome = nome.slice(0, -2);
       if (nome !== c.nome) nome += "…";
-      texto(nome, colunas[0].x, y + 14, 8.5, COR.texto);
-      texto(inteiro(c.alcance), colunas[1].x, y + 14, 8.5, COR.texto, false, "right");
-      texto(inteiro(c.engajamentos), colunas[2].x, y + 14, 8.5, COR.texto, false, "right");
-      texto(inteiro(c.cliquesNoLink), colunas[3].x, y + 14, 8.5, COR.texto, false, "right");
-      texto(reais(c.gasto), colunas[4].x, y + 14, 8.5, COR.texto, false, "right");
-      y += 22;
+      const base = alturaLinha === 34 ? 15 : 14;
+      texto(nome, colunas[0].x + recuo, y + base, 8.5, COR.texto);
+      if (c.legenda) {
+        let leg = `“${c.legenda}”`;
+        doc.setFontSize(7);
+        while (leg.length > 6 && doc.getTextWidth(leg) > maxNome) leg = leg.slice(0, -2);
+        texto(leg, colunas[0].x + recuo, y + 26, 7, COR.fraco);
+      }
+      texto(inteiro(c.alcance), colunas[1].x, y + base, 8.5, COR.texto, false, "right");
+      texto(inteiro(c.engajamentos), colunas[2].x, y + base, 8.5, COR.texto, false, "right");
+      texto(inteiro(c.cliquesNoLink), colunas[3].x, y + base, 8.5, COR.texto, false, "right");
+      texto(reais(c.gasto), colunas[4].x, y + base, 8.5, COR.texto, false, "right");
+      y += alturaLinha;
     }
     y += 8;
   }

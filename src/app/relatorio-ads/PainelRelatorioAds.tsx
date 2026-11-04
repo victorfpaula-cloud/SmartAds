@@ -240,7 +240,18 @@ function Relatorio({ dados }: { dados: DadosRelatorioAds }) {
             <tbody>
               {dados.campanhas.map((c, i) => (
                 <tr key={i} className="border-t border-white/5 text-neutral-300">
-                  <td className="max-w-[260px] truncate py-2.5 pr-3">{c.nome}</td>
+                  <td className="py-2.5 pr-3">
+                    <div className="flex items-center gap-2.5">
+                      {c.thumbnailUrl && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={c.thumbnailUrl} alt="" loading="lazy" referrerPolicy="no-referrer" className="h-10 w-10 shrink-0 rounded-md border border-white/10 object-cover" />
+                      )}
+                      <div className="min-w-0 max-w-[240px]">
+                        <p className="truncate">{c.nome}</p>
+                        {c.legenda && <p className="truncate text-[11px] text-neutral-500">“{c.legenda}”</p>}
+                      </div>
+                    </div>
+                  </td>
                   <td className="py-2.5 text-right tabular-nums">{inteiro(c.alcance)}</td>
                   <td className="py-2.5 text-right tabular-nums">{inteiro(c.engajamentos)}</td>
                   <td className="py-2.5 text-right tabular-nums">{inteiro(c.cliquesNoLink)}</td>

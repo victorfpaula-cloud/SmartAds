@@ -22,6 +22,7 @@ interface Campanha {
   orcamentoVitalicioCentavos: number | null;
   start_time?: string;
   stop_time?: string;
+  criativo?: { thumbnailUrl: string | null; legenda: string | null } | null;
   local: {
     id: string;
     meta_adset_id: string | null;
@@ -346,8 +347,25 @@ export default function PainelCampanhasDaConta({
                 return (
                 <tr key={campanha.id}>
                   <td className="px-4 py-3">
-                    <p className="font-medium text-neutral-100">{campanha.name}</p>
-                    {periodo && <p className="mt-0.5 text-[10.5px] text-neutral-600">{periodo}</p>}
+                    <div className="flex items-center gap-3">
+                      {campanha.criativo?.thumbnailUrl && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={campanha.criativo.thumbnailUrl}
+                          alt=""
+                          loading="lazy"
+                          referrerPolicy="no-referrer"
+                          className="h-12 w-12 shrink-0 rounded-lg border border-white/10 object-cover"
+                        />
+                      )}
+                      <div className="min-w-0">
+                        <p className="font-medium text-neutral-100">{campanha.name}</p>
+                        {campanha.criativo?.legenda && (
+                          <p className="mt-0.5 max-w-[260px] truncate text-[11.5px] text-neutral-400">“{campanha.criativo.legenda}”</p>
+                        )}
+                        {periodo && <p className="mt-0.5 text-[10.5px] text-neutral-600">{periodo}</p>}
+                      </div>
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-neutral-400">
                     {campanha.local

@@ -1200,6 +1200,77 @@ export async function listarCampanhas(
   };
 }
 
+export interface CriativoCampanha {
+  /** Miniatura pequena (160px) servida direto pela CDN da Meta — nada é guardado no nosso servidor. */
+  thumbnailUrl: string | null;
+  /** Começo da legenda do post (ou título do anúncio), numa linha só. */
+  legenda: string | null;
+}
+
+function resumirLegenda(texto: string | null | undefined): string | null {
+  const limpo = (texto ?? "").replace(/\s+/g, " ").trim();
+  if (!limpo) return null;
+  return limpo.length > 90 ? `${limpo.slice(0, 87)}…` : limpo;
+}
+
+/** Miniatura e legenda do anúncio de cada campanha da conta (id da campanha → criativo), pra
+ * identificar de relance "que post é esse". Prefere anúncio ativo; sem texto no criativo (comum em
+ * Boost de post existente), busca a legenda do post do Instagram. Tudo best-effort: falha vira mapa
+ * parcial/vazio, nunca derruba a tela. */
+export async function obterCriativosPorCampanha(adAccountId: string): Promise<Map<string, CriativoCampanha>> {
+  const resultado = new Map<string, CriativoCampanha>();
+  const midiaPorCampanha = new Map<string, string>();
+  const ativos = new Set<string>();
+  let after: string | undefined;
+
+  for (let pagina = 0; pagina < 3; pagina++) {
+    const dados = await chamar<{
+      data: Array<{
+        campaign_id?: string;
+        effective_status?: string;
+        creative?: { thumbnail_url?: string; body?: string; title?: string; effective_instagram_media_id?: string };
+      }>;
+      paging?: { cursors?: { after?: string }; next?: string };
+    }>(`${adAccountId}/ads`, {
+      query: {
+        fields:
+          "campaign_id,effective_status,creative.thumbnail_width(160).thumbnail_height(160){thumbnail_url,body,title,effective_instagram_media_id}",
+        limit: 100,
+        after,
+      },
+    });
+    for (const ad of dados.data) {
+      if (!ad.campaign_id || !ad.creative) continue;
+      const ativo = ad.effective_status === "ACTIVE";
+      if (resultado.has(ad.campaign_id) && !(ativo && !ativos.has(ad.campaign_id))) continue;
+      if (ativo) ativos.add(ad.campaign_id);
+      resultado.set(ad.campaign_id, {
+        thumbnailUrl: ad.creative.thumbnail_url ?? null,
+        legenda: resumirLegenda(ad.creative.body) ?? resumirLegenda(ad.creative.title),
+      });
+      if (ad.creative.effective_instagram_media_id) midiaPorCampanha.set(ad.campaign_id, ad.creative.effective_instagram_media_id);
+      else midiaPorCampanha.delete(ad.campaign_id);
+    }
+    if (!dados.paging?.next) break;
+    after = dados.paging.cursors?.after;
+  }
+
+  // Legenda do post do Instagram pros que não têm texto no criativo (uma chamada em lote).
+  const semLegenda = [...resultado.entries()].filter(([id, c]) => !c.legenda && midiaPorCampanha.has(id)).slice(0, 50);
+  if (semLegenda.length > 0) {
+    try {
+      const ids = [...new Set(semLegenda.map(([id]) => midiaPorCampanha.get(id) as string))];
+      const midias = await chamar<Record<string, { caption?: string }>>("", { query: { ids: ids.join(","), fields: "caption" } });
+      for (const [id, c] of semLegenda) {
+        c.legenda = resumirLegenda(midias[midiaPorCampanha.get(id) as string]?.caption);
+      }
+    } catch {
+      // Sem a legenda, segue só com a miniatura.
+    }
+  }
+  return resultado;
+}
+
 export interface ConjuntoResumoMeta {
   id: string;
   campaign_id: string;

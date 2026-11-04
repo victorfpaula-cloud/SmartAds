@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { listarCampanhas, obterInsightsConta, listarConjuntosDaConta, campanhaAtivaAgora } from "@/lib/meta/api";
+import { listarCampanhas, obterInsightsConta, listarConjuntosDaConta, campanhaAtivaAgora, obterCriativosPorCampanha } from "@/lib/meta/api";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
+import { comContaMeta } from "@/lib/meta/conexao";
 import { ErroMetaNaoConectado } from "@/lib/meta/token";
 import { ErroGraphAPIException } from "@/lib/meta/erros";
 
@@ -27,7 +28,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const [{ campanhas, proximoCursor }, insights, { data: cache }, conjuntos, insightsMes] = await Promise.all([
+    const [{ campanhas, proximoCursor }, insights, { data: cache }, conjuntos, insightsMes, criativos] = await Promise.all([
       // limit 50 (não o padrão de 10 de listarCampanhas) — com 10 por página, uma conta com mais
       // de 10 campanhas cadastradas podia ter uma campanha ATIVA fora da primeira página, escondida
       // até alguém clicar em "Carregar mais campanhas" (ninguém clica achando que só tem histórico
@@ -52,6 +53,8 @@ export async function GET(request: NextRequest) {
       obterInsightsConta(conta.meta_ad_account_id, { nivel: "campaign", datePreset: "this_month", porDia: false }).catch(
         () => null
       ),
+      // Miniatura + legenda do post de cada campanha (best-effort: sem isso a tela só não mostra a foto).
+      comContaMeta(contaId, () => obterCriativosPorCampanha(conta.meta_ad_account_id)).catch(() => null),
     ]);
     const gastoMesPorCampanha = new Map((insightsMes ?? []).map((i) => [i.campaign_id, Number(i.spend ?? 0)]));
     const gastoMesTotalReais = insightsMes ? [...gastoMesPorCampanha.values()].reduce((a, b) => a + b, 0) : null;
@@ -82,6 +85,7 @@ export async function GET(request: NextRequest) {
 
       return {
         ...campanha,
+        criativo: criativos?.get(campanha.id) ?? null,
         spendTotal: gastoPorCampanha.get(campanha.id) ?? "0",
         gastoMesReais: gastoMesPorCampanha.get(campanha.id) ?? 0,
         local: cachePorCampanha.get(campanha.id) ?? null,
