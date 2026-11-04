@@ -4,6 +4,7 @@ import {
   obterInsightsInstagramRelatorio,
   obterResumoContaInstagram,
   listarPostsInstagramDesde,
+  obterCriativosPorCampanha,
   type InsightsInstagramRelatorio,
   type LinhaInsightRelatorio,
 } from "@/lib/meta/api";
@@ -41,6 +42,8 @@ export interface DiaRelatorioAds {
 
 export interface CampanhaRelatorioAds {
   nome: string;
+  thumbnailUrl?: string | null;
+  legenda?: string | null;
   gasto: number;
   alcance: number;
   impressoes: number;
@@ -258,7 +261,7 @@ export async function gerarRelatorioAds(
   const avisos: string[] = [];
 
   return comContaMeta(contaId, async () => {
-    const [totalAtual, porDia, porCampanha, porPlataforma, igInsights, igPosts, igResumo] = await Promise.allSettled([
+    const [totalAtual, porDia, porCampanha, porPlataforma, igInsights, igPosts, igResumo, criativos] = await Promise.allSettled([
       obterInsightsRelatorio(adAccountId, { nivel: "account", desde, ate: hoje }),
       obterInsightsRelatorio(adAccountId, { nivel: "account", desde, ate: hoje, porDia: true }),
       obterInsightsRelatorio(adAccountId, { nivel: "campaign", desde, ate: hoje }),
@@ -270,6 +273,7 @@ export async function gerarRelatorioAds(
         ? listarPostsInstagramDesde(conta.instagram_business_id, Math.floor(new Date(`${desde}T00:00:00-03:00`).getTime() / 1000))
         : Promise.resolve(null),
       conta.instagram_business_id ? obterResumoContaInstagram(conta.instagram_business_id) : Promise.resolve(null),
+      obterCriativosPorCampanha(adAccountId),
     ]);
 
     if (totalAtual.status === "rejected") {
@@ -297,6 +301,8 @@ export async function gerarRelatorioAds(
         ? porCampanha.value
             .map((l) => ({
               nome: l.campaign_name ?? "(sem nome)",
+              thumbnailUrl: (criativos.status === "fulfilled" && l.campaign_id ? criativos.value.get(l.campaign_id)?.thumbnailUrl : null) ?? null,
+              legenda: (criativos.status === "fulfilled" && l.campaign_id ? criativos.value.get(l.campaign_id)?.legenda : null) ?? null,
               gasto: num(l.spend),
               alcance: num(l.reach),
               impressoes: num(l.impressions),
