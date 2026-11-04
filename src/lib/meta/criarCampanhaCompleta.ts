@@ -9,6 +9,7 @@ import {
   obterTokenDePagina,
   encontrarPostDaPaginaCorrespondente,
   criarCriativoDoPostDoInstagram,
+  criarCriativoDoPostInstagramComLink,
   criarCriativoDoPostDaPagina,
   criarCriativoNovo,
   criarAnuncio,
@@ -102,7 +103,7 @@ async function criarCampanhaCompletaComConexao(corpo: ParametrosCriarCampanha): 
       etapaAlcancada: { anuncioIds: [] },
     };
   }
-  if (corpo.criativo.usarPostExistente && !modelo.permiteUsarPostExistente) {
+  if (corpo.criativo.usarPostExistente && !modelo.permiteUsarPostExistente && !modelo.exigeLink) {
     return {
       ok: false,
       erro: "Esse modelo de campanha não permite usar publicação existente.",
@@ -176,7 +177,7 @@ async function criarCampanhaCompletaComConexao(corpo: ParametrosCriarCampanha): 
     // resolve, porque o problema real tava aqui, não lá (achado em 23/09/2026 testando direto
     // contra a API real via Windsor.ai).
     const promotedObject =
-      modelo.exigeFormulario || corpo.criativo.usarPostExistente ? { page_id: conta.page_id } : undefined;
+      modelo.exigeFormulario || (corpo.criativo.usarPostExistente && !modelo.exigeLink) ? { page_id: conta.page_id } : undefined;
 
     const adset = await criarConjuntoDeAnuncios(adAccountId, {
       name: `${corpo.nomeCampanha} - conjunto`,
@@ -193,7 +194,28 @@ async function criarCampanhaCompletaComConexao(corpo: ParametrosCriarCampanha): 
     });
     adsetId = adset.id;
 
-    if (postExistente) {
+    if (postExistente && modelo.exigeLink) {
+      // Campanha de link (delivery) com post/Reel que já existe: criativo do próprio post do Instagram
+      // + botão com o link. Só Instagram (Stories) — sem a volta pelo post da Página.
+      if (corpo.tambemNoFacebook) {
+        throw new Error("Post existente com link só roda no Instagram — desmarque \"Também publicar no Facebook\".");
+      }
+      const criativoLink = await criarCriativoDoPostInstagramComLink(adAccountId, {
+        instagramMediaId: postExistente.id,
+        instagramUserId: conta.instagram_business_id,
+        link: corpo.criativo.link as string,
+        callToAction: corpo.criativo.callToAction ?? "LEARN_MORE",
+        name: `${corpo.nomeCampanha} - criativo`,
+      });
+      criativoInstagramId = criativoLink.id;
+      passosConcluidos.push("criativo do post do Instagram com link criado");
+      const anuncioLink = await criarAnuncio(adAccountId, {
+        name: `${corpo.nomeCampanha} - anúncio`,
+        adsetId: adset.id,
+        creativeId: criativoLink.id,
+      });
+      anuncioIds.push(anuncioLink.id);
+    } else if (postExistente) {
       // Conjunto SEMPRE no formato que a Meta já aceita pra turbinar post (ON_POST + promoted_object
       // da Página). Tentativas de mudar o destino do conjunto pra imitar o "No seu anúncio" do
       // Gerenciador falharam em produção em 29/09/2026 (ON_AD e conjunto sem destino: a Meta

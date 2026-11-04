@@ -93,6 +93,7 @@ export default function FormularioCampanha({
   // Passo 3 — criativo
   const criativoOficial = valoresIniciais?.criativoOficial;
   const [usarPostExistente, setUsarPostExistente] = useState(!criativoOficial && modelo.permiteUsarPostExistente);
+  // Campanhas de link (delivery) também aceitam um post/Reel que já existe, com o botão levando ao link.
   const [posts, setPosts] = useState<PostInstagram[]>([]);
   const [carregandoPosts, setCarregandoPosts] = useState(false);
   const [postSelecionadoId, setPostSelecionadoId] = useState("");
@@ -231,7 +232,7 @@ export default function FormularioCampanha({
       return true;
     }
     if (passo === 3) {
-      if (usarPostExistente) return !!postSelecionadoId;
+      if (usarPostExistente) return !!postSelecionadoId && (!modelo.exigeLink || !!link.trim());
       if (imagens.length === 0) return false;
       if (!mensagem.trim()) return false;
       if (modelo.exigeLink && !link.trim()) return false;
@@ -512,21 +513,21 @@ export default function FormularioCampanha({
               </div>
             )}
 
-            {!criativoOficial && modelo.permiteUsarPostExistente && (
+            {!criativoOficial && (modelo.permiteUsarPostExistente || modelo.exigeLink) && (
               <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={() => setUsarPostExistente(true)}
                   className={`flex-1 rounded-lg border px-3 py-2 text-xs font-semibold ${usarPostExistente ? "border-accent bg-accent/10 text-accent-strong" : "border-white/10 text-neutral-400"}`}
                 >
-                  Usar publicação existente
+                  {modelo.exigeLink ? "Usar post/Reel que já existe" : "Usar publicação existente"}
                 </button>
                 <button
                   type="button"
                   onClick={() => setUsarPostExistente(false)}
                   className={`flex-1 rounded-lg border px-3 py-2 text-xs font-semibold ${!usarPostExistente ? "border-accent bg-accent/10 text-accent-strong" : "border-white/10 text-neutral-400"}`}
                 >
-                  Criar novo
+                  {modelo.exigeLink ? "Subir arte nova" : "Criar novo"}
                 </button>
               </div>
             )}
@@ -629,6 +630,37 @@ export default function FormularioCampanha({
                       </button>
                     )}
                   </>
+                )}
+                {modelo.exigeLink && (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="text-xs font-semibold text-neutral-400">URL de destino</label>
+                      <input
+                        value={link}
+                        onChange={(e) => setLink(e.target.value)}
+                        placeholder="https://…"
+                        className="mt-1 h-10 w-full rounded-lg border border-white/14 bg-ink-850 px-3 text-sm text-neutral-100"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-neutral-400">Botão</label>
+                      <select
+                        value={callToAction}
+                        onChange={(e) => setCallToAction(e.target.value)}
+                        className="mt-1 h-10 w-full rounded-lg border border-white/14 bg-ink-850 px-3 text-sm text-neutral-100"
+                      >
+                        <option value="LEARN_MORE">Saiba mais</option>
+                        <option value="ORDER_NOW">Peça agora</option>
+                        <option value="SHOP_NOW">Comprar agora</option>
+                        <option value="SIGN_UP">Cadastre-se</option>
+                        <option value="CONTACT_US">Fale conosco</option>
+                      </select>
+                    </div>
+                    <p className="text-[11.5px] leading-snug text-neutral-500 sm:col-span-2">
+                      Dica: escolha um Reel ou post vertical (9:16) — nos Stories, post quadrado fica cortado. A Meta
+                      pode recusar o botão em alguns posts; se recusar, aparece o motivo e nada é criado.
+                    </p>
+                  </div>
                 )}
               </div>
             ) : (
