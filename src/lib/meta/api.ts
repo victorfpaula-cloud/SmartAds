@@ -941,6 +941,32 @@ export async function criarCriativoDoPostDoInstagram(
   throw new Error(erros.join(" | "));
 }
 
+/** Criativo a partir de um post/Reel do Instagram que já existe, com botão levando a um link
+ * (campanhas de delivery). Tenta variações do campo do usuário do Instagram; se a Meta recusar todas,
+ * junta os motivos na mensagem. */
+export async function criarCriativoDoPostInstagramComLink(
+  adAccountId: string,
+  params: { instagramMediaId: string; instagramUserId: string; link: string; callToAction: string; name: string }
+): Promise<{ id: string }> {
+  const cta = { type: params.callToAction, value: { link: params.link } };
+  const variantes: Array<Record<string, unknown>> = [
+    { source_instagram_media_id: params.instagramMediaId, instagram_user_id: params.instagramUserId, call_to_action: cta },
+    { source_instagram_media_id: params.instagramMediaId, instagram_actor_id: params.instagramUserId, call_to_action: cta },
+  ];
+  const erros: string[] = [];
+  for (const variante of variantes) {
+    try {
+      return await chamar<{ id: string }>(`${adAccountId}/adcreatives`, {
+        metodo: "POST",
+        corpo: { name: params.name, ...variante },
+      });
+    } catch (e) {
+      erros.push(e instanceof Error ? e.message : String(e));
+    }
+  }
+  throw new Error(`A Meta recusou usar esse post com botão e link (${erros.join(" | ")}). Tente subir a arte nova.`);
+}
+
 /** Anúncio novo ("dark post" — não aparece no feed orgânico, só roda como anúncio), com imagem e
  * link opcional (usado em Cliques no Link) ou sem link (Engajamento/Alcance/Visita ao perfil). */
 export async function criarCriativoNovo(
