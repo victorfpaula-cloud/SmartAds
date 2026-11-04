@@ -1,5 +1,46 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { acessoDoUsuario } from "@/lib/acesso";
+import { criarClienteAdmin } from "@/lib/supabase/admin";
+import { COOKIE_AMBIENTE } from "@/lib/ambiente";
+
+// Usuário restrito (ex.: gestora de uma franquia): só entra nas telas das empresas liberadas pra ele.
+const PAGINAS_RESTRITO = [
+  "/estrategias", "/campanhas", "/boost", "/delivery", "/publicos", "/financeiro",
+  "/relatorios", "/relatorio-ads", "/automacao", "/central",
+];
+// APIs que mexem em contas/clientes/conexões ou devolvem dados de TODAS as empresas: nunca pra restrito.
+const API_BLOQUEADA = [
+  "/api/admin", "/api/contas-meta", "/api/clientes", "/api/empresas", "/api/auth/meta",
+  "/api/meta/contas-disponiveis", "/api/saude", "/api/relatorios/postagens",
+];
+// POSTs que só consultam/atualizam números: liberados mesmo pra quem não pode editar.
+const API_LEITURA = [
+  "/api/auth/logout", "/api/saude-rede", "/api/relatorio-ads", "/api/financeiro/saldo", "/api/financeiro/atualizar",
+  "/api/estrategias/postagens/atualizar", "/api/ia/resumo", "/api/diagnostico", "/api/meta/buscar-interesse",
+  "/api/meta/buscar-localizacao", "/api/meta/posts-instagram",
+];
+const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+const sob = (caminho: string, bases: string[]) => bases.some((b) => caminho === b || caminho.startsWith(b + "/"));
+
+/** Algum id da URL (rota ou parâmetro) é de empresa/cliente/conta que NÃO está liberada pro usuário? */
+async function foraDoEscopo(ids: string[], empresas: string[]): Promise<boolean> {
+  const alvo = Array.from(new Set(ids.map((i) => i.toLowerCase()))).filter((i) => !empresas.includes(i));
+  if (alvo.length === 0) return false;
+  const db = criarClienteAdmin();
+  const [emp, cli, con] = await Promise.all([
+    db.from("smartads_empresas").select("id").in("id", alvo),
+    db.from("smartads_clientes").select("id, empresa_id").in("id", alvo),
+    db.from("smartads_contas_meta").select("id, smartads_clientes(empresa_id)").in("id", alvo),
+  ]);
+  if ((emp.data ?? []).length > 0) return true;
+  if ((cli.data ?? []).some((c) => !c.empresa_id || !empresas.includes(c.empresa_id))) return true;
+  return (con.data ?? []).some((c) => {
+    const rel = c.smartads_clientes as unknown as { empresa_id: string | null } | { empresa_id: string | null }[] | null;
+    const empresaId = Array.isArray(rel) ? rel[0]?.empresa_id : rel?.empresa_id;
+    return !empresaId || !empresas.includes(empresaId);
+  });
+}
 
 /**
  * Exige login em todo o painel — SmartAds é uso interno de uma pessoa só (a agência), sem rota
@@ -52,7 +93,78 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(destino);
   }
 
+  if (session) {
+    // Valida a sessão no servidor de Auth (não só decodifica o cookie): o papel de acesso não pode
+    // ser forjado editando o cookie.
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      const destino = request.nextUrl.clone();
+      destino.pathname = "/login";
+      return NextResponse.redirect(destino);
+    }
+    const acesso = acessoDoUsuario(user);
+    if (acesso.restrito) {
+      const bloqueio = await aplicarRestricoes(request, acesso, response);
+      if (bloqueio) return bloqueio;
+    }
+  }
+
   return response;
+}
+
+async function aplicarRestricoes(
+  request: NextRequest,
+  acesso: ReturnType<typeof acessoDoUsuario>,
+  response: NextResponse
+): Promise<NextResponse | null> {
+  const caminho = request.nextUrl.pathname;
+  const ehApi = caminho.startsWith("/api/");
+  const negar = () =>
+    ehApi
+      ? NextResponse.json({ erro: "Sem permissão." }, { status: 403 })
+      : NextResponse.redirect(new URL(acesso.empresas.length === 1 ? `/api/ambiente?empresa=${acesso.empresas[0]}` : "/", request.url));
+  if (acesso.empresas.length === 0) {
+    // Restrito sem nenhuma empresa liberada: não vê nada, só consegue sair.
+    return caminho === "/login" || caminho === "/api/auth/logout"
+      ? null
+      : ehApi
+        ? NextResponse.json({ erro: "Sem permissão." }, { status: 403 })
+        : NextResponse.redirect(new URL("/login", request.url));
+  }
+
+  if (caminho === "/login") return null;
+  if (ehApi) {
+    if (sob(caminho, API_BLOQUEADA)) return negar();
+    const leitura = request.method === "GET" || request.method === "HEAD";
+    if (!leitura && !acesso.podeEditar && !sob(caminho, API_LEITURA)) return negar();
+  } else if (caminho === "/mais") {
+    return NextResponse.redirect(new URL("/", request.url));
+  } else if (caminho !== "/" && !sob(caminho, PAGINAS_RESTRITO)) {
+    return negar();
+  }
+
+  // Qualquer id de empresa/cliente/conta na URL tem de ser de uma empresa liberada.
+  const ids = [
+    ...(caminho.match(UUID) ?? []),
+    ...Array.from(request.nextUrl.searchParams.values()).flatMap((v) => v.match(UUID) ?? []),
+  ];
+  if (await foraDoEscopo(ids, acesso.empresas)) return negar();
+
+  if (ehApi) return null;
+
+  // Com uma empresa só, não existe "Início": entra direto no ambiente dela.
+  if (caminho === "/" && acesso.empresas.length === 1) {
+    return NextResponse.redirect(new URL(`/api/ambiente?empresa=${acesso.empresas[0]}`, request.url));
+  }
+  // O ambiente aberto (cookie) tem de ser um dos liberados — senão abre o primeiro.
+  const atual = request.cookies.get(COOKIE_AMBIENTE)?.value?.toLowerCase();
+  if (caminho !== "/" && (!atual || !acesso.empresas.includes(atual))) {
+    const ir = encodeURIComponent(caminho + request.nextUrl.search);
+    const r = NextResponse.redirect(new URL(`/api/ambiente?empresa=${acesso.empresas[0]}&ir=${ir}`, request.url));
+    response.cookies.getAll().forEach((c) => r.cookies.set(c));
+    return r;
+  }
+  return null;
 }
 
 export const config = {
