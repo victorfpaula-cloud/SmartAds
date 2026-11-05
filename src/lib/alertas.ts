@@ -67,7 +67,8 @@ export async function gerarAlertas(empresaId: string, agora = new Date()): Promi
 
     // Saldo (só faz sentido em conta pré-paga ou com saldo informado)
     const prev = calcularPrevisaoSaldo(c.saldoDisponivelCentavos, c.mediaDiariaCentavos, agora, c.contaPrePaga);
-    if (c.saldoDisponivelCentavos !== null && c.saldoDisponivelCentavos <= 0 && c.mediaDiariaCentavos > 0) {
+    if (c.saldoDisponivelCentavos !== null && c.saldoDisponivelCentavos <= 0 && c.mediaDiariaCentavos >= 100) {
+      // (>= R$ 1/dia: média de centavos é conta praticamente parada, não "estava gastando")
       add({ severidade: "critico", categoria: "saldo", unidade: u, titulo: "Sem saldo — anúncios parados", detalhe: "A conta estava gastando e o saldo zerou. Adicione crédito pra voltar a veicular.", href: "/financeiro" }, c);
     } else if (prev.dias !== null && prev.dias <= 3) {
       add({ severidade: "critico", categoria: "saldo", unidade: u, titulo: `Saldo acaba em ${prev.dias < 1 ? "menos de 1 dia" : `${prev.dias} dia${prev.dias !== 1 ? "s" : ""}`}`, detalhe: `Saldo ${reais(c.saldoDisponivelCentavos ?? 0)} no ritmo de ${reais(c.mediaDiariaCentavos)}/dia.`, href: "/financeiro" }, c);
@@ -152,7 +153,7 @@ export async function gerarAlertas(empresaId: string, agora = new Date()): Promi
     if (terminando.length > 0) {
       const quando = (iso: string) => {
         const h = (new Date(iso).getTime() - agoraMs) / 3_600_000;
-        return h < 24 ? "em menos de 1 dia" : `em ${Math.round(h / 24)} dias`;
+        return h < 24 ? "em menos de 1 dia" : `em ${Math.round(h / 24)} dia${Math.round(h / 24) !== 1 ? "s" : ""}`;
       };
       add({
         severidade: "atencao", categoria: "campanhas", unidade: c.clienteNome,
