@@ -62,14 +62,18 @@ interface DiaBruto {
  * que aconteça, "0 dias sem postar" já está certo do mesmo jeito — só economiza chamada em quem já
  * sabidamente não precisa ser checado nesse dia. Unidade que ainda não postou hoje continua sendo
  * checada em TODA visita, porque aí sim a resposta pode mudar a qualquer momento. */
-export async function obterRelatorioPostagens(): Promise<UnidadeRelatorioPostagens[]> {
+export async function obterRelatorioPostagens(empresaId?: string): Promise<UnidadeRelatorioPostagens[]> {
   const supabase = criarClienteAdmin();
-  const { data: clientes } = await supabase
+  let consulta = supabase
     .from("smartads_clientes")
     .select("id, nome, smartads_empresas!inner(tipo), smartads_contas_meta(*)")
     .eq("ativo", true)
     .eq("smartads_empresas.tipo", "franquia")
     .order("nome");
+  // Dentro de um ambiente só entram as unidades daquela franquia (sem isso, uma segunda franquia
+  // cadastrada apareceria no Radar da primeira).
+  if (empresaId) consulta = consulta.eq("empresa_id", empresaId);
+  const { data: clientes } = await consulta;
 
   const unidades = (clientes ?? []).flatMap((cliente) =>
     ((cliente as any).smartads_contas_meta as any[])

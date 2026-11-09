@@ -871,3 +871,8 @@ create table if not exists smartads_relatorio_mensal_envios (
 );
 create index if not exists smartads_relatorio_mensal_envios_idx on smartads_relatorio_mensal_envios(cliente_id, mes);
 alter table smartads_relatorio_mensal_envios enable row level security;
+
+-- Tabelas de cache/diagnóstico criadas direto no banco: RLS ligado (sem policy), como todas as outras —
+-- só o service role (servidor) lê e grava.
+alter table if exists smartads_relatorio_postagens_cache enable row level security;
+alter table if exists smartads_cron_diagnostico enable row level security;

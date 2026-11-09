@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
@@ -12,12 +13,12 @@ export interface Ambiente {
 
 /** Ambiente em que a pessoa entrou pelo card do Início (uma franquia ou uma conta única). Fica num
  * cookie; sem ele, o app está na visão geral de todas as contas. */
-export async function lerAmbiente(): Promise<Ambiente | null> {
+export const lerAmbiente = cache(async (): Promise<Ambiente | null> => {
   const id = (await cookies()).get(COOKIE_AMBIENTE)?.value;
   if (!id || !/^[0-9a-f-]{36}$/i.test(id)) return null;
   const { data } = await criarClienteAdmin().from("smartads_empresas").select("id, nome, tipo").eq("id", id).maybeSingle();
   return data ? { id: data.id, nome: data.nome, tipo: data.tipo === "franquia" ? "franquia" : "individual" } : null;
-}
+});
 
 /** Empresa a usar numa página: o ambiente aberto manda (nunca dá pra escapar dele por parâmetro); o
  * parâmetro da URL só vale na visão geral, sem ambiente. */

@@ -1,8 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { acessoDoUsuario } from "@/lib/acesso";
+import { acessoDoUsuario } from "@/lib/acessoBase";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
-import { COOKIE_AMBIENTE } from "@/lib/ambiente";
 
 // Usuário restrito (ex.: gestora de uma franquia): só entra nas telas das empresas liberadas pra ele.
 const PAGINAS_RESTRITO = [
@@ -12,7 +11,7 @@ const PAGINAS_RESTRITO = [
 // APIs que mexem em contas/clientes/conexões ou devolvem dados de TODAS as empresas: nunca pra restrito.
 const API_BLOQUEADA = [
   "/api/admin", "/api/contas-meta", "/api/clientes", "/api/empresas", "/api/auth/meta",
-  "/api/meta/contas-disponiveis", "/api/saude", "/api/relatorios/postagens",
+  "/api/meta/contas-disponiveis", "/api/saude", "/api/relatorios/postagens/enviar",
 ];
 // POSTs que só consultam/atualizam números: liberados mesmo pra quem não pode editar.
 const API_LEITURA = [
@@ -20,6 +19,9 @@ const API_LEITURA = [
   "/api/estrategias/postagens/atualizar", "/api/ia/resumo", "/api/diagnostico", "/api/meta/buscar-interesse",
   "/api/meta/buscar-localizacao", "/api/meta/posts-instagram",
 ];
+// Mesmo nome de COOKIE_AMBIENTE (src/lib/ambiente.ts) — repetido aqui porque aquele arquivo usa APIs
+// de servidor que o middleware não carrega.
+const COOKIE_AMBIENTE = "smartads_ambiente";
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 const sob = (caminho: string, bases: string[]) => bases.some((b) => caminho === b || caminho.startsWith(b + "/"));
 
@@ -153,6 +155,15 @@ async function aplicarRestricoes(
     ...(caminho.match(UUID) ?? []),
     ...Array.from(request.nextUrl.searchParams.values()).flatMap((v) => v.match(UUID) ?? []),
   ];
+  // Ids enviados no corpo (JSON) de POST/PATCH também contam — sem isso dava pra consultar outra
+  // empresa forjando a chamada à mão.
+  if (ehApi && request.method !== "GET" && request.method !== "HEAD" && (request.headers.get("content-type") ?? "").includes("json")) {
+    try {
+      ids.push(...((await request.clone().text()).match(UUID) ?? []).slice(0, 200));
+    } catch {
+      return negar();
+    }
+  }
   if (await foraDoEscopo(ids, acesso.empresas)) return negar();
 
   if (ehApi) return null;
