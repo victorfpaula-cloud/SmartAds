@@ -1,3 +1,4 @@
+import { calcularSituacaoTeto, mensagemTeto } from "@/lib/tetoMensal";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { registrarAcao } from "@/lib/meta/acoesLog";
 import { MODELOS_CAMPANHA } from "@/lib/meta/modelos";
@@ -43,6 +44,8 @@ export interface ParametrosCriarCampanha {
     dataInicio?: string;
     dataFim?: string;
   };
+  /** Cria mesmo passando do teto de gasto do mês da unidade (só a pessoa, na tela; o boost automático nunca). */
+  ignorarTeto?: boolean;
   criativo: {
     usarPostExistente: boolean;
     postSelecionadoId?: string;
@@ -61,7 +64,7 @@ export interface ParametrosCriarCampanha {
 
 export type ResultadoCriarCampanha =
   | { ok: true; campanhaSalva: unknown }
-  | { ok: false; erro: string; status: number; etapaAlcancada: { campanhaId?: string; adsetId?: string; anuncioIds: string[] } };
+  | { ok: false; erro: string; status: number; codigo?: "teto_mensal"; etapaAlcancada: { campanhaId?: string; adsetId?: string; anuncioIds: string[] } };
 
 /**
  * Cria a campanha inteira (campanha → conjunto de anúncios → criativo → anúncio) numa sequência
@@ -127,6 +130,18 @@ async function criarCampanhaCompletaComConexao(corpo: ParametrosCriarCampanha): 
   }
 
   const adAccountId = conta.meta_ad_account_id as string;
+
+  // Teto de gasto do mês da unidade: bloqueia criar campanha que faria a projeção passar dele.
+  if ((conta.teto_mensal_centavos as number | null) && !corpo.ignorarTeto) {
+    try {
+      const situacao = await calcularSituacaoTeto(corpo.contaId, corpo.orcamento);
+      if (situacao?.estoura) {
+        return { ok: false, erro: mensagemTeto(situacao), status: 409, codigo: "teto_mensal", etapaAlcancada: { anuncioIds: [] } };
+      }
+    } catch {
+      // Falha ao calcular não trava a criação (a Meta também falharia logo depois, com o motivo real).
+    }
+  }
   // Regra máxima: TODA campanha criada pelo SmartAds nasce com 🤖 na frente de tudo, sempre — é o
   // jeito de bater o olho no Gerenciador de Anúncios e saber na hora que essa campanha veio do
   // app, mesmo antes da sigla (ver sigla_campanha em smartads_contas_meta, que identifica de qual

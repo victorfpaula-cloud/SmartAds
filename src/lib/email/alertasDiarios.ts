@@ -54,7 +54,7 @@ export async function enviarAlertasDiarios(): Promise<{ enviado: boolean; motivo
   const importantes = todas
     .map((t) => ({
       empresa: t.empresa,
-      alertas: t.alertas.filter((a) => a.severidade !== "info" && a.categoria !== "investimento" && a.categoria !== "posts"),
+      alertas: t.alertas.filter((a) => a.severidade !== "info" && (a.categoria !== "investimento" || /teto de gasto/i.test(a.titulo)) && a.categoria !== "posts"),
     }))
     .filter((t) => t.alertas.length > 0);
   const conexao = (await gerarAlertasConexao().catch(() => [])).filter((a) => a.severidade !== "info");
