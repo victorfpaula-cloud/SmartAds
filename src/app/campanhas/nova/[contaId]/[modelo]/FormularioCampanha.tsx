@@ -209,6 +209,44 @@ export default function FormularioCampanha({
 
   const valorCentavos = Math.round(parseFloat((valorReais || "0").replace(",", ".")) * 100) || 0;
 
+  // Teto de gasto do mês da unidade: projeção (gasto + campanhas no ar + esta) com a Meta, só quando há teto.
+  const [teto, setTeto] = useState<{
+    tetoCentavos: number | null; gastoMesCentavos: number | null; comprometidoCentavos: number;
+    novoCentavos: number; projetadoCentavos: number; estoura: boolean;
+  } | null>(null);
+  const [ignorarTeto, setIgnorarTeto] = useState(false);
+  useEffect(() => {
+    if (etapa < 2 || !valorCentavos) return;
+    const t = setTimeout(() => {
+      const q = new URLSearchParams({ contaId, tipo: tipoOrcamento, valor: String(valorCentavos) });
+      if (dataInicio) q.set("inicio", dataInicio);
+      if (dataFim) q.set("fim", dataFim);
+      fetch(`/api/teto-mensal?${q}`)
+        .then((r) => r.json())
+        .then((c) => setTeto(c.situacao?.tetoCentavos ? c.situacao : null))
+        .catch(() => setTeto(null));
+    }, 500);
+    return () => clearTimeout(t);
+  }, [etapa, contaId, tipoOrcamento, valorCentavos, dataInicio, dataFim]);
+  const realTeto = (c: number) => `R$ ${(c / 100).toFixed(2).replace(".", ",").replace(/\B(?=(\d{3})+(?!\d))/g, ".")}`;
+  const avisoTeto = teto?.tetoCentavos ? (
+    <div className={`rounded-lg border px-4 py-3 text-xs leading-relaxed ${teto.estoura ? "border-danger/40 bg-danger/10 text-danger" : "border-white/10 bg-white/[0.02] text-neutral-300"}`}>
+      <p className="font-semibold">
+        {teto.estoura ? "Passa do teto de gasto do mês desta unidade" : "Dentro do teto de gasto do mês desta unidade"} ({realTeto(teto.tetoCentavos)})
+      </p>
+      <p className="mt-0.5">
+        Já gastou {realTeto(teto.gastoMesCentavos ?? 0)} · campanhas no ar ainda devem gastar ~{realTeto(teto.comprometidoCentavos)} ·
+        esta nova ~{realTeto(teto.novoCentavos)} → projeção <strong>{realTeto(teto.projetadoCentavos)}</strong>
+      </p>
+      {teto.estoura && (
+        <label className="mt-2 flex items-start gap-2 text-neutral-200">
+          <input type="checkbox" checked={ignorarTeto} onChange={(e) => setIgnorarTeto(e.target.checked)} className="mt-0.5 h-4 w-4 accent-accent" />
+          Criar mesmo assim, passando do teto
+        </label>
+      )}
+    </div>
+  ) : null;
+
   function orcamentoPrevisto(): string {
     if (!valorCentavos) return "-";
     const reais = (centavos: number) => `R$ ${(centavos / 100).toFixed(2).replace(".", ",")}`;
@@ -259,6 +297,7 @@ export default function FormularioCampanha({
         planoEtapaId,
         posicionamento: delivery ? "stories" : undefined,
         tambemNoFacebook: tambemNoFacebook || undefined,
+        ignorarTeto: ignorarTeto || undefined,
         orcamento: {
           tipo: tipoOrcamento,
           valorCentavos,
@@ -488,6 +527,7 @@ export default function FormularioCampanha({
               <span className="text-neutral-400">Orçamento previsto: </span>
               <span className="font-semibold text-neutral-100">{orcamentoPrevisto()}</span>
             </div>
+            {avisoTeto}
           </div>
         )}
 
@@ -836,6 +876,7 @@ export default function FormularioCampanha({
               Acompanhe e pause a qualquer momento no painel de Campanhas.
             </p>
 
+            {avisoTeto}
             {erro && (
               <div className="rounded-lg border border-danger/30 bg-danger/10 px-4 py-2.5 text-sm text-danger">
                 {erro}
@@ -844,7 +885,7 @@ export default function FormularioCampanha({
 
             <button
               onClick={publicar}
-              disabled={publicando || !nomeCampanha.trim()}
+              disabled={publicando || !nomeCampanha.trim() || (!!teto?.estoura && !ignorarTeto)}
               className="h-11 rounded-lg bg-accent text-sm font-bold text-white hover:bg-accent-strong disabled:opacity-50"
             >
               {publicando ? "Publicando…" : "Publicar campanha"}

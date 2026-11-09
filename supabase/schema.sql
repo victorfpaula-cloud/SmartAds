@@ -823,6 +823,9 @@ alter table smartads_calendario_rede enable row level security;
 alter table smartads_contas_meta add column if not exists link_ifood text;
 alter table smartads_contas_meta add column if not exists link_whatsapp text;
 
+-- Teto de gasto do mês da unidade (centavos); null = sem teto. Bloqueia criar campanha que passe dele.
+alter table smartads_contas_meta add column if not exists teto_mensal_centavos integer;
+
 -- Boost por conta: tipo de entrega e posts/dia ficam na própria conta; datas especiais também
 -- (smartads_boost_rede_regras.conta_id). O "padrão da rede" (smartads_boost_rede_config) não é mais usado.
 alter table smartads_contas_meta add column if not exists boost_tipo_entrega text not null default 'engajamento';

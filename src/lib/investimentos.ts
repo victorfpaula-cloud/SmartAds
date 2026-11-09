@@ -24,6 +24,8 @@ export interface InvestimentoUnidade {
   contaNome: string;
   /** Valor mensal de sempre da unidade (ex.: R$500; São Paulo pode ser R$1.000). */
   padraoMensalCentavos: number;
+  /** Teto de gasto do mês (bloqueia criar campanha que passe dele); null = sem teto. */
+  tetoCentavos: number | null;
   /** Combinado DESTE mês — o padrão, ou um valor específico só pra esse mês. */
   combinadoCentavos: number;
   combinadoEspecial: boolean;
@@ -66,6 +68,14 @@ export function gerarSugestoes(u: Omit<InvestimentoUnidade, "sugestoes">, mes: s
     sugestoes.push({ tom, texto: ehMesAtual ? "Ainda sem nenhum aporte neste mês." : "Nenhum aporte neste mês." });
   }
 
+  if (ehMesAtual && u.tetoCentavos !== null) {
+    if (u.gastoMesCentavos !== null && u.gastoMesCentavos >= u.tetoCentavos) {
+      sugestoes.push({ tom: "critico", texto: `Teto do mês atingido: gastou ${reais(u.gastoMesCentavos)} de ${reais(u.tetoCentavos)}. Novas campanhas ficam bloqueadas.` });
+    } else if (u.projecaoMesCentavos !== null && u.projecaoMesCentavos > u.tetoCentavos) {
+      sugestoes.push({ tom: "atencao", texto: `No ritmo atual o mês fecha em ~${reais(u.projecaoMesCentavos)}, acima do teto de ${reais(u.tetoCentavos)}.` });
+    }
+  }
+
   if (ehMesAtual) {
     // Saldo que não cobre o resto do mês: só faz sentido em conta pré-paga (cartão não "fica sem saldo").
     if (u.prePaga !== false && u.saldoCentavos !== null && u.mediaDiariaCentavos !== null && u.mediaDiariaCentavos > 0 && diasRestantes > 0) {
@@ -90,7 +100,7 @@ export async function carregarInvestimentos(mes: string, empresaId?: string): Pr
 
   let consulta = supabase
     .from("smartads_clientes")
-    .select("id, nome, smartads_empresas(id, nome, tipo), smartads_contas_meta(id, nome_exibicao, meta_ad_account_nome, meta_ad_account_id, ativo, orcamento_mensal_centavos)")
+    .select("id, nome, smartads_empresas(id, nome, tipo), smartads_contas_meta(id, nome_exibicao, meta_ad_account_nome, meta_ad_account_id, ativo, orcamento_mensal_centavos, teto_mensal_centavos)")
     .eq("ativo", true)
     .order("nome");
   if (empresaId) consulta = consulta.eq("empresa_id", empresaId);
@@ -132,6 +142,7 @@ export async function carregarInvestimentos(mes: string, empresaId?: string): Pr
       empresaNome: (Array.isArray(cl.smartads_empresas) ? cl.smartads_empresas[0] : cl.smartads_empresas)?.nome ?? "—",
       contaNome: (c.nome_exibicao || c.meta_ad_account_nome || c.meta_ad_account_id) as string,
       padraoMensalCentavos: padrao as number,
+      tetoCentavos: (c.teto_mensal_centavos as number | null) ?? null,
       combinadoCentavos: combinado as number,
       combinadoEspecial: Boolean(meta),
       investidoCentavos: lista.reduce((t, a) => t + (a.valor_creditado_centavos ?? a.valor_centavos), 0),

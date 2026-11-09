@@ -82,6 +82,20 @@ function CartaoUnidade({ u, mes }: { u: InvestimentoUnidade; mes: string }) {
             <CaretDown size={14} className={`text-neutral-500 transition ${aberto ? "rotate-180" : ""}`} />
           </div>
         </div>
+        {u.tetoCentavos !== null && u.gastoMesCentavos !== null && (
+          <div>
+            <div className="flex items-center justify-between text-[11px] text-neutral-400">
+              <span>Teto do mês: {reais(u.gastoMesCentavos)} de {reais(u.tetoCentavos)}</span>
+              <span>{Math.round((u.gastoMesCentavos / u.tetoCentavos) * 100)}%</span>
+            </div>
+            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/10">
+              <div
+                className={`h-full rounded-full ${u.gastoMesCentavos >= u.tetoCentavos ? "bg-danger" : (u.projecaoMesCentavos ?? 0) > u.tetoCentavos ? "bg-amber-400" : "bg-ok"}`}
+                style={{ width: `${Math.min(100, (u.gastoMesCentavos / u.tetoCentavos) * 100)}%` }}
+              />
+            </div>
+          </div>
+        )}
         {u.sugestoes.length > 0 && (
           <ul className="flex flex-col gap-1">
             {u.sugestoes.map((s, i) => (
@@ -112,6 +126,26 @@ function Detalhe({ u, mes, onMudou }: { u: InvestimentoUnidade; mes: string; onM
   const [msg, setMsg] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
 
+  const [teto, setTeto] = useState(u.tetoCentavos !== null ? (u.tetoCentavos / 100).toFixed(2).replace(".", ",") : "");
+  const [msgTeto, setMsgTeto] = useState<string | null>(null);
+
+  async function salvarTeto() {
+    const c = teto.trim() ? paraCentavos(teto) : null;
+    if (teto.trim() && !c) return setMsgTeto("Valor inválido.");
+    setOcupado(true);
+    setMsgTeto(null);
+    const r = await fetch("/api/teto-mensal", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contaId: u.contaId, tetoCentavos: c }),
+    });
+    const corpo = await r.json().catch(() => ({}));
+    setOcupado(false);
+    if (!r.ok) return setMsgTeto(corpo.erro || "Falha ao salvar o teto.");
+    setMsgTeto(c ? "Teto salvo." : "Teto removido.");
+    onMudou();
+  }
+
   async function lancar() {
     const c = paraCentavos(valor);
     if (!c) return setMsg("Informe um valor maior que zero.");
@@ -132,6 +166,20 @@ function Detalhe({ u, mes, onMudou }: { u: InvestimentoUnidade; mes: string; onM
 
   return (
     <div className="flex flex-col gap-5 border-t border-white/10 px-5 py-4">
+      <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
+        <p className="text-xs font-semibold text-neutral-300">Teto de gasto do mês</p>
+        <p className="mt-0.5 text-[11px] leading-snug text-neutral-500">
+          O máximo que esta unidade quer gastar em anúncios por mês. O SmartAds projeta o gasto (já gasto + campanhas no ar
+          até o fim do mês + a nova) e bloqueia criar campanha ou boost que passe do teto. Deixe em branco pra não ter teto.
+        </p>
+        <div className="mt-2 flex gap-2">
+          <input value={teto} onChange={(e) => setTeto(e.target.value)} inputMode="decimal" placeholder="Ex.: 1000" className={campo} />
+          <button onClick={salvarTeto} disabled={ocupado} className="h-9 shrink-0 rounded-lg bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-strong disabled:opacity-40">
+            Salvar
+          </button>
+        </div>
+        {msgTeto && <p className="mt-1.5 text-xs text-neutral-400">{msgTeto}</p>}
+      </div>
       <div className="grid gap-4">
         <div>
           <p className="text-xs font-semibold text-neutral-400">Lançar um aporte</p>

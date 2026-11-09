@@ -47,8 +47,25 @@ export async function gerarAlertas(empresaId: string, agora = new Date()): Promi
   const add = (a: Omit<Alerta, "id">, c: ContaFinanceiro) =>
     alertas.push({ ...a, id: `${a.categoria}:${c.contaId}:${a.titulo}`, unidade: a.unidade || c.clienteNome });
 
+  const { data: tetos } = await supabase
+    .from("smartads_contas_meta")
+    .select("id, teto_mensal_centavos")
+    .in("id", contas.map((c) => c.contaId))
+    .not("teto_mensal_centavos", "is", null);
+  const tetoPorConta = new Map((tetos ?? []).map((t) => [t.id as string, t.teto_mensal_centavos as number]));
+
   for (const c of contas) {
     const u = c.clienteNome;
+
+    // Teto de gasto do mês (definido por unidade): atingido, ou projeção do mês acima dele.
+    const teto = tetoPorConta.get(c.contaId);
+    if (teto && c.gastoMesCentavos !== null) {
+      if (c.gastoMesCentavos >= teto) {
+        add({ severidade: "critico", categoria: "investimento", unidade: u, titulo: "Teto de gasto do mês atingido", detalhe: `Gastou ${reais(c.gastoMesCentavos)} de ${reais(teto)}. Novas campanhas e boosts ficam bloqueados; pause o que estiver no ar se não quiser passar.`, href: "/financeiro/investimentos" }, c);
+      } else if (c.projecaoMensalCentavos > teto) {
+        add({ severidade: "atencao", categoria: "investimento", unidade: u, titulo: "Mês deve passar do teto de gasto", detalhe: `Projeção ~${reais(c.projecaoMensalCentavos)} contra o teto de ${reais(teto)} (já gastou ${reais(c.gastoMesCentavos)}).`, href: "/financeiro/investimentos" }, c);
+      }
+    }
 
     // Leitura do Financeiro
     if (c.erro) {
