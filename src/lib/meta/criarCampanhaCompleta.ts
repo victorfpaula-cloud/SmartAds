@@ -98,6 +98,20 @@ async function criarCampanhaCompletaComConexao(corpo: ParametrosCriarCampanha): 
   if (modelo.exigeLink && !corpo.criativo.link?.trim()) {
     return { ok: false, erro: "Informe a URL de destino.", status: 400, etapaAlcancada: { anuncioIds: [] } };
   }
+  // A Meta recusa orçamento diário com menos de 24h de veiculação — avisa antes, em português claro,
+  // em vez de criar a campanha e desfazer tudo (erro visto em produção em 05/11/2026).
+  if (corpo.orcamento.tipo === "diario" && corpo.orcamento.dataFim) {
+    const fim = new Date(corpo.orcamento.dataFim).getTime(); // data sem hora = 00:00, como a Meta lê
+    const inicio = Math.max(Date.now(), corpo.orcamento.dataInicio ? new Date(corpo.orcamento.dataInicio).getTime() || 0 : 0);
+    if (Number.isFinite(fim) && fim - inicio < 24 * 3_600_000) {
+      return {
+        ok: false,
+        erro: "Com orçamento diário a campanha precisa rodar pelo menos 24 horas. Escolha uma data de término pelo menos 2 dias à frente (a data de término conta a partir da meia-noite).",
+        status: 400,
+        etapaAlcancada: { anuncioIds: [] },
+      };
+    }
+  }
   if (corpo.orcamento.tipo === "vitalicio" && (!corpo.orcamento.dataInicio || !corpo.orcamento.dataFim)) {
     return {
       ok: false,

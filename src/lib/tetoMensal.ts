@@ -106,8 +106,19 @@ export async function calcularSituacaoTeto(
   // Comprometido: campanhas ativas × orçamento dos conjuntos ativos até o fim do mês.
   let comprometido = 0;
   try {
-    const [{ campanhas }, conjuntos] = await Promise.all([
-      listarCampanhas(conta.adAccountId, { limit: 100 }),
+    const [campanhas, conjuntos] = await Promise.all([
+      (async () => {
+        // Até 3 páginas (300 campanhas): uma ativa fora da 1ª página ficaria fora da projeção.
+        const todas = [];
+        let after: string | undefined;
+        for (let i = 0; i < 3; i++) {
+          const pagina = await listarCampanhas(conta.adAccountId, { limit: 100, after });
+          todas.push(...pagina.campanhas);
+          if (!pagina.proximoCursor) break;
+          after = pagina.proximoCursor;
+        }
+        return todas;
+      })(),
       listarConjuntosDaConta(conta.adAccountId),
     ]);
     const ativas = new Map(campanhas.filter((c) => campanhaAtivaAgora(c)).map((c) => [c.id, c]));

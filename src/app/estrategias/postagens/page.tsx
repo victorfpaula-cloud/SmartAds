@@ -1,3 +1,4 @@
+import { lerAmbiente } from "@/lib/ambiente";
 import Cabecalho from "@/components/Cabecalho";
 import Link from "next/link";
 import {
@@ -48,7 +49,7 @@ export default async function PostagensPage() {
   // grade usava obterUltimasPostagensPorUnidade, uma busca separada que batia na Meta de novo e
   // calculava "dias sem postar" com sua própria lógica, correndo o risco de um dia divergir do que
   // o relatório mostra pra mesma unidade.
-  const unidadesRelatorio = await obterRelatorioPostagens();
+  const unidadesRelatorio = await obterRelatorioPostagens((await lerAmbiente())?.id);
   const agora = Date.now();
   const horaVerificacao = new Date(agora).toLocaleTimeString("pt-BR", {
     hour: "2-digit",

@@ -1,3 +1,4 @@
+import { lerAmbiente } from "@/lib/ambiente";
 import { NextResponse } from "next/server";
 import { obterRelatorioPostagens, montarHtmlRelatorioPostagens } from "@/lib/relatorioPostagens";
 
@@ -9,7 +10,7 @@ export const maxDuration = 60;
  * formatado em qualquer navegador e imprime/salva como PDF se precisar, sem trazer mais uma
  * dependência pro projeto só por causa de um relatório simples). */
 export async function GET() {
-  const unidades = await obterRelatorioPostagens();
+  const unidades = await obterRelatorioPostagens((await lerAmbiente())?.id);
   const html = montarHtmlRelatorioPostagens(unidades);
   const nomeArquivo = `relatorio-postagens-${new Date().toISOString().slice(0, 10)}.html`;
 

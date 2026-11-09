@@ -1,3 +1,4 @@
+import { lerAmbiente } from "@/lib/ambiente";
 import Cabecalho from "@/components/Cabecalho";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -31,7 +32,7 @@ const CLASSE_COMPARATIVO: Record<ComparativoRede, string> = {
  * depende das outras — mesmo custo que a tela de baixar/enviar já paga. */
 export default async function DetalhePostagensPage({ params }: { params: Promise<{ contaId: string }> }) {
   const { contaId } = await params;
-  const unidades = await obterRelatorioPostagens();
+  const unidades = await obterRelatorioPostagens((await lerAmbiente())?.id);
   const unidade = unidades.find((u) => u.contaId === contaId);
   if (!unidade) notFound();
 
