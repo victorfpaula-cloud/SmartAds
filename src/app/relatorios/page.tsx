@@ -1,8 +1,16 @@
 import Cabecalho from "@/components/Cabecalho";
 import PainelRelatorios from "./PainelRelatorios";
 import AbasRelatorios from "@/components/AbasRelatorios";
+import RelatorioDaRede from "./RelatorioDaRede";
+import { lerAmbiente } from "@/lib/ambiente";
+import { lerAcesso } from "@/lib/acesso";
+import { mesDoRelatorio } from "@/lib/relatorioMensal";
 
-export default function RelatoriosPage() {
+export const dynamic = "force-dynamic";
+
+export default async function RelatoriosPage() {
+  const [ambiente, acesso] = await Promise.all([lerAmbiente(), lerAcesso()]);
+  const mes = mesDoRelatorio();
   return (
     <>
       <Cabecalho ativo="/relatorios" />
@@ -13,6 +21,7 @@ export default function RelatoriosPage() {
         </p>
         <div className="mt-4">
           <AbasRelatorios ativa="resumo" />
+          {ambiente?.tipo === "franquia" && <RelatorioDaRede mesPadrao={mes.mes} rotuloMes={mes.rotulo} podeEnviar={!acesso.restrito} />}
           <PainelRelatorios />
         </div>
       </main>

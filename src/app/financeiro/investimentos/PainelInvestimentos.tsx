@@ -166,6 +166,9 @@ function Detalhe({ u, mes, onMudou }: { u: InvestimentoUnidade; mes: string; onM
 
   return (
     <div className="flex flex-col gap-5 border-t border-white/10 px-5 py-4">
+      <a href={`/unidade/${u.contaId}`} className="self-start text-xs font-medium text-accent-strong hover:underline">
+        Abrir a tela da unidade (plano do teto, campanhas no ar, melhores posts) →
+      </a>
       <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
         <p className="text-xs font-semibold text-neutral-300">Teto de gasto do mês</p>
         <p className="mt-0.5 text-[11px] leading-snug text-neutral-500">

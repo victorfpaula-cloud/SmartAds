@@ -6,7 +6,7 @@ import { criarClienteAdmin } from "@/lib/supabase/admin";
 // Usuário restrito (ex.: gestora de uma franquia): só entra nas telas das empresas liberadas pra ele.
 const PAGINAS_RESTRITO = [
   "/estrategias", "/campanhas", "/boost", "/delivery", "/publicos", "/financeiro",
-  "/relatorios", "/relatorio-ads", "/automacao", "/central",
+  "/relatorios", "/relatorio-ads", "/automacao", "/central", "/unidade",
 ];
 // APIs que mexem em contas/clientes/conexões ou devolvem dados de TODAS as empresas: nunca pra restrito.
 const API_BLOQUEADA = [
@@ -15,7 +15,7 @@ const API_BLOQUEADA = [
 ];
 // POSTs que só consultam/atualizam números: liberados mesmo pra quem não pode editar.
 const API_LEITURA = [
-  "/api/auth/logout", "/api/saude-rede", "/api/relatorio-ads", "/api/financeiro/saldo", "/api/financeiro/atualizar",
+  "/api/auth/logout", "/api/saude-rede", "/api/relatorio-ads", "/api/relatorio-rede", "/api/financeiro/saldo", "/api/financeiro/atualizar",
   "/api/estrategias/postagens/atualizar", "/api/ia/resumo", "/api/diagnostico", "/api/meta/buscar-interesse",
   "/api/meta/buscar-localizacao", "/api/meta/posts-instagram",
 ];

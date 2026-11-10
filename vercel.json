@@ -152,6 +152,22 @@
     {
       "path": "/api/cron/seguidores",
       "schedule": "7 7 * * *"
+    },
+    {
+      "path": "/api/cron/relatorio-rede",
+      "schedule": "30 12 1 * *"
+    },
+    {
+      "path": "/api/cron/relatorio-rede",
+      "schedule": "30 14 1 * *"
+    },
+    {
+      "path": "/api/cron/relatorio-rede",
+      "schedule": "30 16 1 * *"
+    },
+    {
+      "path": "/api/cron/relatorio-rede",
+      "schedule": "30 12 2 * *"
     }
   ]
 }

@@ -12,7 +12,7 @@ export default async function FormularioCampanhaPage({
   searchParams,
 }: {
   params: { contaId: string; modelo: string };
-  searchParams: { canal?: string };
+  searchParams: { canal?: string; post?: string };
 }) {
   const modelo = MODELOS_CAMPANHA[params.modelo as TipoModeloCampanha];
   if (!modelo) notFound();
@@ -50,6 +50,7 @@ export default async function FormularioCampanhaPage({
           instagramBusinessId={conta.instagram_business_id}
           modelo={modelo}
           delivery={delivery}
+          postInicialId={modelo.permiteUsarPostExistente && /^\d{5,25}$/.test(searchParams.post ?? "") ? searchParams.post : undefined}
         />
       </main>
     </>

@@ -51,6 +51,7 @@ export default function FormularioCampanha({
   etapaInicial = 1,
   planoEtapaId,
   delivery,
+  postInicialId,
 }: {
   contaId: string;
   clienteId?: string;
@@ -65,6 +66,8 @@ export default function FormularioCampanha({
   planoEtapaId?: string;
   /** Campanha de delivery (iFood/WhatsApp): link já vem salvo da conta, entrega só em Stories. */
   delivery?: { canal: "ifood" | "whatsapp"; link: string; cta: string };
+  /** Post já escolhido ao chegar (atalho "Impulsionar" dos melhores posts da unidade). */
+  postInicialId?: string;
 }) {
   const router = useRouter();
   const [etapa, setEtapa] = useState(etapaInicial);
@@ -96,7 +99,7 @@ export default function FormularioCampanha({
   // Campanhas de link (delivery) também aceitam um post/Reel que já existe, com o botão levando ao link.
   const [posts, setPosts] = useState<PostInstagram[]>([]);
   const [carregandoPosts, setCarregandoPosts] = useState(false);
-  const [postSelecionadoId, setPostSelecionadoId] = useState("");
+  const [postSelecionadoId, setPostSelecionadoId] = useState(postInicialId ?? "");
   const [mensagem, setMensagem] = useState(criativoOficial?.mensagem ?? "");
   const [titulo, setTitulo] = useState(criativoOficial?.titulo ?? "");
   // Uma imagem = um Anúncio depois (ver hierarquia explicada na tela) — todas as variações
