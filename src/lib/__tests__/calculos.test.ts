@@ -129,3 +129,14 @@ describe("plano do teto mensal", () => {
     expect(p.disponivelCentavos).toBe(0);
   });
 });
+
+import { ehCampanhaDeBoost } from "@/lib/alertas";
+
+describe("alertas", () => {
+  it("reconhece campanha de boost automático (não avisa que está terminando)", () => {
+    expect(ehCampanhaDeBoost("🤖 (RP) Boost engajamento 03/11/2026")).toBe(true);
+    expect(ehCampanhaDeBoost("🤖 Boost alcance 01/11/2026")).toBe(true);
+    expect(ehCampanhaDeBoost("🤖 (RP) Ribeirão - Engajamento")).toBe(false);
+    expect(ehCampanhaDeBoost(null)).toBe(false);
+  });
+});
