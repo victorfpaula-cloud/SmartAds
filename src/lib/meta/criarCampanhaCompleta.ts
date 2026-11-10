@@ -31,7 +31,8 @@ export interface ParametrosCriarCampanha {
   publico: Publico;
   publicoId?: string;
   /** Delivery: "stories" restringe a entrega só aos Stories do Instagram. */
-  posicionamento?: "stories";
+  /** "reels": só Reels — usado sozinho pelo app como segunda tentativa de vídeo que o feed recusou. */
+  posicionamento?: "stories" | "reels";
   /** Campanha manual também no Facebook (foto/carrossel só feed; vídeo feed e Reels). */
   tambemNoFacebook?: boolean;
   /** Preenchido quando essa campanha nasce de uma etapa de um Plano de Execução — ao concluir com
@@ -64,7 +65,7 @@ export interface ParametrosCriarCampanha {
 
 export type ResultadoCriarCampanha =
   | { ok: true; campanhaSalva: unknown }
-  | { ok: false; erro: string; status: number; codigo?: "teto_mensal"; etapaAlcancada: { campanhaId?: string; adsetId?: string; anuncioIds: string[] } };
+  | { ok: false; erro: string; status: number; codigo?: "teto_mensal"; /** true = nada ficou criado na Meta (rollback ok). */ desfeito?: boolean; etapaAlcancada: { campanhaId?: string; adsetId?: string; anuncioIds: string[] } };
 
 /**
  * Cria a campanha inteira (campanha → conjunto de anúncios → criativo → anúncio) numa sequência
@@ -76,7 +77,7 @@ export type ResultadoCriarCampanha =
  * chamado pelo boost automático (src/lib/automacao/boostAutomatico.ts) — mesmo caminho, mesmo
  * rollback, mesmo log, sem duplicar a lógica.
  */
-export async function criarCampanhaCompleta(corpo: ParametrosCriarCampanha): Promise<ResultadoCriarCampanha> {
+async function criarCampanhaUmaVez(corpo: ParametrosCriarCampanha): Promise<ResultadoCriarCampanha> {
   // Campanha, conjunto, anúncio e mídia são IDs que não dizem de qual conta são — roda tudo com a
   // conexão da Meta dessa conta (cada conta pode ter o seu próprio login/portfólio).
   return comContaMeta(corpo.contaId, () => criarCampanhaCompletaComConexao(corpo));
@@ -442,11 +443,11 @@ async function criarCampanhaCompletaComConexao(corpo: ParametrosCriarCampanha): 
 
     // Rollback: apaga a campanha (a Meta já cascade-apaga conjunto/anúncio/criativo junto) em vez
     // de deixar objeto pela metade na conta do cliente.
+    let desfeito = !campanhaId;
     if (campanhaId) {
-      await excluirObjeto(campanhaId).catch(() => {
-        // Se nem o rollback funcionar, fica registrado no log abaixo pra investigar manualmente —
-        // melhor um log claro do que outro erro escondendo o original.
-      });
+      // Se nem o rollback funcionar, fica registrado no log abaixo pra investigar manualmente —
+      // melhor um log claro do que outro erro escondendo o original.
+      desfeito = await excluirObjeto(campanhaId).then(() => true).catch(() => false);
     }
 
     const mensagem =
@@ -485,6 +486,29 @@ async function criarCampanhaCompletaComConexao(corpo: ParametrosCriarCampanha): 
     });
 
     const status = erro instanceof ErroMetaNaoConectado ? 409 : 502;
-    return { ok: false, erro: mensagem, status, etapaAlcancada: { campanhaId, adsetId, anuncioIds } };
+    return { ok: false, erro: mensagem, status, desfeito, etapaAlcancada: { campanhaId, adsetId, anuncioIds } };
   }
+}
+
+
+/** Regra de posicionamento ao promover publicação existente: foto e carrossel só no feed; vídeo
+ * (Reels) em feed + Reels e, se a Meta recusar por causa do formato do vídeo no feed, uma segunda
+ * tentativa só em Reels. Foto/carrossel nunca caem pra outro posicionamento. */
+export async function criarCampanhaCompleta(corpo: ParametrosCriarCampanha): Promise<ResultadoCriarCampanha> {
+  const primeira = await criarCampanhaUmaVez(corpo);
+  if (primeira.ok || primeira.codigo === "teto_mensal") return primeira;
+  const recusaDeFormato = /propor[cç][aã]o|aspect ratio/i.test(primeira.erro);
+  if (!recusaDeFormato || corpo.posicionamento || corpo.tambemNoFacebook) return primeira;
+  if (!corpo.criativo.usarPostExistente || !corpo.criativo.postSelecionadoId) return primeira;
+  // Só tenta de novo se a 1ª tentativa foi desfeita por completo na Meta — nunca arrisca duplicar.
+  if (!primeira.desfeito) return primeira;
+  try {
+    const idPost = corpo.criativo.postSelecionadoId;
+    const post = await comContaMeta(corpo.contaId, () => obterPostInstagram(idPost));
+    if (post.media_type !== "VIDEO") return primeira;
+  } catch {
+    return primeira;
+  }
+  const segunda = await criarCampanhaUmaVez({ ...corpo, posicionamento: "reels" });
+  return segunda.ok ? segunda : { ...segunda, erro: `${primeira.erro} | Segunda tentativa só em Reels: ${segunda.erro}` };
 }

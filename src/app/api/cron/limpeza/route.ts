@@ -1,3 +1,4 @@
+import { comRegistroDeCron } from "@/lib/cronRegistro";
 import { NextResponse, type NextRequest } from "next/server";
 import { limparDadosAntigos } from "@/lib/limpeza";
 
@@ -6,7 +7,7 @@ export const maxDuration = 30;
 
 /** Roda 1x/semana (ver vercel.json) — mesma autenticação por CRON_SECRET do resto da automação.
  * Ver limparDadosAntigos pra saber o que é apagado e por quê. */
-export async function GET(request: NextRequest) {
+export const GET = comRegistroDeCron("limpeza", async function (request: NextRequest) {
   const segredoEsperado = process.env.CRON_SECRET;
   const autorizacao = request.headers.get("authorization");
 
@@ -16,4 +17,4 @@ export async function GET(request: NextRequest) {
 
   const resultado = await limparDadosAntigos();
   return NextResponse.json({ ...resultado, executadoEm: new Date().toISOString() });
-}
+});

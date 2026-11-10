@@ -1,3 +1,4 @@
+import { comRegistroDeCron } from "@/lib/cronRegistro";
 import { NextResponse, type NextRequest } from "next/server";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { obterResumoContaInstagram } from "@/lib/meta/api";
@@ -12,7 +13,7 @@ export const maxDuration = 60;
 /** Guarda 1x/dia quantos seguidores cada conta tem (smartads_seguidores_snapshot). A Meta não
  * devolve histórico de seguidores, então o "novos seguidores" do Relatório Ads é a diferença entre
  * duas leituras daqui. Mesma autenticação por CRON_SECRET do resto da automação. */
-export async function GET(request: NextRequest) {
+export const GET = comRegistroDeCron("seguidores", async function (request: NextRequest) {
   const segredoEsperado = process.env.CRON_SECRET;
   if (!segredoEsperado || request.headers.get("authorization") !== `Bearer ${segredoEsperado}`) {
     return NextResponse.json({ erro: "Não autorizado." }, { status: 401 });
@@ -45,4 +46,4 @@ export async function GET(request: NextRequest) {
   });
 
   return NextResponse.json({ contas: resultados.length, gravadas: resultados.filter(Boolean).length, executadoEm: new Date().toISOString() });
-}
+});

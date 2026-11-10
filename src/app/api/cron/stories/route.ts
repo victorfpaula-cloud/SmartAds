@@ -1,3 +1,4 @@
+import { comRegistroDeCron } from "@/lib/cronRegistro";
 import { NextResponse, type NextRequest } from "next/server";
 import { coletarStoriesAtivos } from "@/lib/stories";
 
@@ -6,7 +7,7 @@ export const maxDuration = 60;
 
 /** Roda 6x/dia, de 3 em 3 horas (ver vercel.json e coletarStoriesAtivos pra entender por que
  * várias rodadas) — mesma autenticação por CRON_SECRET do resto da automação. */
-export async function GET(request: NextRequest) {
+export const GET = comRegistroDeCron("stories", async function (request: NextRequest) {
   const segredoEsperado = process.env.CRON_SECRET;
   const autorizacao = request.headers.get("authorization");
 
@@ -16,4 +17,4 @@ export async function GET(request: NextRequest) {
 
   const resultado = await coletarStoriesAtivos();
   return NextResponse.json({ ...resultado, executadoEm: new Date().toISOString() });
-}
+});

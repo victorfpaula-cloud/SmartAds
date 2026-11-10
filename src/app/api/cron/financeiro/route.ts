@@ -1,3 +1,4 @@
+import { comRegistroDeCron } from "@/lib/cronRegistro";
 import { NextResponse, type NextRequest } from "next/server";
 import { atualizarCacheFinanceiroDeTodasAsContas } from "@/lib/financeiro/atualizarCacheFinanceiro";
 
@@ -8,7 +9,7 @@ export const maxDuration = 60;
  * (coletarFinanceiro.ts), nunca bate na Meta sozinha numa visita comum, pra não gastar requisição
  * (Meta, Supabase, Vercel) toda vez que alguém abre a tela. Mesma autenticação por CRON_SECRET do
  * resto da automação. */
-export async function GET(request: NextRequest) {
+export const GET = comRegistroDeCron("financeiro", async function (request: NextRequest) {
   const segredoEsperado = process.env.CRON_SECRET;
   const autorizacao = request.headers.get("authorization");
 
@@ -18,4 +19,4 @@ export async function GET(request: NextRequest) {
 
   const resultado = await atualizarCacheFinanceiroDeTodasAsContas();
   return NextResponse.json({ ...resultado, executadoEm: new Date().toISOString() });
-}
+});
