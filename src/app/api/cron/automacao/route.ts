@@ -1,3 +1,4 @@
+import { comRegistroDeCron } from "@/lib/cronRegistro";
 import { NextResponse, type NextRequest } from "next/server";
 import { avaliarRegras } from "@/lib/automacao/regras";
 import { avaliarTestesAb } from "@/lib/automacao/testesAb";
@@ -12,7 +13,7 @@ export const maxDuration = 60;
  * avaliar, e é melhor a pausa acontecer primeiro (mais conservador) do que o contrário. Chamado
  * pelo cron da Vercel (ver vercel.json), autenticado pelo header que a própria Vercel manda
  * automaticamente — ninguém mais consegue disparar isso batendo na URL. */
-export async function GET(request: NextRequest) {
+export const GET = comRegistroDeCron("automacao", async function (request: NextRequest) {
   const segredoEsperado = process.env.CRON_SECRET;
   const autorizacao = request.headers.get("authorization");
 
@@ -26,4 +27,4 @@ export async function GET(request: NextRequest) {
   await avaliarPlanosExecucao();
 
   return NextResponse.json({ ok: true, executadoEm: new Date().toISOString() });
-}
+});

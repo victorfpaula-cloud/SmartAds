@@ -876,3 +876,15 @@ alter table smartads_relatorio_mensal_envios enable row level security;
 -- só o service role (servidor) lê e grava.
 alter table if exists smartads_relatorio_postagens_cache enable row level security;
 alter table if exists smartads_cron_diagnostico enable row level security;
+
+-- Registro de cada execução dos crons (ver src/lib/cronRegistro.ts) — alimenta o alerta de rotina que falhou.
+create table if not exists smartads_cron_execucoes (
+  id uuid primary key default gen_random_uuid(),
+  nome text not null,
+  iniciado_em timestamptz not null default now(),
+  terminado_em timestamptz,
+  ok boolean,
+  erro text
+);
+create index if not exists smartads_cron_execucoes_nome_idx on smartads_cron_execucoes(nome, iniciado_em desc);
+alter table smartads_cron_execucoes enable row level security;

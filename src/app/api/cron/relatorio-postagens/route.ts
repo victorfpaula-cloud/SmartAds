@@ -1,3 +1,4 @@
+import { comRegistroDeCron } from "@/lib/cronRegistro";
 import { NextResponse, type NextRequest } from "next/server";
 import { enviarRelatorioPostagens } from "@/lib/email/relatorioPostagens";
 
@@ -26,7 +27,7 @@ function ehDiaDeEnvio(agora: Date): boolean {
 
 /** Chamado pelo cron mensal da Vercel (ver vercel.json) — mesma autenticação por CRON_SECRET do
  * resto da automação. */
-export async function GET(request: NextRequest) {
+export const GET = comRegistroDeCron("relatorio-postagens", async function (request: NextRequest) {
   const segredoEsperado = process.env.CRON_SECRET;
   const autorizacao = request.headers.get("authorization");
 
@@ -41,4 +42,4 @@ export async function GET(request: NextRequest) {
 
   const resultado = await enviarRelatorioPostagens();
   return NextResponse.json({ ...resultado, executadoEm: agora.toISOString() });
-}
+});

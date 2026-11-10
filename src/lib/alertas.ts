@@ -1,3 +1,4 @@
+import { ROTINAS } from "@/lib/cronRegistro";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { coletarFinanceiro, unicasPorContaDeAnuncio, type ContaFinanceiro } from "@/lib/financeiro/coletarFinanceiro";
 import { descreverSituacaoConta } from "@/lib/financeiro/situacaoConta";
@@ -250,6 +251,33 @@ export async function gerarAlertasConexao(agora = new Date()): Promise<Alerta[]>
       if (dias < 7) {
         alertas.push({ id: `conexao:${c.id}:vence`, severidade: dias < 3 ? "critico" : "atencao", categoria: "conexao", unidade: nome, titulo: dias <= 0 ? "Acesso à Meta venceu" : `Acesso à Meta vence em ${Math.ceil(dias)} dia${Math.ceil(dias) !== 1 ? "s" : ""}`, detalhe: "O app renova sozinho quando consegue; se não renovar, reconecte em Contas e conexões.", href: "/contas" });
       }
+    }
+  }
+  alertas.push(...(await gerarAlertasRotinas(agora).catch(() => [])));
+  return alertas;
+}
+
+/** Rotinas automáticas (crons): a última execução falhou, não terminou, ou a rotina diária parou de rodar. */
+export async function gerarAlertasRotinas(agora = new Date()): Promise<Alerta[]> {
+  const { data } = await criarClienteAdmin()
+    .from("smartads_cron_execucoes")
+    .select("nome, iniciado_em, terminado_em, ok, erro")
+    .gte("iniciado_em", new Date(agora.getTime() - 4 * 86_400_000).toISOString())
+    .order("iniciado_em", { ascending: false })
+    .limit(1000);
+  const ultima = new Map<string, { iniciado_em: string; terminado_em: string | null; ok: boolean | null; erro: string | null }>();
+  for (const l of data ?? []) if (!ultima.has(l.nome as string)) ultima.set(l.nome as string, l as never);
+  const alertas: Alerta[] = [];
+  for (const [nome, u] of ultima) {
+    const r = ROTINAS[nome] ?? { rotulo: nome, intervaloHoras: null };
+    const horas = (agora.getTime() - new Date(u.iniciado_em).getTime()) / 3_600_000;
+    const base = { severidade: "atencao" as const, categoria: "dados" as const, unidade: "Rotinas automáticas", href: "/estrategias/alertas" };
+    if (u.ok === false) {
+      alertas.push({ ...base, id: `rotina:${nome}:falhou`, titulo: `${r.rotulo} falhou na última execução`, detalhe: (u.erro ?? "Erro não informado.").slice(0, 160) });
+    } else if (u.ok === null && horas > 0.25) {
+      alertas.push({ ...base, id: `rotina:${nome}:incompleta`, titulo: `${r.rotulo} não terminou`, detalhe: "A última execução começou e não chegou ao fim (provável tempo esgotado)." });
+    } else if (r.intervaloHoras && horas > r.intervaloHoras + 12) {
+      alertas.push({ ...base, id: `rotina:${nome}:parada`, titulo: `${r.rotulo} parou de rodar`, detalhe: `A última execução foi há ${Math.round(horas)} horas.` });
     }
   }
   return alertas;

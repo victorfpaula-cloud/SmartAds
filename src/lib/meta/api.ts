@@ -704,7 +704,7 @@ export async function listarPublicosSalvosDaMeta(adAccountId: string): Promise<P
 export function montarTargeting(
   publico: Publico,
   ehReels: boolean = false,
-  posicionamento?: "stories",
+  posicionamento?: "stories" | "reels",
   /** Também publica no Facebook; `video` diz qual conjunto de posicionamentos usar lá. */
   facebook?: { video: boolean }
 ): Record<string, unknown> {
@@ -720,9 +720,9 @@ export function montarTargeting(
     age_max: publico.idadeMax ?? 65,
     publisher_platforms: facebook ? ["instagram", "facebook"] : ["instagram"],
     instagram_positions:
-      posicionamento === "stories" ? ["story"] : ehReels ? ["stream", "reels"] : ["stream"],
+      posicionamento === "stories" ? ["story"] : posicionamento === "reels" ? ["reels"] : ehReels ? ["stream", "reels"] : ["stream"],
     ...(facebook
-      ? { facebook_positions: posicionamento === "stories" ? ["story"] : facebook.video ? ["feed", "facebook_reels"] : ["feed"] }
+      ? { facebook_positions: posicionamento === "stories" ? ["story"] : posicionamento === "reels" ? ["facebook_reels"] : facebook.video ? ["feed", "facebook_reels"] : ["feed"] }
       : {}),
     // Passou a ser obrigatório sinalizar explicitamente se o público Advantage (expansão
     // automática de público pela própria Meta) está ligado — "0" porque o SmartAds sempre

@@ -1,3 +1,4 @@
+import { comRegistroDeCron } from "@/lib/cronRegistro";
 import { NextResponse, type NextRequest } from "next/server";
 import { avaliarBoostAutomatico } from "@/lib/automacao/boostAutomatico";
 
@@ -6,7 +7,7 @@ export const maxDuration = 60;
 
 /** Chamado uma vez por hora cheia, das 10h às 20h (SP), por 11 entradas diárias no vercel.json (o plano Hobby não aceita cron com mais de uma execução por dia numa mesma entrada) —
  * mesma autenticação por CRON_SECRET do resto da automação. */
-export async function GET(request: NextRequest) {
+export const GET = comRegistroDeCron("boost-automatico", async function (request: NextRequest) {
   const segredoEsperado = process.env.CRON_SECRET;
   const autorizacao = request.headers.get("authorization");
 
@@ -16,4 +17,4 @@ export async function GET(request: NextRequest) {
 
   const resultado = await avaliarBoostAutomatico();
   return NextResponse.json({ ...resultado, executadoEm: new Date().toISOString() });
-}
+});
