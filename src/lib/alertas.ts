@@ -31,6 +31,11 @@ export const ROTULO_CATEGORIA: Record<CategoriaAlerta, string> = {
   conexao: "Conexão com a Meta",
 };
 
+/** Saldo a partir do qual avisa "saldo baixo" (R$ 20). */
+const SALDO_BAIXO_CENTAVOS = 2000;
+/** Campanhas criadas pelo boost automático: "🤖 (SIGLA) Boost engajamento 03/11/2026". */
+export const ehCampanhaDeBoost = (nome: string | null | undefined) => /\bboost (engajamento|alcance)\b/i.test(nome ?? "");
+
 const reais = (c: number) => `R$ ${(c / 100).toFixed(2).replace(".", ",").replace(/\B(?=(\d{3})+(?!\d))/g, ".")}`;
 const ORDEM: Record<SeveridadeAlerta, number> = { critico: 0, atencao: 1, info: 2 };
 
@@ -88,10 +93,9 @@ export async function gerarAlertas(empresaId: string, agora = new Date()): Promi
     if (c.saldoDisponivelCentavos !== null && c.saldoDisponivelCentavos <= 0 && c.mediaDiariaCentavos >= 100) {
       // (>= R$ 1/dia: média de centavos é conta praticamente parada, não "estava gastando")
       add({ severidade: "critico", categoria: "saldo", unidade: u, titulo: "Sem saldo — anúncios parados", detalhe: "A conta estava gastando e o saldo zerou. Adicione crédito pra voltar a veicular.", href: "/financeiro" }, c);
-    } else if (prev.dias !== null && prev.dias <= 3) {
-      add({ severidade: "critico", categoria: "saldo", unidade: u, titulo: `Saldo acaba em ${prev.dias < 1 ? "menos de 1 dia" : `${prev.dias} dia${prev.dias !== 1 ? "s" : ""}`}`, detalhe: `Saldo ${reais(c.saldoDisponivelCentavos ?? 0)} no ritmo de ${reais(c.mediaDiariaCentavos)}/dia.`, href: "/financeiro" }, c);
-    } else if (prev.dias !== null && prev.dias <= 7) {
-      add({ severidade: "atencao", categoria: "saldo", unidade: u, titulo: `Saldo acaba em ${prev.dias} dias`, detalhe: `Saldo ${reais(c.saldoDisponivelCentavos ?? 0)} no ritmo de ${reais(c.mediaDiariaCentavos)}/dia (até ${prev.detalhe?.replace("até ", "") ?? "—"}).`, href: "/financeiro" }, c);
+    } else if (c.saldoDisponivelCentavos !== null && c.saldoDisponivelCentavos > 0 && c.saldoDisponivelCentavos <= SALDO_BAIXO_CENTAVOS && c.mediaDiariaCentavos >= 100) {
+      // Só avisa quando o saldo já está bem no fim (pedido do dono: antes avisava com dias de folga).
+      add({ severidade: "critico", categoria: "saldo", unidade: u, titulo: `Saldo baixo: ${reais(c.saldoDisponivelCentavos)}`, detalhe: `No ritmo de ${reais(c.mediaDiariaCentavos)}/dia${prev.dias !== null ? `, acaba ${prev.dias < 1 ? "hoje" : `em ${prev.dias} dia${prev.dias !== 1 ? "s" : ""}`}` : ""}.`, href: "/financeiro" }, c);
     }
     if (c.contaPrePaga === true && c.saldoDisponivelCentavos === null) {
       add({ severidade: "info", categoria: "saldo", unidade: u, titulo: "Saldo não lido", detalhe: "A Meta não mostrou o saldo dessa conta pré-paga; digite o valor do Gerenciador no Financeiro.", href: "/financeiro" }, c);
@@ -166,6 +170,8 @@ export async function gerarAlertas(empresaId: string, agora = new Date()): Promi
     const c = porId.get(contaId);
     if (!c) continue;
     const terminando = lista
+      // Boost automático já nasce com a duração certa — terminar é o esperado, não vira aviso.
+      .filter((x) => !ehCampanhaDeBoost(x.nome))
       .filter((x) => x.fim_em && new Date(x.fim_em).getTime() > agoraMs && new Date(x.fim_em).getTime() - agoraMs <= 2 * 86_400_000)
       .sort((a, b) => (a.fim_em ?? "").localeCompare(b.fim_em ?? ""));
     if (terminando.length > 0) {
