@@ -46,6 +46,7 @@ export function comRegistroDeCron(
       await fechar(resposta.status < 500, resposta.status < 500 ? null : `A rotina respondeu com erro ${resposta.status}.`);
       return resposta;
     } catch (e) {
+      console.error(`Cron ${nome} falhou:`, e);
       const mensagem = e instanceof Error ? e.message : String(e);
       await fechar(false, mensagem);
       return NextResponse.json({ erro: mensagem }, { status: 500 });

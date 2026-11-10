@@ -503,7 +503,8 @@ export async function criarCampanhaCompleta(corpo: ParametrosCriarCampanha): Pro
   // Só tenta de novo se a 1ª tentativa foi desfeita por completo na Meta — nunca arrisca duplicar.
   if (!primeira.desfeito) return primeira;
   try {
-    const post = await obterPostInstagram(corpo.criativo.postSelecionadoId);
+    const idPost = corpo.criativo.postSelecionadoId;
+    const post = await comContaMeta(corpo.contaId, () => obterPostInstagram(idPost));
     if (post.media_type !== "VIDEO") return primeira;
   } catch {
     return primeira;

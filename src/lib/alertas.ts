@@ -262,9 +262,10 @@ export async function gerarAlertasRotinas(agora = new Date()): Promise<Alerta[]>
   const { data } = await criarClienteAdmin()
     .from("smartads_cron_execucoes")
     .select("nome, iniciado_em, terminado_em, ok, erro")
-    .gte("iniciado_em", new Date(agora.getTime() - 4 * 86_400_000).toISOString())
+    // 30 dias = tudo que o registro guarda: rotina que parou continua avisando até voltar a rodar.
+    .gte("iniciado_em", new Date(agora.getTime() - 30 * 86_400_000).toISOString())
     .order("iniciado_em", { ascending: false })
-    .limit(1000);
+    .limit(2000);
   const ultima = new Map<string, { iniciado_em: string; terminado_em: string | null; ok: boolean | null; erro: string | null }>();
   for (const l of data ?? []) if (!ultima.has(l.nome as string)) ultima.set(l.nome as string, l as never);
   const alertas: Alerta[] = [];
