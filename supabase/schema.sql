@@ -888,3 +888,23 @@ create table if not exists smartads_cron_execucoes (
 );
 create index if not exists smartads_cron_execucoes_nome_idx on smartads_cron_execucoes(nome, iniciado_em desc);
 alter table smartads_cron_execucoes enable row level security;
+
+-- Relatório mensal da rede (franqueadora): resultado por unidade calculado aos poucos + registro do envio.
+create table if not exists smartads_relatorio_rede_cache (
+  empresa_id uuid not null references smartads_empresas(id) on delete cascade,
+  mes text not null,
+  conta_id uuid not null references smartads_contas_meta(id) on delete cascade,
+  dados jsonb,
+  erro text,
+  calculado_em timestamptz not null default now(),
+  primary key (empresa_id, mes, conta_id)
+);
+alter table smartads_relatorio_rede_cache enable row level security;
+create table if not exists smartads_relatorio_rede_envios (
+  empresa_id uuid not null references smartads_empresas(id) on delete cascade,
+  mes text not null,
+  destinatario text,
+  enviado_em timestamptz not null default now(),
+  primary key (empresa_id, mes)
+);
+alter table smartads_relatorio_rede_envios enable row level security;

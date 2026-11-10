@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
-import { calcularSituacaoTeto } from "@/lib/tetoMensal";
+import { calcularPlanoTeto, calcularSituacaoTeto } from "@/lib/tetoMensal";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -10,6 +10,10 @@ export async function GET(request: NextRequest) {
   const p = request.nextUrl.searchParams;
   const contaId = p.get("contaId");
   if (!contaId) return NextResponse.json({ erro: "Informe a conta." }, { status: 400 });
+  if (p.get("plano")) {
+    const plano = await calcularPlanoTeto(contaId);
+    return plano ? NextResponse.json({ plano }) : NextResponse.json({ erro: "Conta não encontrada." }, { status: 404 });
+  }
   const valor = Number(p.get("valor"));
   const tipo: "diario" | "vitalicio" = p.get("tipo") === "vitalicio" ? "vitalicio" : "diario";
   const novo = valor > 0 ? { tipo, valorCentavos: Math.round(valor), dataInicio: p.get("inicio") || undefined, dataFim: p.get("fim") || undefined } : undefined;

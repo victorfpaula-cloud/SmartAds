@@ -97,3 +97,35 @@ describe("acesso do usuário", () => {
     expect(acessoDoUsuario({ app_metadata: { papel: "restrito", empresas: [], pode_editar: true } }).podeEditar).toBe(true);
   });
 });
+
+import { montarPlanoTeto } from "@/lib/tetoMensal";
+
+describe("plano do teto mensal", () => {
+  const agora = sp("2026-11-10T12:00:00"); // faltam 20,5 dias
+  const camp = (diario: number) => ({ id: "c" + diario, nome: "Camp " + diario, diarioCentavos: diario, restanteCentavos: Math.round(diario * 20.5), fim: null });
+  const base = { aoVivo: true, campanhasLidas: true };
+  it("sem teto só informa", () => {
+    const p = montarPlanoTeto({ ...base, tetoCentavos: null, gasto: 10000, campanhas: [camp(1000)] }, agora);
+    expect(p.status).toBe("sem_teto");
+    expect(p.projetadoCentavos).toBe(30500);
+  });
+  it("dentro do teto diz quanto ainda cabe", () => {
+    const p = montarPlanoTeto({ ...base, tetoCentavos: 100000, gasto: 20000, campanhas: [camp(1000)] }, agora);
+    expect(p.status).toBe("dentro");
+    expect(p.dataDoTeto).toBeNull();
+    expect(p.disponivelCentavos).toBe(80000);
+  });
+  it("vai passar: calcula o dia e o ritmo ideal", () => {
+    // teto 1000, gastou 400, R$ 60/dia no ar → sobra 600 = 10 dias → 20/11
+    const p = montarPlanoTeto({ ...base, tetoCentavos: 100000, gasto: 40000, campanhas: [camp(6000)] }, agora);
+    expect(p.status).toBe("vai_passar");
+    expect(p.dataDoTeto).toBe("2026-11-20");
+    expect(p.ritmoIdealCentavos).toBe(Math.floor(60000 / 20.5));
+    expect(p.passos.length).toBeGreaterThan(1);
+  });
+  it("atingido", () => {
+    const p = montarPlanoTeto({ ...base, tetoCentavos: 100000, gasto: 100500, campanhas: [camp(1000)] }, agora);
+    expect(p.status).toBe("atingido");
+    expect(p.disponivelCentavos).toBe(0);
+  });
+});

@@ -51,7 +51,7 @@ export default function PainelBoost({ unidades: unidadesIniciais }: { unidades: 
                 return (
                   <tr key={c.id}>
                     <td className="px-4 py-3">
-                      <p className="font-medium text-neutral-100">{u.clienteNome}</p>
+                      <a href={`/unidade/${c.id}`} className="font-medium text-neutral-100 underline-offset-2 hover:underline">{u.clienteNome}</a>
                       <p className="text-[10.5px] text-neutral-600">{c.nome_exibicao || c.meta_ad_account_nome || c.meta_ad_account_id}</p>
                     </td>
                     <td className="px-4 py-3">
