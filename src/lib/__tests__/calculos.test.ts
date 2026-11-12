@@ -140,3 +140,35 @@ describe("alertas", () => {
     expect(ehCampanhaDeBoost(null)).toBe(false);
   });
 });
+
+import { ehPostOficial, palavrasDaLegenda, similaridadeLegendas } from "@/lib/automacao/postsOficiais";
+
+describe("posts oficiais da rede (boost da franquia)", () => {
+  const legenda = "Novidade na Dona Baunilha! O bolo de pote de ninho com nutella chegou 🍰 Peça já pelo iFood ou venha nos visitar #donabaunilha";
+  const post = (id: string, caption: string, dia: string) => ({ id, caption, timestamp: `${dia}T15:00:00-03:00` });
+  it("mesma legenda com @ e cidade diferentes conta como igual", () => {
+    const a = palavrasDaLegenda(legenda + " @donabaunilha.ribeirao");
+    const b = palavrasDaLegenda(legenda.replace("Novidade", "NOVIDADE") + " @donabaunilha.olimpia");
+    expect(similaridadeLegendas(a, b)).toBeGreaterThanOrEqual(0.9);
+  });
+  it("oficial quando 2 outras unidades postaram igual (mesmo com atraso)", () => {
+    const outras = new Map([
+      ["ig1", [post("1", legenda, "2026-11-10")]],
+      ["ig2", [post("2", legenda + " Unidade Olímpia", "2026-11-12")]],
+      ["ig3", [post("3", "Bom dia! Hoje tem café fresquinho", "2026-11-11")]],
+    ]);
+    expect(ehPostOficial(post("x", legenda, "2026-11-11"), outras)).toBe(true);
+  });
+  it("não é oficial se só uma outra unidade postou, ou se a legenda é própria", () => {
+    const umaSo = new Map([["ig1", [post("1", legenda, "2026-11-10")]], ["ig2", [post("2", "Outra coisa totalmente diferente sobre o nosso café da manhã especial", "2026-11-10")]]]);
+    expect(ehPostOficial(post("x", legenda, "2026-11-11"), umaSo)).toBe(false);
+    const todas = new Map([["ig1", [post("1", legenda, "2026-11-10")]], ["ig2", [post("2", legenda, "2026-11-10")]]]);
+    expect(ehPostOficial(post("x", "Fotos do nosso evento de sábado com os clientes queridos da unidade", "2026-11-11"), todas)).toBe(false);
+  });
+  it("fora da janela de dias não conta; legenda curta nunca é oficial", () => {
+    const longe = new Map([["ig1", [post("1", legenda, "2026-10-01")]], ["ig2", [post("2", legenda, "2026-10-02")]]]);
+    expect(ehPostOficial(post("x", legenda, "2026-11-11"), longe)).toBe(false);
+    const curtas = new Map([["ig1", [post("1", "Bom dia!", "2026-11-11")]], ["ig2", [post("2", "Bom dia!", "2026-11-11")]]]);
+    expect(ehPostOficial(post("x", "Bom dia!", "2026-11-11"), curtas)).toBe(false);
+  });
+});

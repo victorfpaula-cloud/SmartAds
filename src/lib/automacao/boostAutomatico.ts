@@ -1,5 +1,6 @@
 import { criarClienteAdmin } from "@/lib/supabase/admin";
-import { listarPostsInstagram } from "@/lib/meta/api";
+import { listarPostsInstagram, type PostInstagram } from "@/lib/meta/api";
+import { ehPostOficial } from "@/lib/automacao/postsOficiais";
 import { criarCampanhaCompleta } from "@/lib/meta/criarCampanhaCompleta";
 import type { Publico } from "@/lib/meta/tipos";
 import { mapearEmLotes } from "@/lib/lotes";
@@ -35,6 +36,9 @@ function ehPostDeHoje(timestampPost: string): boolean {
   return dataEmSaoPaulo(timestampPost) === dataEmSaoPaulo(new Date().toISOString());
 }
 
+/** Franquia: além do post de hoje, aceita post oficial publicado com atraso de até tantos dias. */
+const DIAS_ATRASO_OFICIAL = 3;
+
 /** Chamado 1x/dia pelo cron (ver /api/cron/boost-automatico e vercel.json), depois da janela de
  * postagem do dia (a pessoa liga a função e diz o horário na tela — ver PainelContas). Pra cada
  * conta com boost_automatico_ativo: pega o PRIMEIRO post de hoje do Instagram (no máximo 1 boost por
@@ -52,7 +56,7 @@ export async function avaliarBoostAutomatico(): Promise<{
   const { data: contas } = await supabase
     .from("smartads_contas_meta")
     .select(
-      "id, instagram_business_id, boost_automatico_publico_id, boost_automatico_orcamento_centavos, boost_automatico_duracao_dias, boost_tipo_entrega, boost_posts_por_dia"
+      "id, instagram_business_id, boost_automatico_publico_id, boost_automatico_orcamento_centavos, boost_automatico_duracao_dias, boost_tipo_entrega, boost_posts_por_dia, smartads_clientes(empresa_id, smartads_empresas(tipo))"
     )
     .eq("ativo", true)
     .eq("boost_automatico_ativo", true);
@@ -70,6 +74,43 @@ export async function avaliarBoostAutomatico(): Promise<{
       (regrasBrutas ?? []).filter((r) => r.conta_id === conta.id).map(regraDeLinha),
       hojeSP
     ).config;
+
+  // Franquia: o boost só turbina os posts OFICIAIS da rede (mesma legenda postada por várias
+  // unidades — ver postsOficiais.ts). Pra comparar, lê uma vez por rodada os posts recentes de
+  // todas as contas do Instagram de cada franquia (só das franquias que têm boost ligado).
+  const empresaDaConta = (conta: any): { id: string | null; franquia: boolean } => {
+    const cl = Array.isArray(conta.smartads_clientes) ? conta.smartads_clientes[0] : conta.smartads_clientes;
+    const emp = Array.isArray(cl?.smartads_empresas) ? cl?.smartads_empresas[0] : cl?.smartads_empresas;
+    return { id: cl?.empresa_id ?? null, franquia: emp?.tipo === "franquia" };
+  };
+  const postsDaRede = new Map<string, Promise<Map<string, PostInstagram[]>>>();
+  const carregarPostsDaRede = (empresaId: string) => {
+    if (!postsDaRede.has(empresaId)) {
+      postsDaRede.set(
+        empresaId,
+        (async () => {
+          const { data: daRede } = await supabase
+            .from("smartads_contas_meta")
+            .select("instagram_business_id, smartads_clientes!inner(empresa_id, ativo)")
+            .eq("ativo", true)
+            .eq("smartads_clientes.empresa_id", empresaId)
+            .eq("smartads_clientes.ativo", true)
+            .not("instagram_business_id", "is", null);
+          const ids = Array.from(new Set((daRede ?? []).map((c) => c.instagram_business_id as string)));
+          const porConta = new Map<string, PostInstagram[]>();
+          await mapearEmLotes(ids, async (igId) => {
+            try {
+              porConta.set(igId, await listarPostsInstagram(igId));
+            } catch {
+              // Conta que a Meta não deixou ler só não entra na comparação.
+            }
+          });
+          return porConta;
+        })()
+      );
+    }
+    return postsDaRede.get(empresaId)!;
+  };
 
   const criadasPorConta = await mapearEmLotes(contas ?? [], async (conta): Promise<boolean> => {
     try {
@@ -93,10 +134,23 @@ export async function avaliarBoostAutomatico(): Promise<{
         .gte("created_at", inicioDoDia);
       if ((sucessosHoje ?? []).length >= rede.boostsPorDia) return false;
 
-      const posts = await listarPostsInstagram(conta.instagram_business_id);
-      const postsDeHoje = posts
-        .filter((p) => ehPostDeHoje(p.timestamp))
-        .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+      const empresa = empresaDaConta(conta);
+      let postsDeHoje: PostInstagram[];
+      if (empresa.franquia && empresa.id) {
+        // Franquia: só posts oficiais da rede, de hoje ou publicados com até DIAS_ATRASO_OFICIAL dias de atraso.
+        const rede = await carregarPostsDaRede(empresa.id);
+        const proprios = rede.get(conta.instagram_business_id) ?? (await listarPostsInstagram(conta.instagram_business_id));
+        const outras = new Map([...rede].filter(([igId]) => igId !== conta.instagram_business_id));
+        const limite = Date.now() - DIAS_ATRASO_OFICIAL * 86_400_000;
+        postsDeHoje = proprios
+          .filter((p) => new Date(p.timestamp).getTime() >= limite && ehPostOficial(p, outras))
+          .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+      } else {
+        const posts = await listarPostsInstagram(conta.instagram_business_id);
+        postsDeHoje = posts
+          .filter((p) => ehPostDeHoje(p.timestamp))
+          .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+      }
       if (postsDeHoje.length === 0) return false;
 
       // Primeiro post de hoje que ainda não foi turbinado e ainda tem tentativas sobrando.

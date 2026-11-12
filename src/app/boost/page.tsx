@@ -40,6 +40,13 @@ export default async function BoostPage({ searchParams }: { searchParams: { empr
         <p className="mt-1 text-sm text-neutral-400">
           Cada conta tem o seu próprio boost. Clique em Configurar na linha da conta para definir o que entrega, o público, quanto gasta e as datas especiais.
         </p>
+        {empresa?.tipo === "franquia" && (
+          <p className="mt-2 rounded-lg border border-accent/30 bg-accent/10 px-3 py-2 text-xs leading-relaxed text-neutral-200">
+            Na franquia o boost turbina <strong>só os posts oficiais da rede</strong>: os que pelo menos 3 unidades publicam
+            com a mesma legenda (vale mesmo se a unidade postar com até 3 dias de atraso). Post próprio da unidade não é
+            turbinado.
+          </p>
+        )}
 
         {lista.length > 1 && !empresaAlvo && (
           <div className="mt-4 flex flex-wrap gap-2">
