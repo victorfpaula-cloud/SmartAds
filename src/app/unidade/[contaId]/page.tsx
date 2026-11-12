@@ -24,7 +24,7 @@ export default async function UnidadePage({ params }: { params: Promise<{ contaI
   const { data: conta } = await db
     .from("smartads_contas_meta")
     .select(
-      "id, nome_exibicao, meta_ad_account_nome, meta_ad_account_id, instagram_username, instagram_business_id, teto_mensal_centavos, link_ifood, link_whatsapp, boost_automatico_ativo, boost_automatico_orcamento_diario_centavos, boost_automatico_duracao_dias, smartads_clientes!inner(id, nome, empresa_id, email_relatorio)"
+      "id, nome_exibicao, meta_ad_account_nome, meta_ad_account_id, instagram_username, instagram_business_id, teto_mensal_centavos, link_ifood, link_whatsapp, boost_automatico_ativo, boost_automatico_orcamento_centavos, boost_automatico_duracao_dias, smartads_clientes!inner(id, nome, empresa_id, email_relatorio)"
     )
     .eq("id", contaId)
     .maybeSingle();
@@ -61,8 +61,8 @@ export default async function UnidadePage({ params }: { params: Promise<{ contaI
     [
       "Boost automático",
       conta.boost_automatico_ativo ? "Ligado" : "Desligado",
-      conta.boost_automatico_ativo && conta.boost_automatico_orcamento_diario_centavos
-        ? `${reais(conta.boost_automatico_orcamento_diario_centavos as number)}/dia por ${conta.boost_automatico_duracao_dias ?? 3} dias`
+      conta.boost_automatico_ativo && conta.boost_automatico_orcamento_centavos
+        ? `${reais(conta.boost_automatico_orcamento_centavos as number)}/dia por ${conta.boost_automatico_duracao_dias ?? 3} dias`
         : null,
     ],
   ];

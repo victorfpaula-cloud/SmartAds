@@ -15,7 +15,7 @@ const API_BLOQUEADA = [
 ];
 // POSTs que só consultam/atualizam números: liberados mesmo pra quem não pode editar.
 const API_LEITURA = [
-  "/api/auth/logout", "/api/saude-rede", "/api/relatorio-ads", "/api/relatorio-rede", "/api/financeiro/saldo", "/api/financeiro/atualizar",
+  "/api/auth/logout", "/api/saude-rede", "/api/relatorio-ads", "/api/relatorio-rede", "/api/analise-trafego", "/api/financeiro/saldo", "/api/financeiro/atualizar",
   "/api/estrategias/postagens/atualizar", "/api/ia/resumo", "/api/diagnostico", "/api/meta/buscar-interesse",
   "/api/meta/buscar-localizacao", "/api/meta/posts-instagram",
 ];

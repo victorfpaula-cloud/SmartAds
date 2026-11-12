@@ -1,3 +1,4 @@
+import { AbasSaudeRede } from "@/components/AbasRede";
 import Cabecalho from "@/components/Cabecalho";
 import Link from "next/link";
 import { exigirAmbiente } from "@/lib/ambiente";
@@ -126,6 +127,7 @@ export default async function SaudeDaRedePage({ searchParams }: { searchParams: 
     <>
       <Cabecalho ativo="/estrategias" />
       <main className="mx-auto max-w-6xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
+        <AbasSaudeRede />
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="font-display text-2xl font-bold">Saúde da rede · {ambiente.nome}</h1>

@@ -45,3 +45,16 @@ export async function AbasUnidades() {
     />
   );
 }
+
+/** Saúde da rede: os números somados e a análise comparativa do tráfego entre as unidades. */
+export function AbasSaudeRede() {
+  return (
+    <AbasPagina
+      destaque
+      abas={[
+        { href: "/estrategias/saude-rede", label: "Números da rede" },
+        { href: "/estrategias/analise-trafego", label: "Análise do tráfego" },
+      ]}
+    />
+  );
+}

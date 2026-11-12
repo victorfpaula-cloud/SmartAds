@@ -908,3 +908,11 @@ create table if not exists smartads_relatorio_rede_envios (
   primary key (empresa_id, mes)
 );
 alter table smartads_relatorio_rede_envios enable row level security;
+
+-- Análise semanal do tráfego da franquia (ver src/lib/analiseTrafego.ts): a última calculada por empresa.
+create table if not exists smartads_analise_trafego (
+  empresa_id uuid primary key references smartads_empresas(id) on delete cascade,
+  dados jsonb not null,
+  calculado_em timestamptz not null default now()
+);
+alter table smartads_analise_trafego enable row level security;
