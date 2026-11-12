@@ -5,10 +5,11 @@
  * Regra: um post de uma unidade é oficial quando pelo menos MIN_OUTRAS_CONTAS outras contas do
  * Instagram da mesma franquia publicaram uma legenda praticamente igual (≥ SIMILARIDADE_MINIMA das
  * palavras em comum) num intervalo de até JANELA_DIAS dias. Post próprio da unidade (legenda
- * diferente) nunca bate com duas outras unidades, então não entra. Legenda curta demais (menos de
+ * diferente) não bate com outra unidade, então não entra. Legenda curta demais (menos de
  * MIN_PALAVRAS palavras) não é comparada — evita confundir "Bom dia!" com post oficial. */
 
-export const MIN_OUTRAS_CONTAS = 2;
+// 1 = basta outra conta da rede ter postado a mesma legenda (2 contas no total) pra já soltar o boost.
+export const MIN_OUTRAS_CONTAS = 1;
 export const SIMILARIDADE_MINIMA = 0.75;
 export const JANELA_DIAS = 5;
 export const MIN_PALAVRAS = 6;

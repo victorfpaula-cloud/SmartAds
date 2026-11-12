@@ -159,9 +159,11 @@ describe("posts oficiais da rede (boost da franquia)", () => {
     ]);
     expect(ehPostOficial(post("x", legenda, "2026-11-11"), outras)).toBe(true);
   });
-  it("não é oficial se só uma outra unidade postou, ou se a legenda é própria", () => {
-    const umaSo = new Map([["ig1", [post("1", legenda, "2026-11-10")]], ["ig2", [post("2", "Outra coisa totalmente diferente sobre o nosso café da manhã especial", "2026-11-10")]]]);
-    expect(ehPostOficial(post("x", legenda, "2026-11-11"), umaSo)).toBe(false);
+  it("basta uma outra unidade ter postado igual; legenda própria não é oficial", () => {
+    const umaSo = new Map([["ig1", [post("1", legenda, "2026-11-11")]], ["ig2", [post("2", "Outra coisa totalmente diferente sobre o nosso café da manhã especial", "2026-11-10")]]]);
+    expect(ehPostOficial(post("x", legenda, "2026-11-11"), umaSo)).toBe(true);
+    const nenhuma = new Map([["ig2", [post("2", "Outra coisa totalmente diferente sobre o nosso café da manhã especial", "2026-11-10")]]]);
+    expect(ehPostOficial(post("x", legenda, "2026-11-11"), nenhuma)).toBe(false);
     const todas = new Map([["ig1", [post("1", legenda, "2026-11-10")]], ["ig2", [post("2", legenda, "2026-11-10")]]]);
     expect(ehPostOficial(post("x", "Fotos do nosso evento de sábado com os clientes queridos da unidade", "2026-11-11"), todas)).toBe(false);
   });
