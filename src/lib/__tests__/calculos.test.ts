@@ -174,3 +174,48 @@ describe("posts oficiais da rede (boost da franquia)", () => {
     expect(ehPostOficial(post("x", "Bom dia!", "2026-11-11"), curtas)).toBe(false);
   });
 });
+
+import { gerarInsights, somarLinhas, type AnaliseTrafego, type Metricas } from "@/lib/analiseTrafego";
+
+describe("análise do tráfego", () => {
+  const m = (gasto: number, alcance: number, curtidas: number, interacoes = curtidas * 3, impressoes = alcance * 1.3): Metricas => ({ gasto, alcance, impressoes, interacoes, curtidas, comentarios: 2, salvamentos: 1, compartilhamentos: 1, campanhas: 2 });
+  const unidade = (nome: string, atual: Metricas, anterior: Metricas = atual) => ({
+    contaId: nome, unidade: nome, erro: null, boostLigado: true, boostDiario: 10,
+    atual: { boost: atual, tudo: atual }, anterior: { boost: anterior, tudo: anterior },
+  });
+  const analise = (u: ReturnType<typeof unidade>[]): AnaliseTrafego => ({ calculadoEm: "", periodo: { desde: "2026-11-05", ate: "2026-11-11" }, unidades: u });
+
+  it("separa boost do resto pelas campanhas", () => {
+    const r = somarLinhas([
+      { campaign_name: "🤖 (OL) Boost engajamento 05/11/2026", spend: "10", reach: "1000", impressions: "1200", actions: [{ action_type: "post_reaction", value: "50" }] },
+      { campaign_name: "🤖 Ribeirão - Engajamento", spend: "20", reach: "2000", impressions: "2500", actions: [{ action_type: "post_reaction", value: "30" }] },
+    ]);
+    expect(r.boost.gasto).toBe(10);
+    expect(r.boost.curtidas).toBe(50);
+    expect(r.tudo.gasto).toBe(30);
+    expect(r.tudo.curtidas).toBe(80);
+  });
+
+  it("compara quem investe parecido e recomenda orçamento pra alcançar o líder", () => {
+    const ins = gerarInsights(analise([unidade("Olímpia", m(70, 14000, 700)), unidade("Ribeirão", m(70, 10000, 350)), unidade("Bauru", m(140, 20000, 900))]), "boost");
+    const textos = ins.map((i) => `${i.unidade}: ${i.titulo}`).join("\n");
+    expect(textos).toContain("Ribeirão: Investe parecido com Olímpia, mas tem 100% menos curtidas por real");
+    expect(textos).toMatch(/Ribeirão: .*Bauru/);
+    expect(textos).toContain("Olímpia: Curtida mais barata da rede");
+  });
+
+  it("aponta saturação e piora contra a semana anterior", () => {
+    const ins = gerarInsights(
+      analise([unidade("A", m(70, 5000, 200, 600, 15000), m(70, 5000, 400)), unidade("B", m(70, 9000, 300))]),
+      "boost"
+    );
+    expect(ins.some((i) => i.unidade === "A" && /saturado/.test(i.titulo))).toBe(true);
+    expect(ins.some((i) => i.unidade === "A" && /mais cara que na semana anterior/.test(i.titulo))).toBe(true);
+  });
+
+  it("boost ligado sem gasto vira atenção; uma unidade só não compara", () => {
+    const ins = gerarInsights(analise([unidade("A", m(0, 0, 0)), unidade("B", m(70, 9000, 300))]), "boost");
+    expect(ins.some((i) => i.unidade === "A" && /não gastou/.test(i.titulo))).toBe(true);
+    expect(ins.some((i) => /Só uma unidade/.test(i.titulo))).toBe(true);
+  });
+});
