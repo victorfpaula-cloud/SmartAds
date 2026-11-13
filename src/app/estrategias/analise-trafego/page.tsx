@@ -2,7 +2,7 @@ import Link from "next/link";
 import Cabecalho from "@/components/Cabecalho";
 import { AbasSaudeRede } from "@/components/AbasRede";
 import { exigirAmbiente } from "@/lib/ambiente";
-import { gerarInsights, lerAnaliseTrafego, mediana, taxas, GASTO_MINIMO_SEMANA, type Escopo, type TomInsight } from "@/lib/analiseTrafego";
+import { calcularIndices, gerarInsights, lerAnaliseTrafego, mediana, taxas, GASTO_MINIMO_SEMANA, type Escopo, type TomInsight } from "@/lib/analiseTrafego";
 import BotaoAtualizarAnalise from "./BotaoAtualizarAnalise";
 
 export const dynamic = "force-dynamic";
@@ -12,12 +12,21 @@ const I = (n: number) => Math.round(n).toLocaleString("pt-BR");
 const D = (n: number | null, c = 1) => (n === null ? "—" : n.toLocaleString("pt-BR", { minimumFractionDigits: c, maximumFractionDigits: c }));
 const dataBR = (iso: string) => iso.slice(8, 10) + "/" + iso.slice(5, 7);
 
-const ESTILO: Record<TomInsight, { rotulo: string; classe: string }> = {
-  atencao: { rotulo: "Atenção", classe: "border-amber-400/40 bg-amber-400/10 text-amber-200" },
-  oportunidade: { rotulo: "Oportunidade", classe: "border-accent/40 bg-accent/10 text-accent-strong" },
-  destaque: { rotulo: "Destaque", classe: "border-ok/40 bg-ok/10 text-ok" },
-  info: { rotulo: "Para saber", classe: "border-white/14 bg-white/[0.03] text-neutral-300" },
+const ESTILO: Record<TomInsight, { rotulo: string; classe: string; barra: string }> = {
+  atencao: { rotulo: "Atenção", classe: "border-amber-400/40 bg-amber-400/10 text-amber-200", barra: "bg-amber-400" },
+  oportunidade: { rotulo: "Oportunidade", classe: "border-accent/40 bg-accent/10 text-accent-strong", barra: "bg-accent" },
+  destaque: { rotulo: "Destaque", classe: "border-ok/40 bg-ok/10 text-ok", barra: "bg-ok" },
+  info: { rotulo: "Para saber", classe: "border-white/14 bg-white/[0.03] text-neutral-300", barra: "bg-neutral-500" },
 };
+
+/** Texto das dicas com trechos **em negrito**. */
+function Texto({ t }: { t: string }) {
+  return (
+    <>
+      {t.split(/\*\*(.+?)\*\*/g).map((parte, i) => (i % 2 === 1 ? <strong key={i} className="font-semibold text-neutral-100">{parte}</strong> : parte))}
+    </>
+  );
+}
 
 /** Análise semanal comparando o tráfego das unidades: quem rende mais por real investido, o que
  * explica a diferença e o que fazer. Calculada toda segunda (ou no botão Atualizar agora). */
@@ -29,6 +38,7 @@ export default async function AnaliseTrafegoPage({ searchParams }: { searchParam
   const nomePeriodo = dias === 7 ? "7 dias" : "15 dias";
   const link = (mud: { escopo?: Escopo; dias?: number }) => `/estrategias/analise-trafego?escopo=${mud.escopo ?? escopo}&dias=${mud.dias ?? dias}`;
   const insights = analise ? gerarInsights(analise, escopo) : [];
+  const indices = analise ? calcularIndices(analise, escopo).indices : [];
   const linhas = (analise?.unidades ?? [])
     .map((u) => ({ u, m: u.atual[escopo], t: taxas(u.atual[escopo], dias), tAnt: taxas(u.anterior[escopo], dias), ant: u.anterior[escopo] }))
     .sort((a, b) => (a.t.custoEngajamento ?? Infinity) - (b.t.custoEngajamento ?? Infinity));
@@ -38,12 +48,13 @@ export default async function AnaliseTrafegoPage({ searchParams }: { searchParam
     custoVisita: mediana(ativas.filter((l) => (l.m.visitasPerfil ?? 0) >= 10).map((l) => l.t.custoVisita)),
     custoClique: mediana(ativas.filter((l) => (l.m.cliques ?? 0) >= 10).map((l) => l.t.custoClique)),
     custoMil: mediana(ativas.map((l) => l.t.custoMilAlcance)),
+    custoMilViews: mediana(ativas.map((l) => l.t.custoMilVisualizacoes)),
     taxaEng: mediana(ativas.map((l) => l.t.taxaEngajamento)),
     freq: mediana(ativas.map((l) => l.t.frequencia)),
     gastoDia: mediana(ativas.map((l) => l.t.gastoDia)),
   };
-  const total = ativas.reduce((t, l) => ({ gasto: t.gasto + l.m.gasto, eng: t.eng + l.m.interacoes, alcance: t.alcance + l.m.alcance, visitas: t.visitas + (l.m.visitasPerfil ?? 0), cliques: t.cliques + (l.m.cliques ?? 0) }), { gasto: 0, eng: 0, alcance: 0, visitas: 0, cliques: 0 });
-  const totalAnt = linhas.filter((l) => !l.u.erro && l.m.gasto >= GASTO_MINIMO_SEMANA * (dias / 7)).reduce((t, l) => ({ gasto: t.gasto + l.ant.gasto, eng: t.eng + l.ant.interacoes, alcance: t.alcance + l.ant.alcance, visitas: t.visitas + (l.ant.visitasPerfil ?? 0), cliques: t.cliques + (l.ant.cliques ?? 0) }), { gasto: 0, eng: 0, alcance: 0, visitas: 0, cliques: 0 });
+  const total = ativas.reduce((t, l) => ({ gasto: t.gasto + l.m.gasto, eng: t.eng + l.m.interacoes, alcance: t.alcance + l.m.alcance, views: t.views + l.m.impressoes, visitas: t.visitas + (l.m.visitasPerfil ?? 0), cliques: t.cliques + (l.m.cliques ?? 0) }), { gasto: 0, eng: 0, alcance: 0, views: 0, visitas: 0, cliques: 0 });
+  const totalAnt = linhas.filter((l) => !l.u.erro && l.m.gasto >= GASTO_MINIMO_SEMANA * (dias / 7)).reduce((t, l) => ({ gasto: t.gasto + l.ant.gasto, eng: t.eng + l.ant.interacoes, alcance: t.alcance + l.ant.alcance, views: t.views + l.ant.impressoes, visitas: t.visitas + (l.ant.visitasPerfil ?? 0), cliques: t.cliques + (l.ant.cliques ?? 0) }), { gasto: 0, eng: 0, alcance: 0, views: 0, visitas: 0, cliques: 0 });
   // Um cartão por unidade (com todas as dicas dela), na ordem do mais urgente; dicas da rede no topo.
   const ordemTom: Record<TomInsight, number> = { atencao: 0, oportunidade: 1, destaque: 2, info: 3 };
   const porUnidade = new Map<string | null, typeof insights>();
@@ -51,8 +62,9 @@ export default async function AnaliseTrafegoPage({ searchParams }: { searchParam
   const grupos = [...porUnidade.entries()]
     .map(([unidade, itens]) => {
       const l = linhas.find((x) => x.u.unidade === unidade);
-      const resumo = l && l.m.gasto > 0 ? `${R(l.t.gastoDia)}/dia · ${I(l.m.alcance)} alcançados · ${I(l.m.interacoes)} engajamentos · ${I(l.m.visitasPerfil ?? 0)} visitas ao perfil · ${I(l.m.cliques ?? 0)} cliques` : null;
-      return { unidade, itens, resumo, peso: Math.min(...itens.map((i) => ordemTom[i.tom])) };
+      const resumo = l && l.m.gasto > 0 ? `${R(l.t.gastoDia)}/dia · ${I(l.m.alcance)} alcançados · ${I(l.m.impressoes)} visualizações · ${I(l.m.interacoes)} engajamentos` : null;
+      const indice = indices.find((x) => x.unidade === unidade)?.indice ?? null;
+      return { unidade, itens, resumo, indice, peso: Math.min(...itens.map((i) => ordemTom[i.tom])) };
     })
     .sort((a, b) => (a.unidade === null ? -1 : b.unidade === null ? 1 : a.peso - b.peso || (a.unidade ?? "").localeCompare(b.unidade ?? "")));
   const varPct = (a: number, b: number) => (b > 0 ? Math.round((a / b - 1) * 100) : null);
@@ -68,7 +80,7 @@ export default async function AnaliseTrafegoPage({ searchParams }: { searchParam
           <div>
             <h1 className="font-display text-2xl font-bold">Análise do tráfego · {ambiente.nome}</h1>
             <p className="mt-1 max-w-2xl text-sm text-neutral-400">
-              Compara só as unidades (a conta central Principal/Expansão fica de fora) pelo que cada real investido devolve em alcance, engajamento, visitas ao perfil e cliques no link — cada métrica comparada com a mediana da rede, numa régua por faixas — e sugere o que ajustar.
+              Compara só as unidades (a conta central Principal/Expansão fica de fora) pelo que cada real investido devolve em alcance, visualizações, engajamento, visitas ao perfil, cliques no link e vídeo assistido — cada métrica comparada com a mediana da rede, numa régua por faixas — e sugere o que ajustar.
               Sempre os últimos {nomePeriodo} até ontem, comparados com os {nomePeriodo} anteriores. Atualiza sozinha toda segunda.
             </p>
             {analise && (
@@ -99,10 +111,11 @@ export default async function AnaliseTrafegoPage({ searchParams }: { searchParam
           <p className="cartao-vidro mt-4 px-5 py-6 text-sm text-neutral-400">Ainda sem análise dos últimos {nomePeriodo}. Clique em Atualizar agora (leva alguns segundos).</p>
         ) : (
           <>
-            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
+            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
               {[
                 [`Investido em ${nomePeriodo}`, R(total.gasto), varPct(total.gasto, totalAnt.gasto)],
                 ["Alcance", I(total.alcance), varPct(total.alcance, totalAnt.alcance)],
+                ["Visualizações", I(total.views), varPct(total.views, totalAnt.views)],
                 ["Engajamentos", I(total.eng), varPct(total.eng, totalAnt.eng)],
                 ["Visitas ao perfil", I(total.visitas), varPct(total.visitas, totalAnt.visitas)],
                 ["Cliques no link", I(total.cliques), varPct(total.cliques, totalAnt.cliques)],
@@ -122,21 +135,37 @@ export default async function AnaliseTrafegoPage({ searchParams }: { searchParam
               ) : (
                 <div className="mt-2 flex flex-col gap-3">
                   {grupos.map((g) => (
-                    <div key={g.unidade ?? "rede"} className="cartao-vidro px-4 py-3.5">
-                      <div className="flex flex-wrap items-baseline justify-between gap-2">
-                        <p className="text-sm font-bold text-neutral-100">{g.unidade ?? "Rede"}</p>
+                    <div key={g.unidade ?? "rede"} className="cartao-vidro overflow-hidden">
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 bg-white/[0.02] px-4 py-2.5">
+                        <div className="flex items-center gap-2.5">
+                          <p className="text-[15px] font-bold text-neutral-100">{g.unidade ?? "Rede"}</p>
+                          {g.indice !== null && (
+                            <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${g.indice >= 115 ? "bg-ok/15 text-ok" : g.indice <= 85 ? "bg-amber-400/15 text-amber-300" : "bg-white/[0.06] text-neutral-300"}`}>
+                              índice {g.indice}
+                            </span>
+                          )}
+                        </div>
                         {g.resumo && <p className="text-[11px] text-neutral-500">{g.resumo}</p>}
                       </div>
-                      <ul className="mt-2 flex flex-col divide-y divide-white/5">
+                      <ul className="flex flex-col divide-y divide-white/5">
                         {g.itens.map((i, n) => (
-                          <li key={n} className="py-2.5 first:pt-0 last:pb-0">
-                            <div className="flex items-start gap-2">
-                              <span className={`mt-0.5 shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${ESTILO[i.tom].classe}`}>{ESTILO[i.tom].rotulo}</span>
-                              <div className="min-w-0">
-                                {i.metrica && <p className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500">{i.metrica}</p>}
-                                <p className="text-[13px] font-semibold text-neutral-100">{i.titulo}</p>
-                                <p className="mt-0.5 text-xs leading-relaxed text-neutral-400">{i.detalhe}</p>
+                          <li key={n} className="flex gap-3 px-4 py-3">
+                            <span className={`mt-1 w-1 shrink-0 self-stretch rounded-full ${ESTILO[i.tom].barra}`} />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className={`rounded-full border px-2 py-px text-[10px] font-semibold ${ESTILO[i.tom].classe}`}>{ESTILO[i.tom].rotulo}</span>
+                                {i.metrica && <span className="text-[10.5px] font-semibold uppercase tracking-wide text-neutral-500">{i.metrica}</span>}
                               </div>
+                              <p className="mt-1 text-[14px] font-bold leading-snug text-neutral-100">{i.titulo}</p>
+                              <p className="mt-1 text-[12.5px] leading-relaxed text-neutral-400">
+                                <Texto t={i.detalhe} />
+                              </p>
+                              {i.acao && (
+                                <p className="mt-1.5 rounded-lg bg-white/[0.04] px-2.5 py-1.5 text-[12.5px] leading-relaxed text-neutral-300">
+                                  <span className="font-semibold text-neutral-100">O que fazer: </span>
+                                  <Texto t={i.acao} />
+                                </p>
+                              )}
                             </div>
                           </li>
                         ))}
@@ -149,15 +178,18 @@ export default async function AnaliseTrafegoPage({ searchParams }: { searchParam
 
             <section className="cartao-vidro mt-5 overflow-x-auto p-4">
               <h2 className="font-display text-base font-bold">Unidade a unidade</h2>
-              <p className="mt-0.5 text-[11px] text-neutral-500">Ordenado pelo custo por engajamento (mais barato primeiro). Verde = bem melhor que a mediana da rede; amarelo = bem pior. Unidades com menos de {R(GASTO_MINIMO_SEMANA * (dias / 7))} no período não entram na mediana.</p>
-              <table className="mt-3 w-full min-w-[980px] text-left text-[12.5px]">
+              <p className="mt-0.5 text-[11px] text-neutral-500">Ordenado pelo custo por engajamento (mais barato primeiro). Índice = desempenho geral (100 = mediana da rede), juntando alcance, visualizações, engajamento, visitas, cliques e vídeo onde há volume. Verde = bem melhor que a mediana da rede; amarelo = bem pior. Unidades com menos de {R(GASTO_MINIMO_SEMANA * (dias / 7))} no período não entram na mediana.</p>
+              <table className="mt-3 w-full min-w-[1180px] text-left text-[12.5px]">
                 <thead className="text-[10.5px] uppercase tracking-wide text-neutral-500">
                   <tr>
                     <th className="py-2 pr-2 font-medium">Unidade</th>
                     <th className="py-2 text-right font-medium">Boost/dia</th>
                     <th className="py-2 text-right font-medium">Gastou/dia</th>
                     <th className="py-2 text-right font-medium">Alcance</th>
+                    <th className="py-2 text-right font-medium">Índice</th>
                     <th className="py-2 text-right font-medium">R$/mil alcance</th>
+                    <th className="py-2 text-right font-medium">Visualiz.</th>
+                    <th className="py-2 text-right font-medium">R$/mil visualiz.</th>
                     <th className="py-2 text-right font-medium">Engajam.</th>
                     <th className="py-2 text-right font-medium">R$/engaj.</th>
                     <th className="py-2 text-right font-medium">Visitas perfil</th>
@@ -178,7 +210,10 @@ export default async function AnaliseTrafegoPage({ searchParams }: { searchParam
                       <td className="py-2 text-right tabular-nums">{u.boostLigado ? R(u.boostDiario) : <span className="text-neutral-600">desligado</span>}</td>
                       <td className="py-2 text-right tabular-nums">{R(t.gastoDia)}</td>
                       <td className="py-2 text-right tabular-nums">{I(m.alcance)}</td>
+                      <td className="py-2 text-right font-semibold tabular-nums">{indices.find((x) => x.contaId === u.contaId)?.indice ?? "—"}</td>
                       <td className={`py-2 text-right tabular-nums ${cor(t.custoMilAlcance, med.custoMil, true)}`}>{R(t.custoMilAlcance)}</td>
+                      <td className="py-2 text-right tabular-nums">{I(m.impressoes)}</td>
+                      <td className={`py-2 text-right tabular-nums ${cor(t.custoMilVisualizacoes, med.custoMilViews, true)}`}>{R(t.custoMilVisualizacoes)}</td>
                       <td className="py-2 text-right tabular-nums">{I(m.interacoes)}</td>
                       <td className={`py-2 text-right tabular-nums ${m.interacoes >= 50 ? cor(t.custoEngajamento, med.custoEng, true) : ""}`}>{R(t.custoEngajamento)}</td>
                       <td className="py-2 text-right tabular-nums">{I(m.visitasPerfil ?? 0)}</td>
@@ -194,7 +229,10 @@ export default async function AnaliseTrafegoPage({ searchParams }: { searchParam
                     <td />
                     <td className="py-2 text-right tabular-nums">{R(med.gastoDia)}</td>
                     <td />
+                    <td className="py-2 text-right tabular-nums">100</td>
                     <td className="py-2 text-right tabular-nums">{R(med.custoMil)}</td>
+                    <td />
+                    <td className="py-2 text-right tabular-nums">{R(med.custoMilViews)}</td>
                     <td />
                     <td className="py-2 text-right tabular-nums">{R(med.custoEng)}</td>
                     <td />
