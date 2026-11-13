@@ -1160,17 +1160,29 @@ export interface LinhaInsightRelatorio {
   actions?: AcaoInsight[];
   /** Só vem quando o relatório é pedido com breakdownPlataforma (instagram, facebook, audience_network...). */
   publisher_platform?: string;
+  /** Só com comVideo: quem assistiu 15s+ (ou o vídeo inteiro, se mais curto) e quem assistiu até o fim. */
+  video_thruplay_watched_actions?: AcaoInsight[];
+  video_p100_watched_actions?: AcaoInsight[];
   date_start?: string;
   date_stop?: string;
 }
 
 export async function obterInsightsRelatorio(
   adAccountId: string,
-  opcoes: { nivel: "account" | "campaign"; desde: string; ate: string; porDia?: boolean; breakdownPlataforma?: boolean }
+  opcoes: {
+    nivel: "account" | "campaign";
+    desde: string;
+    ate: string;
+    porDia?: boolean;
+    breakdownPlataforma?: boolean;
+    /** Também pede as métricas de vídeo (ThruPlay e 100% assistido) — usado pela Análise do tráfego. */
+    comVideo?: boolean;
+  }
 ): Promise<LinhaInsightRelatorio[]> {
   const campos =
     "spend,impressions,reach,frequency,clicks,inline_link_clicks,ctr,cpm,cpc,actions" +
-    (opcoes.nivel === "campaign" ? ",campaign_id,campaign_name" : "");
+    (opcoes.nivel === "campaign" ? ",campaign_id,campaign_name" : "") +
+    (opcoes.comVideo ? ",video_thruplay_watched_actions,video_p100_watched_actions" : "");
   const dados = await chamar<{ data: LinhaInsightRelatorio[] }>(`${adAccountId}/insights`, {
     query: {
       level: opcoes.nivel,

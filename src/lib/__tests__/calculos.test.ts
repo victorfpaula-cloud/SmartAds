@@ -175,7 +175,7 @@ describe("posts oficiais da rede (boost da franquia)", () => {
   });
 });
 
-import { gerarInsights, somarLinhas, type AnaliseTrafego, type Metricas } from "@/lib/analiseTrafego";
+import { calcularIndices, gerarInsights, somarLinhas, type AnaliseTrafego, type Metricas } from "@/lib/analiseTrafego";
 
 describe("análise do tráfego", () => {
   const m = (gasto: number, alcance: number, curtidas: number, interacoes = curtidas * 3, impressoes = alcance * 1.3): Metricas => ({ gasto, alcance, impressoes, interacoes, curtidas, comentarios: 2, salvamentos: 1, compartilhamentos: 1, campanhas: 2 });
@@ -200,15 +200,29 @@ describe("análise do tráfego", () => {
     const r = somarLinhas([{ campaign_name: "x", spend: "10", reach: "100", impressions: "100", inline_link_clicks: "7", actions: [{ action_type: "onsite_conversion.instagram_profile_visit", value: "4" }] }] as never);
     expect(r.tudo.cliques).toBe(7);
     expect(r.tudo.visitasPerfil).toBe(4);
+    const v = somarLinhas([{ campaign_name: "x", spend: "10", reach: "100", impressions: "500", actions: [{ action_type: "video_view", value: "200" }], video_thruplay_watched_actions: [{ action_type: "video_view", value: "60" }] }] as never);
+    expect(v.tudo.videoViews).toBe(200);
+    expect(v.tudo.thruplays).toBe(60);
   });
 
   it("compara cada métrica com a mediana da rede numa régua por faixas", () => {
     // engajamento = curtidas*3; A barato, B e C na média, D caro
     const ins = gerarInsights(analise([unidade("A", m(70, 14000, 400)), unidade("B", m(70, 10000, 200)), unidade("C", m(70, 10000, 210)), unidade("D", m(70, 9000, 90))]), "boost");
     const de = (u: string) => ins.filter((i) => i.unidade === u && i.metrica === "Engajamento");
-    expect(de("A").some((i) => /bem mais barato que a média da rede/.test(i.titulo))).toBe(true);
-    expect(de("D").some((i) => /custo bem acima da média/.test(i.titulo) && /mais que o dobro da mediana/.test(i.detalhe))).toBe(true);
+    expect(de("A").some((i) => /bem mais barato que a rede/.test(i.titulo))).toBe(true);
+    expect(de("D").some((i) => /bem mais caro que a rede/.test(i.titulo) && /mais que o dobro da mediana/.test(i.detalhe) && !!i.acao)).toBe(true);
     expect(de("B").some((i) => /bem/.test(i.titulo))).toBe(false); // na média: sem dica
+  });
+
+  it("índice geral junta as métricas com teto, 100 = mediana", () => {
+    const a = analise([unidade("A", m(70, 14000, 400)), unidade("B", m(70, 10000, 200)), unidade("C", m(70, 10000, 210)), unidade("D", m(70, 9000, 90))]);
+    const { indices } = calcularIndices(a, "boost");
+    const de = (u: string) => indices.find((x) => x.unidade === u)!.indice;
+    expect(de("A")).toBeGreaterThan(110);
+    expect(de("B")).toBeGreaterThanOrEqual(90);
+    expect(de("B")).toBeLessThanOrEqual(110);
+    expect(de("D")).toBeLessThan(80);
+    expect(Math.max(...indices.map((x) => x.indice))).toBeLessThanOrEqual(200);
   });
 
   it("pares com investimento parecido usam 'x mais' e nunca percentual gigante", () => {
