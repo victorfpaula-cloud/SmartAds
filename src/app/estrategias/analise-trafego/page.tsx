@@ -21,15 +21,18 @@ const ESTILO: Record<TomInsight, { rotulo: string; classe: string }> = {
 
 /** Análise semanal comparando o tráfego das unidades: quem rende mais por real investido, o que
  * explica a diferença e o que fazer. Calculada toda segunda (ou no botão Atualizar agora). */
-export default async function AnaliseTrafegoPage({ searchParams }: { searchParams: { escopo?: string } }) {
+export default async function AnaliseTrafegoPage({ searchParams }: { searchParams: { escopo?: string; dias?: string } }) {
   const ambiente = await exigirAmbiente("franquia");
   const escopo: Escopo = searchParams.escopo === "tudo" ? "tudo" : "boost";
-  const analise = await lerAnaliseTrafego(ambiente.id);
+  const dias = searchParams.dias === "15" ? 15 : 7;
+  const analise = await lerAnaliseTrafego(ambiente.id, dias);
+  const nomePeriodo = dias === 7 ? "7 dias" : "15 dias";
+  const link = (mud: { escopo?: Escopo; dias?: number }) => `/estrategias/analise-trafego?escopo=${mud.escopo ?? escopo}&dias=${mud.dias ?? dias}`;
   const insights = analise ? gerarInsights(analise, escopo) : [];
   const linhas = (analise?.unidades ?? [])
-    .map((u) => ({ u, m: u.atual[escopo], t: taxas(u.atual[escopo]), tAnt: taxas(u.anterior[escopo]), ant: u.anterior[escopo] }))
+    .map((u) => ({ u, m: u.atual[escopo], t: taxas(u.atual[escopo], dias), tAnt: taxas(u.anterior[escopo], dias), ant: u.anterior[escopo] }))
     .sort((a, b) => (b.t.curtidasPorReal ?? -1) - (a.t.curtidasPorReal ?? -1));
-  const ativas = linhas.filter((l) => !l.u.erro && l.m.gasto >= GASTO_MINIMO_SEMANA);
+  const ativas = linhas.filter((l) => !l.u.erro && l.m.gasto >= GASTO_MINIMO_SEMANA * (dias / 7));
   const med = {
     custoCurtida: mediana(ativas.map((l) => l.t.custoCurtida)),
     custoMil: mediana(ativas.map((l) => l.t.custoMilAlcance)),
@@ -39,6 +42,17 @@ export default async function AnaliseTrafegoPage({ searchParams }: { searchParam
   };
   const total = ativas.reduce((t, l) => ({ gasto: t.gasto + l.m.gasto, curtidas: t.curtidas + l.m.curtidas, alcance: t.alcance + l.m.alcance }), { gasto: 0, curtidas: 0, alcance: 0 });
   const totalAnt = linhas.filter((l) => !l.u.erro).reduce((t, l) => ({ gasto: t.gasto + l.ant.gasto, curtidas: t.curtidas + l.ant.curtidas }), { gasto: 0, curtidas: 0 });
+  // Um cartão por unidade (com todas as dicas dela), na ordem do mais urgente; dicas da rede no topo.
+  const ordemTom: Record<TomInsight, number> = { atencao: 0, oportunidade: 1, destaque: 2, info: 3 };
+  const porUnidade = new Map<string | null, typeof insights>();
+  for (const i of insights) porUnidade.set(i.unidade, [...(porUnidade.get(i.unidade) ?? []), i]);
+  const grupos = [...porUnidade.entries()]
+    .map(([unidade, itens]) => {
+      const l = linhas.find((x) => x.u.unidade === unidade);
+      const resumo = l && l.m.gasto > 0 ? `${R(l.t.gastoDia)}/dia · ${I(l.m.curtidas)} curtidas · ${R(l.t.custoCurtida)} por curtida · ${I(l.m.alcance)} alcançados` : null;
+      return { unidade, itens, resumo, peso: Math.min(...itens.map((i) => ordemTom[i.tom])) };
+    })
+    .sort((a, b) => (a.unidade === null ? -1 : b.unidade === null ? 1 : a.peso - b.peso || (a.unidade ?? "").localeCompare(b.unidade ?? "")));
   const varPct = (a: number, b: number) => (b > 0 ? Math.round((a / b - 1) * 100) : null);
   const cor = (valor: number | null, ref: number | null, menorMelhor: boolean) =>
     valor === null || ref === null ? "" : (menorMelhor ? valor <= ref * 0.85 : valor >= ref * 1.15) ? "text-ok" : (menorMelhor ? valor >= ref * 1.3 : valor <= ref * 0.7) ? "text-amber-300" : "";
@@ -53,33 +67,39 @@ export default async function AnaliseTrafegoPage({ searchParams }: { searchParam
             <h1 className="font-display text-2xl font-bold">Análise do tráfego · {ambiente.nome}</h1>
             <p className="mt-1 max-w-2xl text-sm text-neutral-400">
               Compara só as unidades (a conta central Principal/Expansão fica de fora) pelo que cada real investido devolve — alcance, curtidas, interações — e sugere o que ajustar.
-              Atualiza sozinha toda segunda com a semana que fechou.
+              Sempre os últimos {nomePeriodo} até ontem, comparados com os {nomePeriodo} anteriores. Atualiza sozinha toda segunda.
             </p>
             {analise && (
               <p className="mt-1 text-[11px] text-neutral-600">
-                Semana de {dataBR(analise.periodo.desde)} a {dataBR(analise.periodo.ate)} comparada com a anterior · calculado em{" "}
+                Período de {dataBR(analise.periodo.desde)} a {dataBR(analise.periodo.ate)} comparado com os {nomePeriodo} anteriores · calculado em{" "}
                 {new Date(analise.calculadoEm).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
               </p>
             )}
           </div>
-          <BotaoAtualizarAnalise />
+          <BotaoAtualizarAnalise dias={dias} />
         </div>
 
-        <div className="mt-4 flex gap-2">
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          {([7, 15] as const).map((d) => (
+            <Link key={d} href={link({ dias: d })} className={d === dias ? "pilula-ativa rounded-lg px-3.5 py-2 text-[13px] font-semibold text-neutral-100" : "rounded-lg px-3.5 py-2 text-[13px] font-medium text-neutral-400 hover:text-neutral-200"}>
+              Últimos {d} dias
+            </Link>
+          ))}
+          <span className="mx-1 h-5 w-px bg-white/10" />
           {(["boost", "tudo"] as const).map((e) => (
-            <Link key={e} href={`/estrategias/analise-trafego?escopo=${e}`} className={e === escopo ? "pilula-ativa rounded-lg px-3.5 py-2 text-[13px] font-semibold text-neutral-100" : "rounded-lg px-3.5 py-2 text-[13px] font-medium text-neutral-400 hover:text-neutral-200"}>
+            <Link key={e} href={link({ escopo: e })} className={e === escopo ? "pilula-ativa rounded-lg px-3.5 py-2 text-[13px] font-semibold text-neutral-100" : "rounded-lg px-3.5 py-2 text-[13px] font-medium text-neutral-400 hover:text-neutral-200"}>
               {e === "boost" ? "Só boost" : "Todo o tráfego"}
             </Link>
           ))}
         </div>
 
         {!analise ? (
-          <p className="cartao-vidro mt-4 px-5 py-6 text-sm text-neutral-400">Ainda sem análise. Clique em Atualizar agora (leva alguns segundos).</p>
+          <p className="cartao-vidro mt-4 px-5 py-6 text-sm text-neutral-400">Ainda sem análise dos últimos {nomePeriodo}. Clique em Atualizar agora (leva alguns segundos).</p>
         ) : (
           <>
             <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
               {[
-                ["Investido na semana", R(total.gasto), varPct(total.gasto, totalAnt.gasto)],
+                [`Investido em ${nomePeriodo}`, R(total.gasto), varPct(total.gasto, totalAnt.gasto)],
                 ["Curtidas", I(total.curtidas), varPct(total.curtidas, totalAnt.curtidas)],
                 ["Custo por curtida (mediana)", R(med.custoCurtida), null],
                 ["Alcance a cada R$ 1 (mediana)", med.custoMil ? I(1000 / med.custoMil) : "—", null],
@@ -87,7 +107,7 @@ export default async function AnaliseTrafegoPage({ searchParams }: { searchParam
                 <div key={rotulo as string} className="cartao-vidro px-4 py-3">
                   <p className="text-[10.5px] uppercase tracking-wide text-neutral-500">{rotulo}</p>
                   <p className="mt-0.5 text-lg font-bold text-neutral-100">{valor}</p>
-                  {typeof v === "number" && <p className={`text-[11px] ${v >= 0 ? "text-ok" : "text-amber-300"}`}>{v >= 0 ? "+" : ""}{v}% vs semana anterior</p>}
+                  {typeof v === "number" && <p className={`text-[11px] ${v >= 0 ? "text-ok" : "text-amber-300"}`}>{v >= 0 ? "+" : ""}{v}% vs período anterior</p>}
                 </div>
               ))}
             </div>
@@ -95,26 +115,37 @@ export default async function AnaliseTrafegoPage({ searchParams }: { searchParam
             <section className="mt-5">
               <h2 className="font-display text-base font-bold">Análises e recomendações</h2>
               {insights.length === 0 ? (
-                <p className="mt-2 text-sm text-neutral-500">Nada fora do padrão nesta semana.</p>
+                <p className="mt-2 text-sm text-neutral-500">Nada fora do padrão nesse período.</p>
               ) : (
-                <ul className="mt-2 flex flex-col gap-2">
-                  {insights.map((i, n) => (
-                    <li key={n} className="cartao-vidro px-4 py-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className={`rounded-full border px-2 py-0.5 text-[10.5px] font-semibold ${ESTILO[i.tom].classe}`}>{ESTILO[i.tom].rotulo}</span>
-                        {i.unidade && <span className="text-xs font-semibold text-neutral-300">{i.unidade}</span>}
+                <div className="mt-2 flex flex-col gap-3">
+                  {grupos.map((g) => (
+                    <div key={g.unidade ?? "rede"} className="cartao-vidro px-4 py-3.5">
+                      <div className="flex flex-wrap items-baseline justify-between gap-2">
+                        <p className="text-sm font-bold text-neutral-100">{g.unidade ?? "Rede"}</p>
+                        {g.resumo && <p className="text-[11px] text-neutral-500">{g.resumo}</p>}
                       </div>
-                      <p className="mt-1.5 text-sm font-semibold text-neutral-100">{i.titulo}</p>
-                      <p className="mt-0.5 text-xs leading-relaxed text-neutral-400">{i.detalhe}</p>
-                    </li>
+                      <ul className="mt-2 flex flex-col divide-y divide-white/5">
+                        {g.itens.map((i, n) => (
+                          <li key={n} className="py-2.5 first:pt-0 last:pb-0">
+                            <div className="flex items-start gap-2">
+                              <span className={`mt-0.5 shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${ESTILO[i.tom].classe}`}>{ESTILO[i.tom].rotulo}</span>
+                              <div className="min-w-0">
+                                <p className="text-[13px] font-semibold text-neutral-100">{i.titulo}</p>
+                                <p className="mt-0.5 text-xs leading-relaxed text-neutral-400">{i.detalhe}</p>
+                              </div>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   ))}
-                </ul>
+                </div>
               )}
             </section>
 
             <section className="cartao-vidro mt-5 overflow-x-auto p-4">
               <h2 className="font-display text-base font-bold">Unidade a unidade</h2>
-              <p className="mt-0.5 text-[11px] text-neutral-500">Ordenado por curtidas por real. Verde = bem melhor que a mediana da rede; amarelo = bem pior. Unidades com menos de {R(GASTO_MINIMO_SEMANA)} na semana não entram na mediana.</p>
+              <p className="mt-0.5 text-[11px] text-neutral-500">Ordenado por curtidas por real. Verde = bem melhor que a mediana da rede; amarelo = bem pior. Unidades com menos de {R(GASTO_MINIMO_SEMANA * (dias / 7))} no período não entram na mediana.</p>
               <table className="mt-3 w-full min-w-[860px] text-left text-[12.5px]">
                 <thead className="text-[10.5px] uppercase tracking-wide text-neutral-500">
                   <tr>
@@ -128,7 +159,7 @@ export default async function AnaliseTrafegoPage({ searchParams }: { searchParam
                     <th className="py-2 text-right font-medium">Engaj./100</th>
                     <th className="py-2 text-right font-medium">Frequência</th>
                     <th className="py-2 text-right font-medium">Coment. + salv.</th>
-                    <th className="py-2 text-right font-medium">R$/curtida sem. ant.</th>
+                    <th className="py-2 text-right font-medium">R$/curtida antes</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -166,7 +197,7 @@ export default async function AnaliseTrafegoPage({ searchParams }: { searchParam
                 </tbody>
               </table>
               <p className="mt-2 text-[10.5px] text-neutral-600">
-                Alcance é a soma das campanhas da semana (a mesma pessoa em duas campanhas conta duas vezes). Curtidas = reações nos posts turbinados. Engaj./100 = interações (inclui visualizações de vídeo e cliques) a cada 100 alcançados.
+                Alcance é a soma das campanhas do período (a mesma pessoa em duas campanhas conta duas vezes). Curtidas = reações nos posts turbinados. Engaj./100 = interações (inclui visualizações de vídeo e cliques) a cada 100 alcançados.
               </p>
             </section>
           </>

@@ -210,7 +210,7 @@ describe("análise do tráfego", () => {
       "boost"
     );
     expect(ins.some((i) => i.unidade === "A" && /saturado/.test(i.titulo))).toBe(true);
-    expect(ins.some((i) => i.unidade === "A" && /mais cara que na semana anterior/.test(i.titulo))).toBe(true);
+    expect(ins.some((i) => i.unidade === "A" && /mais cara que no período anterior/.test(i.titulo))).toBe(true);
   });
 
   it("boost ligado sem gasto vira atenção; uma unidade só não compara", () => {
