@@ -4,15 +4,15 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowsClockwise } from "@phosphor-icons/react";
 
-export default function BotaoAtualizarAnalise() {
+export default function BotaoAtualizarAnalise({ dias }: { dias: number }) {
   const router = useRouter();
   const [estado, setEstado] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
   async function atualizar() {
     setOcupado(true);
-    setEstado("Buscando as duas últimas semanas na Meta…");
+    setEstado(`Buscando os últimos ${dias} dias e o período anterior na Meta…`);
     try {
-      const r = await fetch("/api/analise-trafego", { method: "POST" });
+      const r = await fetch("/api/analise-trafego", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dias }) });
       const c = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(c.erro || "Falha ao calcular.");
       setEstado(c.comErro ? `Pronto. ${c.comErro} unidade(s) sem leitura na Meta.` : "Pronto.");

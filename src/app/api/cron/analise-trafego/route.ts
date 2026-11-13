@@ -16,10 +16,12 @@ export const GET = comRegistroDeCron("analise-trafego", async function (request:
   const { data: franquias } = await criarClienteAdmin().from("smartads_empresas").select("id").eq("tipo", "franquia");
   let feitas = 0;
   for (const f of franquias ?? []) {
-    const resta = 50_000 - (Date.now() - inicio);
-    if (resta < 15_000) break;
-    await calcularAnaliseTrafego(f.id, resta - 10_000);
-    feitas++;
+    for (const dias of [7, 15]) {
+      const resta = 50_000 - (Date.now() - inicio);
+      if (resta < 15_000) break;
+      await calcularAnaliseTrafego(f.id, dias, resta - 10_000);
+      feitas++;
+    }
   }
   return NextResponse.json({ franquias: (franquias ?? []).length, feitas, executadoEm: new Date().toISOString() });
 });
