@@ -25,6 +25,10 @@ export interface Metricas {
   comentarios: number;
   salvamentos: number;
   compartilhamentos: number;
+  /** Visitas ao perfil do Instagram vindas dos anúncios (podem faltar em análises antigas). */
+  visitasPerfil?: number;
+  /** Cliques no link dos anúncios (idem). */
+  cliques?: number;
   campanhas: number;
 }
 
@@ -44,6 +48,8 @@ export type TomInsight = "destaque" | "oportunidade" | "atencao" | "info";
 export interface Insight {
   tom: TomInsight;
   unidade: string | null;
+  /** Métrica a que a dica se refere (Alcance, Engajamento, Visitas ao perfil, Cliques no link). */
+  metrica?: string | null;
   titulo: string;
   detalhe: string;
 }
@@ -56,7 +62,7 @@ export interface AnaliseTrafego {
   unidades: UnidadeAnalise[];
 }
 
-const zero = (): Metricas => ({ gasto: 0, alcance: 0, impressoes: 0, interacoes: 0, curtidas: 0, comentarios: 0, salvamentos: 0, compartilhamentos: 0, campanhas: 0 });
+const zero = (): Metricas => ({ gasto: 0, alcance: 0, impressoes: 0, interacoes: 0, curtidas: 0, comentarios: 0, salvamentos: 0, compartilhamentos: 0, visitasPerfil: 0, cliques: 0, campanhas: 0 });
 const num = (v: unknown) => {
   const n = Number(v ?? 0);
   return Number.isFinite(n) ? n : 0;
@@ -78,6 +84,8 @@ export function somarLinhas(linhas: LinhaInsightRelatorio[]): Record<Escopo, Met
       m.comentarios += acao(l, ["comment"]);
       m.salvamentos += acao(l, ["onsite_conversion.post_save"]);
       m.compartilhamentos += acao(l, ["post"]);
+      m.visitasPerfil = (m.visitasPerfil ?? 0) + (l.actions ?? []).filter((a) => /profile_visit/i.test(a.action_type)).reduce((t, a) => t + num(a.value), 0);
+      m.cliques = (m.cliques ?? 0) + (num(l.inline_link_clicks) || acao(l, ["link_click"]));
       if (num(l.spend) > 0) m.campanhas++;
     }
   }
@@ -162,26 +170,33 @@ export const GASTO_MINIMO_SEMANA = 10;
 export interface Taxas {
   gastoDia: number;
   custoMilAlcance: number | null;
+  custoEngajamento: number | null;
+  custoVisita: number | null;
+  custoClique: number | null;
+  /** Mantidos pra compatibilidade (tela antiga / testes). */
   custoCurtida: number | null;
   curtidasPorReal: number | null;
   custoInteracao: number | null;
   taxaEngajamento: number | null; // interações a cada 100 alcançados
-  taxaCurtida: number | null; // curtidas a cada 100 alcançados
+  taxaCurtida: number | null;
   frequencia: number | null;
-  conversaPorMil: number | null; // comentários + salvamentos + compartilhamentos a cada mil alcançados
+  conversaPorMil: number | null;
 }
 
 export function taxas(m: Metricas, dias = 7): Taxas {
-  const d = (a: number, b: number) => (b > 0 ? a / b : null);
+  const custo = (qtd: number | undefined, min = 1) => (qtd && qtd >= min ? m.gasto / qtd : null);
   return {
     gastoDia: m.gasto / dias,
     custoMilAlcance: m.alcance > 0 ? (m.gasto / m.alcance) * 1000 : null,
-    custoCurtida: m.curtidas > 0 ? m.gasto / m.curtidas : null,
-    curtidasPorReal: d(m.curtidas, m.gasto),
-    custoInteracao: m.interacoes > 0 ? m.gasto / m.interacoes : null,
+    custoEngajamento: custo(m.interacoes),
+    custoVisita: custo(m.visitasPerfil),
+    custoClique: custo(m.cliques),
+    custoCurtida: custo(m.curtidas),
+    curtidasPorReal: m.gasto > 0 ? m.curtidas / m.gasto : null,
+    custoInteracao: custo(m.interacoes),
     taxaEngajamento: m.alcance > 0 ? (m.interacoes / m.alcance) * 100 : null,
     taxaCurtida: m.alcance > 0 ? (m.curtidas / m.alcance) * 100 : null,
-    frequencia: d(m.impressoes, m.alcance),
+    frequencia: m.alcance > 0 ? m.impressoes / m.alcance : null,
     conversaPorMil: m.alcance > 0 ? ((m.comentarios + m.salvamentos + m.compartilhamentos) / m.alcance) * 1000 : null,
   };
 }
@@ -195,80 +210,92 @@ export function mediana(valores: Array<number | null>): number | null {
 
 const R = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const I = (n: number) => Math.round(n).toLocaleString("pt-BR");
-const P = (n: number) => `${Math.round(n)}%`;
 const D = (n: number, c = 1) => n.toLocaleString("pt-BR", { minimumFractionDigits: c, maximumFractionDigits: c });
-/** Arredonda orçamento sugerido pra um valor "redondo" de R$ 1 (ou R$ 5 acima de R$ 30). */
 const arred = (n: number) => (n >= 30 ? Math.ceil(n / 5) * 5 : Math.ceil(n));
 
-/** Por que uma unidade rende menos que outra: custo do alcance (público) ou resposta ao post (conteúdo). */
-function diagnosticoDiferenca(pior: Taxas, melhor: Taxas, nomePior: string, nomeMelhor: string): string {
-  const cpm = pior.custoMilAlcance && melhor.custoMilAlcance ? pior.custoMilAlcance / melhor.custoMilAlcance : 1;
-  const resp = pior.taxaCurtida && melhor.taxaCurtida ? melhor.taxaCurtida / pior.taxaCurtida : 1;
-  const publico = `${nomePior} paga ${R(pior.custoMilAlcance ?? 0)} pra alcançar mil pessoas, contra ${R(melhor.custoMilAlcance ?? 0)} em ${nomeMelhor}`;
-  const post = `a cada 100 pessoas alcançadas, ${D(pior.taxaCurtida ?? 0)} curtem em ${nomePior} e ${D(melhor.taxaCurtida ?? 0)} em ${nomeMelhor}`;
-  if (cpm >= 1.25 && resp < 1.25)
-    return `O motivo principal é o custo do público: ${publico}, e o post engaja parecido (${post}). Ação: no público salvo do boost, aumente o raio em 2 a 5 km ou inclua cidades vizinhas, tire interesses muito específicos e abra a faixa de idade — público maior costuma baratear o alcance.`;
-  if (resp >= 1.25 && cpm < 1.25)
-    return `O alcance custa parecido, mas o post converte menos em curtida: ${post}. Ação: turbine os posts oficiais que mais renderam na rede (veja "Melhores posts" na tela da unidade), dê preferência a foto e carrossel quando o objetivo for curtida, e confira se a unidade está postando no horário de pico (fim da tarde e noite).`;
-  if (cpm >= 1.25 && resp >= 1.25)
-    return `Os dois pesam: ${publico}, e ${post}. Comece pelo público (raio maior, menos filtros) e, na sequência, priorize os posts que mais engajaram.`;
-  return `Custo do alcance e resposta ao post são parecidos (${publico}; ${post}); a diferença vem do volume entregue — vale olhar se as campanhas ficaram pausadas ou sem saldo em algum dia.`;
+/** As quatro métricas da análise: o custo de cada resultado, comparado com a mediana da rede. */
+export interface MetricaAnalise {
+  chave: "alcance" | "engajamento" | "visitas" | "cliques";
+  nome: string;
+  /** Como se lê o custo ("por mil pessoas alcançadas", "por engajamento"...). */
+  unidadeCusto: string;
+  volume: (m: Metricas) => number;
+  custo: (t: Taxas) => number | null;
+  /** Volume mínimo no período pra a unidade entrar na comparação dessa métrica. */
+  minimo: number;
+  rotuloVolume: string;
 }
+
+export const METRICAS: MetricaAnalise[] = [
+  { chave: "alcance", nome: "Alcance", unidadeCusto: "por mil pessoas alcançadas", volume: (m) => m.alcance, custo: (t) => t.custoMilAlcance, minimo: 1000, rotuloVolume: "pessoas alcançadas" },
+  { chave: "engajamento", nome: "Engajamento", unidadeCusto: "por engajamento", volume: (m) => m.interacoes, custo: (t) => t.custoEngajamento, minimo: 50, rotuloVolume: "engajamentos" },
+  { chave: "visitas", nome: "Visitas ao perfil", unidadeCusto: "por visita ao perfil", volume: (m) => m.visitasPerfil ?? 0, custo: (t) => t.custoVisita, minimo: 10, rotuloVolume: "visitas ao perfil" },
+  { chave: "cliques", nome: "Cliques no link", unidadeCusto: "por clique no link", volume: (m) => m.cliques ?? 0, custo: (t) => t.custoClique, minimo: 10, rotuloVolume: "cliques no link" },
+];
+
+/** A régua: posição de um custo em relação à mediana, em faixas — nunca um percentual exagerado.
+ * "na média" (±15%) não vira dica. */
+export function regua(custo: number, mediana: number): { faixa: "bem_melhor" | "melhor" | "media" | "pior" | "bem_pior"; texto: string } {
+  const r = custo / mediana;
+  const pct = Math.round(Math.abs(r - 1) * 100);
+  if (r <= 0.5) return { faixa: "bem_melhor", texto: "menos da metade da mediana da rede" };
+  if (r <= 0.75) return { faixa: "bem_melhor", texto: `${pct}% abaixo da mediana da rede` };
+  if (r <= 0.85) return { faixa: "melhor", texto: `${pct}% abaixo da mediana da rede` };
+  if (r < 1.15) return { faixa: "media", texto: "na média da rede" };
+  if (r < 1.35) return { faixa: "pior", texto: `${pct}% acima da mediana da rede` };
+  if (r < 2) return { faixa: "bem_pior", texto: `${pct}% acima da mediana da rede` };
+  return { faixa: "bem_pior", texto: "mais que o dobro da mediana da rede" };
+}
+
+/** "1,4x mais", "mais que o dobro" — comparação entre duas unidades sem percentuais gigantes. */
+const vezes = (r: number) => (r >= 2 ? "mais que o dobro de" : `${D(r)}x`);
 
 export function gerarInsights(analise: AnaliseTrafego, escopo: Escopo): Insight[] {
   const ins: Insight[] = [];
   const dias = analise.dias ?? 7;
-  const nomePeriodo = dias === 7 ? "na semana" : `nos ${dias} dias`;
-  const minimo = GASTO_MINIMO_SEMANA * (dias / 7);
+  const nomePeriodo = dias === 7 ? "nos últimos 7 dias" : `nos últimos ${dias} dias`;
+  const minimoGasto = GASTO_MINIMO_SEMANA * (dias / 7);
   const freqLimite = dias <= 7 ? 2.5 : 3.5;
   const linhas = analise.unidades
     .filter((u) => !u.erro)
     .map((u) => ({ u, m: u.atual[escopo], t: taxas(u.atual[escopo], dias), ant: u.anterior[escopo], tAnt: taxas(u.anterior[escopo], dias) }));
-  const ativas = linhas.filter((l) => l.m.gasto >= minimo);
+  const ativas = linhas.filter((l) => l.m.gasto >= minimoGasto);
 
   if (escopo === "boost") {
     for (const l of linhas.filter((x) => x.u.boostLigado && x.m.gasto < 1)) {
-      ins.push({ tom: "atencao", unidade: l.u.unidade, titulo: `Boost ligado, mas não gastou ${nomePeriodo}`, detalhe: "Nenhuma campanha de boost entregou. As causas mais comuns: a unidade não publicou post oficial da rede no período (o boost da franquia só turbina esses), a conta está sem saldo, ou a Meta recusou o post (veja o último erro na tela da unidade)." });
+      ins.push({ tom: "atencao", unidade: l.u.unidade, metrica: null, titulo: `Boost ligado, mas não gastou ${nomePeriodo}`, detalhe: "Nenhuma campanha de boost entregou. Causas mais comuns: a unidade não publicou post oficial da rede no período (o boost da franquia só turbina esses), a conta está sem saldo, ou a Meta recusou o post (veja o último erro na tela da unidade)." });
     }
   }
   for (const l of ativas.filter((x) => x.m.interacoes === 0 && x.m.alcance === 0)) {
-    ins.push({ tom: "atencao", unidade: l.u.unidade, titulo: `Investiu ${R(l.m.gasto)} sem resultado medido`, detalhe: "A Meta não registrou alcance nem interações. Pode ser anúncio reprovado, entrega travada ou atraso no relatório da Meta — confira as campanhas no Gerenciador." });
-  }
-  if (ativas.length < 2) {
-    if (ativas.length === 1) ins.push({ tom: "info", unidade: null, titulo: "Só uma unidade investiu o suficiente pra comparar", detalhe: `É preciso pelo menos duas unidades com ${R(minimo)} ou mais ${nomePeriodo}.` });
-    return ins;
+    ins.push({ tom: "atencao", unidade: l.u.unidade, metrica: null, titulo: `Investiu ${R(l.m.gasto)} sem resultado medido`, detalhe: "A Meta não registrou alcance nem engajamento. Pode ser anúncio reprovado, entrega travada ou atraso no relatório da Meta — confira as campanhas no Gerenciador." });
   }
 
-  const med = {
-    custoCurtida: mediana(ativas.map((l) => l.t.custoCurtida)),
-    custoMil: mediana(ativas.map((l) => l.t.custoMilAlcance)),
-    taxaEng: mediana(ativas.map((l) => l.t.taxaEngajamento)),
-    taxaCurtida: mediana(ativas.map((l) => l.t.taxaCurtida)),
-    conversa: mediana(ativas.map((l) => l.t.conversaPorMil)),
-  };
-
-  // 1) Destaques da rede.
-  const melhorPor = (f: (l: (typeof ativas)[number]) => number | null, menorMelhor: boolean) =>
-    [...ativas].filter((l) => f(l) !== null).sort((a, b) => (menorMelhor ? f(a)! - f(b)! : f(b)! - f(a)!))[0];
-  const lider = melhorPor((l) => l.t.custoCurtida, true);
-  if (lider && med.custoCurtida && lider.t.custoCurtida) {
-    const vantagem = (1 - lider.t.custoCurtida / med.custoCurtida) * 100;
-    if (vantagem >= 10)
-      ins.push({
-        tom: "destaque",
-        unidade: lider.u.unidade,
-        titulo: `Curtida mais barata da rede: ${R(lider.t.custoCurtida)}`,
-        detalhe: `${P(vantagem)} abaixo da mediana da rede (${R(med.custoCurtida)}). Com ${R(lider.t.gastoDia)}/dia gerou ${I(lider.m.curtidas)} curtidas ${nomePeriodo}, alcançando ${I(lider.m.alcance)} pessoas (${R(lider.t.custoMilAlcance ?? 0)} por mil). Use o público salvo e os posts turbinados dessa unidade como referência pras outras.`,
-      });
+  // 1) Cada métrica separada: custo do resultado na régua da mediana da rede.
+  const medianas = new Map<string, number | null>();
+  for (const met of METRICAS) {
+    const comVolume = ativas.filter((l) => met.volume(l.m) >= met.minimo && met.custo(l.t) !== null);
+    const med = comVolume.length >= 3 ? mediana(comVolume.map((l) => met.custo(l.t))) : null;
+    medianas.set(met.chave, med);
+    if (!med) continue;
+    for (const l of comVolume) {
+      const c = met.custo(l.t)!;
+      const r = regua(c, med);
+      const pouco = met.volume(l.m) < met.minimo * 2 ? ` Volume ainda pequeno (${I(met.volume(l.m))} ${met.rotuloVolume}) — confirme no próximo período.` : "";
+      const base = `${R(c)} ${met.unidadeCusto} (${r.texto}, que é ${R(med)}). Resultado: ${I(met.volume(l.m))} ${met.rotuloVolume} com ${R(l.m.gasto)} investidos.`;
+      if (r.faixa === "bem_melhor")
+        ins.push({ tom: "destaque", unidade: l.u.unidade, metrica: met.nome, titulo: `${met.nome}: bem mais barato que a média da rede`, detalhe: `${base} O público e os posts dessa unidade são referência pra ${met.nome.toLowerCase()}.${pouco}` });
+      else if (r.faixa === "bem_pior")
+        ins.push({ tom: "oportunidade", unidade: l.u.unidade, metrica: met.nome, titulo: `${met.nome}: custo bem acima da média da rede`, detalhe: `${base} ${acaoPorMetrica(met.chave)}${pouco}` });
+      else if (r.faixa === "pior" && met.chave !== "alcance")
+        ins.push({ tom: "info", unidade: l.u.unidade, metrica: met.nome, titulo: `${met.nome}: um pouco acima da média`, detalhe: `${base} Nada grave — acompanhe no próximo período.${pouco}` });
+    }
   }
-  const eng = melhorPor((l) => l.t.taxaEngajamento, false);
-  if (eng && med.taxaEng && eng.t.taxaEngajamento && eng.t.taxaEngajamento > med.taxaEng * 1.2)
-    ins.push({ tom: "destaque", unidade: eng.u.unidade, titulo: `Maior engajamento: ${D(eng.t.taxaEngajamento)} interações a cada 100 alcançados`, detalhe: `A mediana da rede é ${D(med.taxaEng)}. O público dessa unidade responde mais aos posts turbinados — bom candidato a receber mais orçamento, porque cada real rende mais aqui.` });
-  const conv = melhorPor((l) => l.t.conversaPorMil, false);
-  if (conv && med.conversa && conv.t.conversaPorMil && conv.t.conversaPorMil > med.conversa * 1.5 && conv.m.comentarios + conv.m.salvamentos + conv.m.compartilhamentos >= 5)
-    ins.push({ tom: "destaque", unidade: conv.u.unidade, titulo: "Quem mais gera conversa (comentários, salvamentos e compartilhamentos)", detalhe: `${D(conv.t.conversaPorMil)} a cada mil alcançados (mediana ${D(med.conversa)}): ${I(conv.m.comentarios)} comentários, ${I(conv.m.salvamentos)} salvamentos e ${I(conv.m.compartilhamentos)} compartilhamentos. Esses sinais pesam mais pro algoritmo do Instagram que a curtida e ajudam o orgânico da unidade.` });
+  if (ativas.length < 3) {
+    ins.push({ tom: "info", unidade: null, metrica: null, titulo: "Poucas unidades pra comparar", detalhe: `As comparações precisam de pelo menos 3 unidades com ${R(minimoGasto)} ou mais investidos ${nomePeriodo}. Hoje são ${ativas.length}.` });
+  }
 
-  // 2) Pares com investimento parecido e resultado bem diferente — com o motivo.
+  // 2) Unidades que investem parecido: quem rende mais alcance e engajamento por real, e por quê.
+  const medEng = medianas.get("engajamento") ?? null;
   const ordenadas = [...ativas].sort((a, b) => a.t.gastoDia - b.t.gastoDia);
   const jaComparadas = new Set<string>();
   for (let i = 0; i < ordenadas.length; i++) {
@@ -276,75 +303,96 @@ export function gerarInsights(analise: AnaliseTrafego, escopo: Escopo): Insight[
       const a = ordenadas[i];
       const b = ordenadas[j];
       if (b.t.gastoDia > a.t.gastoDia * 1.3) break;
-      if (!a.m.curtidas || !b.m.curtidas) continue;
-      const [melhor, pior] = a.m.curtidas / a.m.gasto >= b.m.curtidas / b.m.gasto ? [a, b] : [b, a];
-      const dif = ((melhor.m.curtidas / melhor.m.gasto) / (pior.m.curtidas / pior.m.gasto) - 1) * 100;
-      if (dif < 30 || jaComparadas.has(pior.u.contaId)) continue;
+      if (a.m.interacoes < 50 || b.m.interacoes < 50) continue;
+      const [melhor, pior] = a.m.interacoes / a.m.gasto >= b.m.interacoes / b.m.gasto ? [a, b] : [b, a];
+      const razao = melhor.m.interacoes / melhor.m.gasto / (pior.m.interacoes / pior.m.gasto);
+      if (razao < 1.35 || jaComparadas.has(pior.u.contaId)) continue;
       jaComparadas.add(pior.u.contaId);
+      const razaoAlc = melhor.t.custoMilAlcance && pior.t.custoMilAlcance ? pior.t.custoMilAlcance / melhor.t.custoMilAlcance : 1;
+      const respostaMelhor = melhor.t.taxaEngajamento ?? 0;
+      const respostaPior = pior.t.taxaEngajamento ?? 0;
+      const motivo =
+        razaoAlc >= 1.25 && respostaMelhor < respostaPior * 1.25
+          ? `O motivo é o custo do público: ${pior.u.unidade} paga ${R(pior.t.custoMilAlcance ?? 0)} pra alcançar mil pessoas contra ${R(melhor.t.custoMilAlcance ?? 0)}, e o post engaja parecido. ${acaoPorMetrica("alcance")}`
+          : respostaMelhor >= respostaPior * 1.25 && razaoAlc < 1.25
+            ? `O alcance custa parecido, mas o post engaja menos: ${D(respostaPior)} engajamentos a cada 100 pessoas contra ${D(respostaMelhor)}. ${acaoPorMetrica("engajamento")}`
+            : `Pesam os dois: o alcance custa ${R(pior.t.custoMilAlcance ?? 0)} por mil (contra ${R(melhor.t.custoMilAlcance ?? 0)}) e o post engaja ${D(respostaPior)} a cada 100 pessoas (contra ${D(respostaMelhor)}). Comece pelo público e depois priorize os posts que mais engajaram.`;
       ins.push({
         tom: "oportunidade",
         unidade: pior.u.unidade,
-        titulo: `Investe parecido com ${melhor.u.unidade}, mas tem ${P(dif)} menos curtidas por real`,
-        detalhe: `${pior.u.unidade}: ${R(pior.t.gastoDia)}/dia → ${I(pior.m.curtidas)} curtidas (${R(pior.t.custoCurtida ?? 0)} cada). ${melhor.u.unidade}: ${R(melhor.t.gastoDia)}/dia → ${I(melhor.m.curtidas)} curtidas (${R(melhor.t.custoCurtida ?? 0)} cada). ${diagnosticoDiferenca(pior.t, melhor.t, pior.u.unidade, melhor.u.unidade)}`,
+        metrica: "Engajamento",
+        titulo: `Investe parecido com ${melhor.u.unidade}, que tira ${vezes(razao)} mais engajamento por real`,
+        detalhe: `${pior.u.unidade}: ${R(pior.t.gastoDia)}/dia → ${I(pior.m.interacoes)} engajamentos e ${I(pior.m.alcance)} alcançados. ${melhor.u.unidade}: ${R(melhor.t.gastoDia)}/dia → ${I(melhor.m.interacoes)} engajamentos e ${I(melhor.m.alcance)} alcançados. ${motivo}`,
       });
     }
   }
 
-  // 3) Orçamento pra chegar perto do líder em curtidas, com plano de aumento gradual.
-  const topCurtidas = [...ativas].sort((a, b) => b.m.curtidas - a.m.curtidas)[0];
+  // 3) Orçamento pra chegar perto da unidade que mais engaja — só pra quem já tem custo razoável.
+  const topEng = [...ativas].sort((a, b) => b.m.interacoes - a.m.interacoes)[0];
   for (const l of ativas) {
-    if (l === topCurtidas || !l.t.curtidasPorReal || !topCurtidas.m.curtidas) continue;
-    if (l.m.curtidas >= topCurtidas.m.curtidas * 0.8) continue;
-    const necessarioDia = topCurtidas.m.curtidas / dias / l.t.curtidasPorReal;
-    const caro = med.custoCurtida && l.t.custoCurtida && l.t.custoCurtida > med.custoCurtida * 1.5;
+    if (!topEng || l === topEng || l.m.interacoes < 50 || !l.t.custoEngajamento) continue;
+    if (l.m.interacoes >= topEng.m.interacoes * 0.8) continue;
+    const r = medEng ? regua(l.t.custoEngajamento, medEng) : null;
+    const necessarioDia = (topEng.m.interacoes / dias) * l.t.custoEngajamento;
+    if (r && (r.faixa === "bem_pior" || r.faixa === "pior")) continue; // primeiro baixar o custo (dica da régua acima)
     const passos: number[] = [];
     let atual = l.t.gastoDia;
     while (atual < necessarioDia && passos.length < 4) {
       atual = Math.min(necessarioDia, atual * 1.25);
       passos.push(arred(atual));
     }
-    const plano = passos.length ? `Plano sugerido (aumento de ~25% por semana pra a Meta não reiniciar o aprendizado): ${passos.map((v, k) => `semana ${k + 1}: ${R(v)}/dia`).join(" → ")}${atual < necessarioDia ? " → e assim por diante" : ""}.` : "";
-    const ganho = (arred(Math.min(necessarioDia, l.t.gastoDia * 1.25)) - l.t.gastoDia) * dias * l.t.curtidasPorReal;
+    const ganho = passos.length ? (passos[0] - l.t.gastoDia) * dias / l.t.custoEngajamento : 0;
     ins.push({
-      tom: caro ? "atencao" : "oportunidade",
+      tom: "oportunidade",
       unidade: l.u.unidade,
-      titulo: caro
-        ? `Pra igualar ${topCurtidas.u.unidade} seriam ~${R(arred(necessarioDia))}/dia — antes, baixe o custo por curtida`
-        : `Pra chegar perto de ${topCurtidas.u.unidade} em curtidas: ~${R(arred(necessarioDia))}/dia`,
-      detalhe: caro
-        ? `Hoje: ${R(l.t.gastoDia)}/dia e ${I(l.m.curtidas)} curtidas ${nomePeriodo}, a ${R(l.t.custoCurtida ?? 0)} cada — ${P(((l.t.custoCurtida ?? 0) / (med.custoCurtida ?? 1) - 1) * 100)} acima da mediana (${R(med.custoCurtida ?? 0)}). ${topCurtidas.u.unidade} fez ${I(topCurtidas.m.curtidas)}. Aumentar verba com o custo assim só multiplica o desperdício: primeiro ajuste o público (raio maior, menos filtros) e os posts turbinados; quando a curtida chegar perto de ${R(med.custoCurtida ?? 0)}, o orçamento necessário cai pra ~${R(arred(topCurtidas.m.curtidas / dias * (med.custoCurtida ?? 0)))}/dia.`
-        : `Hoje: ${R(l.t.gastoDia)}/dia e ${I(l.m.curtidas)} curtidas ${nomePeriodo} (${R(l.t.custoCurtida ?? 0)} cada); ${topCurtidas.u.unidade} fez ${I(topCurtidas.m.curtidas)}. Mantido o custo atual, chegar lá exige ~${R(arred(necessarioDia))}/dia. ${plano} Só o primeiro passo já deve render ~${I(Math.max(0, ganho))} curtidas a mais ${nomePeriodo}. Confira se o teto de gasto do mês da unidade comporta o aumento.`,
+      metrica: "Engajamento",
+      titulo: `Pra chegar perto do volume de ${topEng.u.unidade}: ~${R(arred(necessarioDia))}/dia`,
+      detalhe: `Hoje: ${R(l.t.gastoDia)}/dia e ${I(l.m.interacoes)} engajamentos ${nomePeriodo}, a ${R(l.t.custoEngajamento)} cada (${r?.texto ?? "sem mediana"}). ${topEng.u.unidade} teve ${I(topEng.m.interacoes)}. Como o custo dessa unidade já é bom, o caminho é volume: ${passos.map((v, k) => `semana ${k + 1}: ${R(v)}/dia`).join(" → ")}${atual < necessarioDia ? " → e assim por diante" : ""} (aumentos de ~25% por semana pra a Meta não reiniciar o aprendizado). O primeiro passo deve trazer ~${I(Math.max(0, ganho))} engajamentos a mais ${nomePeriodo}. Confira se o teto de gasto do mês comporta.`,
     });
   }
 
-  // 4) Saturação, alcance caro, engajamento baixo, curtida baixa.
+  // 4) Saturação do público.
   for (const l of ativas) {
     if (l.t.frequencia !== null && l.t.frequencia >= freqLimite)
-      ins.push({ tom: "atencao", unidade: l.u.unidade, titulo: `Público saturado: cada pessoa viu o anúncio ${D(l.t.frequencia)} vezes ${nomePeriodo}`, detalhe: `Foram ${I(l.m.impressoes)} exibições pra ${I(l.m.alcance)} pessoas. Acima de ~${D(freqLimite)} a Meta começa a repetir o anúncio pra mesma gente: o custo sobe e o engajamento cai. Ação: aumente o raio do público salvo (2 a 5 km) ou inclua cidades vizinhas; se não der pra ampliar, reduza o orçamento diário pra ~${R(arred((l.t.gastoDia * freqLimite) / l.t.frequencia * 0.8))} — o mesmo público com menos repetição.` });
-    if (med.custoMil && l.t.custoMilAlcance && l.t.custoMilAlcance > med.custoMil * 1.5)
-      ins.push({ tom: "atencao", unidade: l.u.unidade, titulo: `Alcance caro: ${R(l.t.custoMilAlcance)} a cada mil pessoas`, detalhe: `${P((l.t.custoMilAlcance / med.custoMil - 1) * 100)} acima da mediana da rede (${R(med.custoMil)}). Com o custo da mediana, o mesmo investimento alcançaria ~${I((l.m.gasto / med.custoMil) * 1000)} pessoas em vez de ${I(l.m.alcance)}. Geralmente é público pequeno (raio curto, muitos interesses) ou muito disputado na região. Teste um público salvo mais aberto por uma semana e compare aqui.` });
-    if (med.taxaEng && l.t.taxaEngajamento !== null && l.t.taxaEngajamento < med.taxaEng * 0.6 && (l.t.custoMilAlcance ?? 0) <= (med.custoMil ?? Infinity))
-      ins.push({ tom: "oportunidade", unidade: l.u.unidade, titulo: "Alcança barato, mas engaja pouco", detalhe: `${D(l.t.taxaEngajamento)} interações a cada 100 alcançados (mediana ${D(med.taxaEng)}), com alcance a ${R(l.t.custoMilAlcance ?? 0)} por mil. O público está sendo atingido, mas o post não prende. Ação: turbine os posts oficiais com mais curtidas e comentários orgânicos (tela da unidade → Melhores posts) e evite turbinar post só informativo.` });
-    if (med.taxaCurtida && l.t.taxaCurtida !== null && l.m.interacoes > 0 && l.t.taxaCurtida < med.taxaCurtida * 0.5 && (l.t.taxaEngajamento ?? 0) >= (med.taxaEng ?? 0))
-      ins.push({ tom: "info", unidade: l.u.unidade, titulo: "Muita interação, pouca curtida", detalhe: `${I(l.m.interacoes)} interações mas só ${I(l.m.curtidas)} curtidas: a maior parte é visualização de vídeo e clique, típico de Reels. Se o objetivo é curtida no feed, turbine mais foto e carrossel; se é alcance e marca, o Reels está cumprindo o papel.` });
+      ins.push({ tom: "atencao", unidade: l.u.unidade, metrica: "Alcance", titulo: `Público saturado: cada pessoa viu o anúncio ${D(l.t.frequencia)} vezes`, detalhe: `${I(l.m.impressoes)} exibições pra ${I(l.m.alcance)} pessoas ${nomePeriodo}. Acima de ~${D(freqLimite)} a Meta repete o anúncio pra mesma gente: o alcance trava e o custo por engajamento sobe. ${acaoPorMetrica("alcance")} Se não der pra ampliar, reduza o orçamento pra ~${R(arred((l.t.gastoDia * freqLimite) / l.t.frequencia * 0.8))}/dia.` });
   }
 
-  // 5) Período contra período anterior.
+  // 5) Período contra o anterior (alcance e engajamento, na mesma régua de ±35%).
   for (const l of ativas) {
-    if (l.ant.gasto < minimo || !l.t.custoCurtida || !l.tAnt.custoCurtida) continue;
-    const v = (l.t.custoCurtida / l.tAnt.custoCurtida - 1) * 100;
-    const contexto = `Gasto ${R(l.tAnt.gastoDia)}/dia → ${R(l.t.gastoDia)}/dia; alcance ${I(l.ant.alcance)} → ${I(l.m.alcance)}; curtidas ${I(l.ant.curtidas)} → ${I(l.m.curtidas)}.`;
-    if (v >= 35)
-      ins.push({ tom: "atencao", unidade: l.u.unidade, titulo: `Curtida ficou ${P(v)} mais cara que no período anterior`, detalhe: `${R(l.tAnt.custoCurtida)} → ${R(l.t.custoCurtida)}. ${contexto} ${(l.t.frequencia ?? 0) > (l.tAnt.frequencia ?? 0) * 1.2 ? "A frequência subiu junto: o público está cansando — amplie o raio." : "Sem sinal de saturação: provavelmente os posts turbinados renderam menos — compare com os que funcionaram no período anterior."}` });
-    else if (v <= -25)
-      ins.push({ tom: "destaque", unidade: l.u.unidade, titulo: `Curtida ficou ${P(-v)} mais barata que no período anterior`, detalhe: `${R(l.tAnt.custoCurtida)} → ${R(l.t.custoCurtida)}. ${contexto} Algo funcionou melhor — vale repetir o tipo de post e manter o público.` });
+    if (l.ant.gasto < minimoGasto) continue;
+    for (const [nome, agora, antes, vol] of [
+      ["Engajamento", l.t.custoEngajamento, l.tAnt.custoEngajamento, l.m.interacoes >= 50 && l.ant.interacoes >= 50],
+      ["Alcance", l.t.custoMilAlcance, l.tAnt.custoMilAlcance, l.m.alcance >= 1000 && l.ant.alcance >= 1000],
+    ] as const) {
+      if (!vol || !agora || !antes) continue;
+      const r = agora / antes;
+      const contexto = `Gasto ${R(l.tAnt.gastoDia)}/dia → ${R(l.t.gastoDia)}/dia; alcance ${I(l.ant.alcance)} → ${I(l.m.alcance)}; engajamentos ${I(l.ant.interacoes)} → ${I(l.m.interacoes)}.`;
+      if (r >= 1.35)
+        ins.push({ tom: "atencao", unidade: l.u.unidade, metrica: nome, titulo: `${nome} ficou mais caro que no período anterior`, detalhe: `${R(antes)} → ${R(agora)} ${nome === "Alcance" ? "por mil pessoas" : "por engajamento"}${r >= 2 ? " (mais que o dobro)" : ""}. ${contexto} ${(l.t.frequencia ?? 0) > (l.tAnt.frequencia ?? 0) * 1.2 ? "A frequência subiu junto: o público está cansando." : "Sem sinal de saturação: os posts turbinados renderam menos que no período anterior."}` });
+      else if (r <= 0.7)
+        ins.push({ tom: "destaque", unidade: l.u.unidade, metrica: nome, titulo: `${nome} ficou mais barato que no período anterior`, detalhe: `${R(antes)} → ${R(agora)} ${nome === "Alcance" ? "por mil pessoas" : "por engajamento"}. ${contexto} Vale repetir o tipo de post e manter o público.` });
+    }
   }
 
   // 6) Investimento muito baixo.
   const medGasto = mediana(ativas.map((l) => l.t.gastoDia));
-  for (const l of linhas.filter((x) => x.m.gasto > 0 && x.m.gasto < minimo))
-    ins.push({ tom: "info", unidade: l.u.unidade, titulo: `Investimento muito baixo: ${R(l.m.gasto)} ${nomePeriodo}`, detalhe: `A mediana da rede é ${R(medGasto ?? 0)}/dia. Com tão pouco a Meta mal sai da fase de aprendizado e o resultado fica instável; o mínimo que costuma funcionar é ~R$ 5 a 10/dia por campanha.` });
+  for (const l of linhas.filter((x) => x.m.gasto > 0 && x.m.gasto < minimoGasto))
+    ins.push({ tom: "info", unidade: l.u.unidade, metrica: null, titulo: `Investimento muito baixo: ${R(l.m.gasto)} ${nomePeriodo}`, detalhe: `A mediana da rede é ${R(medGasto ?? 0)}/dia. Com tão pouco a Meta mal sai da fase de aprendizado e os números ficam instáveis — por isso a unidade fica fora das comparações.` });
 
   const ordem: Record<TomInsight, number> = { atencao: 0, oportunidade: 1, destaque: 2, info: 3 };
   return ins.sort((a, b) => ordem[a.tom] - ordem[b.tom]);
+}
+
+/** O que fazer quando o custo de uma métrica está alto. */
+function acaoPorMetrica(chave: MetricaAnalise["chave"]): string {
+  switch (chave) {
+    case "alcance":
+      return "Ação: no público salvo do boost, aumente o raio em 2 a 5 km ou inclua cidades vizinhas, tire interesses muito específicos e abra a faixa de idade — público maior barateia o alcance.";
+    case "engajamento":
+      return "Ação: turbine os posts oficiais que mais engajaram (tela da unidade → Melhores posts), evite turbinar post só informativo e confira se a unidade posta no horário de pico (fim da tarde e noite).";
+    case "visitas":
+      return "Ação: posts com chamada clara pro perfil (\"veja o cardápio no perfil\", \"siga pra novidades\") e um perfil atualizado (destaques, bio com cardápio/iFood) aumentam a visita; Reels costumam levar mais gente ao perfil que foto.";
+    case "cliques":
+      return "Ação: confira se o link e o botão estão certos (iFood/WhatsApp), use arte com a oferta bem visível e chamada direta (\"peça agora\"), e prefira Stories pra campanha de clique.";
+  }
 }

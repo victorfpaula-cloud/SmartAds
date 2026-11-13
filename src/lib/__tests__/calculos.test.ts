@@ -196,27 +196,32 @@ describe("análise do tráfego", () => {
     expect(r.tudo.curtidas).toBe(80);
   });
 
-  it("compara quem investe parecido e recomenda orçamento pra alcançar o líder", () => {
-    const ins = gerarInsights(analise([unidade("Olímpia", m(70, 14000, 700)), unidade("Ribeirão", m(70, 10000, 350)), unidade("Bauru", m(140, 20000, 900))]), "boost");
-    const textos = ins.map((i) => `${i.unidade}: ${i.titulo}`).join("\n");
-    expect(textos).toContain("Ribeirão: Investe parecido com Olímpia, mas tem 100% menos curtidas por real");
-    expect(textos).toMatch(/Ribeirão: .*Bauru/);
-    expect(textos).toContain("Olímpia: Curtida mais barata da rede");
+  it("soma visitas ao perfil e cliques no link", () => {
+    const r = somarLinhas([{ campaign_name: "x", spend: "10", reach: "100", impressions: "100", inline_link_clicks: "7", actions: [{ action_type: "onsite_conversion.instagram_profile_visit", value: "4" }] }] as never);
+    expect(r.tudo.cliques).toBe(7);
+    expect(r.tudo.visitasPerfil).toBe(4);
   });
 
-  it("aponta saturação e piora contra a semana anterior", () => {
-    const ins = gerarInsights(
-      analise([unidade("A", m(70, 5000, 200, 600, 15000), m(70, 5000, 400)), unidade("B", m(70, 9000, 300))]),
-      "boost"
-    );
-    expect(ins.some((i) => i.unidade === "A" && /saturado/.test(i.titulo))).toBe(true);
-    expect(ins.some((i) => i.unidade === "A" && /mais cara que no período anterior/.test(i.titulo))).toBe(true);
+  it("compara cada métrica com a mediana da rede numa régua por faixas", () => {
+    // engajamento = curtidas*3; A barato, B e C na média, D caro
+    const ins = gerarInsights(analise([unidade("A", m(70, 14000, 400)), unidade("B", m(70, 10000, 200)), unidade("C", m(70, 10000, 210)), unidade("D", m(70, 9000, 90))]), "boost");
+    const de = (u: string) => ins.filter((i) => i.unidade === u && i.metrica === "Engajamento");
+    expect(de("A").some((i) => /bem mais barato que a média da rede/.test(i.titulo))).toBe(true);
+    expect(de("D").some((i) => /custo bem acima da média/.test(i.titulo) && /mais que o dobro da mediana/.test(i.detalhe))).toBe(true);
+    expect(de("B").some((i) => /bem/.test(i.titulo))).toBe(false); // na média: sem dica
+  });
+
+  it("pares com investimento parecido usam 'x mais' e nunca percentual gigante", () => {
+    const ins = gerarInsights(analise([unidade("Olímpia", m(70, 14000, 300)), unidade("Ribeirão", m(70, 10000, 100)), unidade("Bauru", m(140, 20000, 300))]), "boost");
+    const par = ins.find((i) => i.unidade === "Ribeirão" && /Investe parecido com Olímpia/.test(i.titulo));
+    expect(par?.titulo).toContain("mais que o dobro de mais engajamento por real");
+    expect(ins.every((i) => !/\d{3,}%/.test(i.titulo))).toBe(true);
   });
 
   it("boost ligado sem gasto vira atenção; uma unidade só não compara", () => {
     const ins = gerarInsights(analise([unidade("A", m(0, 0, 0)), unidade("B", m(70, 9000, 300))]), "boost");
     expect(ins.some((i) => i.unidade === "A" && /não gastou/.test(i.titulo))).toBe(true);
-    expect(ins.some((i) => /Só uma unidade/.test(i.titulo))).toBe(true);
+    expect(ins.some((i) => /Poucas unidades pra comparar/.test(i.titulo))).toBe(true);
   });
 });
 
