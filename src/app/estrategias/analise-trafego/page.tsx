@@ -52,7 +52,7 @@ export default async function AnaliseTrafegoPage({ searchParams }: { searchParam
           <div>
             <h1 className="font-display text-2xl font-bold">Análise do tráfego · {ambiente.nome}</h1>
             <p className="mt-1 max-w-2xl text-sm text-neutral-400">
-              Compara as unidades pelo que cada real investido devolve — alcance, curtidas, interações — e sugere o que ajustar.
+              Compara só as unidades (a conta central Principal/Expansão fica de fora) pelo que cada real investido devolve — alcance, curtidas, interações — e sugere o que ajustar.
               Atualiza sozinha toda segunda com a semana que fechou.
             </p>
             {analise && (
