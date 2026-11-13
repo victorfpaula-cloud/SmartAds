@@ -219,3 +219,12 @@ describe("análise do tráfego", () => {
     expect(ins.some((i) => /Só uma unidade/.test(i.titulo))).toBe(true);
   });
 });
+
+import { ehContaCentralDaRede } from "@/lib/analiseTrafego";
+describe("conta central da rede fora da análise", () => {
+  it("reconhece Principal e Expansão, não as unidades", () => {
+    expect(ehContaCentralDaRede("Dona Baunilha - Principal")).toBe(true);
+    expect(ehContaCentralDaRede("Dona Baunilha - Expansão")).toBe(true);
+    expect(ehContaCentralDaRede("DB - Ribeirão")).toBe(false);
+  });
+});

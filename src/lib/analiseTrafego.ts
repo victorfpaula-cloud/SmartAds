@@ -1,7 +1,7 @@
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { obterInsightsRelatorio, type LinhaInsightRelatorio } from "@/lib/meta/api";
 import { comContaMeta } from "@/lib/meta/conexao";
-import { contasRepetidas, listarContasDaRede } from "@/lib/saudeRede";
+import { listarContasDaRede } from "@/lib/saudeRede";
 import { adicionarDias, diaEmSaoPaulo } from "@/lib/tempoSaoPaulo";
 import { mapearEmLotes } from "@/lib/lotes";
 
@@ -86,8 +86,13 @@ export function somarLinhas(linhas: LinhaInsightRelatorio[]): Record<Escopo, Met
 export async function calcularAnaliseTrafego(empresaId: string, limiteMs = 45_000): Promise<AnaliseTrafego> {
   const inicio = Date.now();
   const contasTodas = await listarContasDaRede(empresaId);
-  const repetidas = contasRepetidas(contasTodas);
-  const contas = contasTodas.filter((c) => c.adAccountId && !repetidas.has(c.contaId));
+  // Só as unidades: fica de fora a conta central da rede (Principal/Expansão), que divide a mesma
+  // conta de anúncio entre mais de um cadastro e não é comparável com uma unidade.
+  const usosDaContaDeAnuncio = new Map<string, number>();
+  for (const c of contasTodas) if (c.adAccountId) usosDaContaDeAnuncio.set(c.adAccountId, (usosDaContaDeAnuncio.get(c.adAccountId) ?? 0) + 1);
+  const contas = contasTodas.filter(
+    (c) => c.adAccountId && (usosDaContaDeAnuncio.get(c.adAccountId) ?? 0) === 1 && !ehContaCentralDaRede(c.unidade)
+  );
   const { data: cfg } = await criarClienteAdmin()
     .from("smartads_contas_meta")
     .select("id, boost_automatico_ativo, boost_automatico_orcamento_centavos")
@@ -133,9 +138,14 @@ export async function calcularAnaliseTrafego(empresaId: string, limiteMs = 45_00
   return analise;
 }
 
+/** Conta central da franquia (não é uma unidade): "Dona Baunilha - Principal", "... - Expansão". */
+export const ehContaCentralDaRede = (nome: string) => /\b(principal|expans[aã]o|oficial)\b/i.test(nome);
+
 export async function lerAnaliseTrafego(empresaId: string): Promise<AnaliseTrafego | null> {
   const { data } = await criarClienteAdmin().from("smartads_analise_trafego").select("dados").eq("empresa_id", empresaId).maybeSingle();
-  return (data?.dados as AnaliseTrafego | undefined) ?? null;
+  const a = (data?.dados as AnaliseTrafego | undefined) ?? null;
+  // Análises calculadas antes dessa regra ainda traziam a conta central — tira na leitura também.
+  return a ? { ...a, unidades: a.unidades.filter((u) => !ehContaCentralDaRede(u.unidade)) } : null;
 }
 
 // ---------------------------------------------------------------------------------------------
