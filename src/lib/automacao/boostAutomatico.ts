@@ -261,6 +261,8 @@ export async function avaliarBoostAutomatico(): Promise<{
         });
         if (resultado.ok) {
           criados.push(tipo);
+          // Se der exceção depois daqui, o registro da falha já sabe que este tipo existe (não recria).
+          emAndamento.tipos = [...criados];
           primeiroId = primeiroId ?? (resultado.campanhaSalva as { id: string })?.id ?? null;
         } else {
           erro = resultado.erro;

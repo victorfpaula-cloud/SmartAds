@@ -74,7 +74,10 @@ export default function FormularioCampanhaRede({ unidades }: { unidades: Unidade
   async function publicar() {
     // Quem já foi criada numa tentativa anterior não é criada de novo (evita campanha duplicada).
     const pendentes = escolhidas.filter((u) => estados[u.contaId]?.tipo !== "ok");
-    if (pendentes.length === 0) return;
+    if (pendentes.length === 0) {
+      window.alert("Todas as unidades marcadas já tiveram a campanha criada.");
+      return;
+    }
     const reais = (valorCentavos / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
     if (!window.confirm(`Criar e colocar no ar a campanha em ${pendentes.length} unidade${pendentes.length !== 1 ? "s" : ""}, com ${reais}${tipoOrc === "diario" ? " por dia" : " no total"} em cada uma?`)) return;
     setEnviando(true);

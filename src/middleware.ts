@@ -32,14 +32,15 @@ async function foraDoEscopo(ids: string[], empresas: string[]): Promise<boolean>
   // Registros que pertencem a uma conta, a um cliente ou a uma empresa (regra, aporte, campanha
   // criada, plano, sugestão, público...): o id deles também não pode ser de outra empresa.
   const doFilho = async (tabela: string, coluna: string) => {
-    const { data } = await db.from(tabela).select(`id, ${coluna}`).in("id", alvo);
+    const { data, error } = await db.from(tabela).select(`id, ${coluna}`).in("id", alvo);
+    if (error) throw new Error(error.message); // sem conseguir conferir, nega (ver quem chama)
     return ((data ?? []) as unknown as Array<Record<string, string | null>>).map((l) => l[coluna]).filter((v): v is string => !!v);
   };
   const [porConta, porCliente, porEmpresa] = await Promise.all([
     Promise.all(
       ["smartads_campanhas_criadas", "smartads_regras_automacao", "smartads_investimentos", "smartads_planos_execucao", "smartads_sugestoes", "smartads_diagnosticos"].map((t) => doFilho(t, "conta_id"))
     ),
-    Promise.all(["smartads_publicos_salvos", "smartads_piloto_automatico"].map((t) => doFilho(t, "cliente_id"))),
+    Promise.all(["smartads_publicos_salvos"].map((t) => doFilho(t, "cliente_id"))),
     Promise.all(["smartads_calendario_rede", "smartads_boost_rede_regras"].map((t) => doFilho(t, "empresa_id"))),
   ]);
   if (porEmpresa.flat().some((e) => !empresas.includes(e))) return true;
@@ -179,13 +180,14 @@ async function aplicarRestricoes(
   if (ehApi && request.method !== "GET" && request.method !== "HEAD" && !(request.headers.get("content-type") ?? "").includes("multipart")) {
     try {
       const doCorpo = (await request.clone().text()).match(UUID) ?? [];
-      if (doCorpo.length > 300) return negar(); // nunca "corta" a lista: muitos ids = recusa
+      if (doCorpo.length > 120) return negar(); // nunca "corta" a lista: muitos ids = recusa
       ids.push(...doCorpo);
     } catch {
       return negar();
     }
   }
-  if (await foraDoEscopo(ids, acesso.empresas)) return negar();
+  // Falha ao conferir (banco fora do ar) = nega: melhor uma tela de "sem permissão" do que abrir demais.
+  if (await foraDoEscopo(ids, acesso.empresas).catch(() => true)) return negar();
 
   if (ehApi) return null;
 
