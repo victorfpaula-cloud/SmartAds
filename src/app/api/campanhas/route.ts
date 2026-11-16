@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { criarCampanhaCompleta, type ParametrosCriarCampanha } from "@/lib/meta/criarCampanhaCompleta";
 
 export const dynamic = "force-dynamic";
+// Criar campanha são várias chamadas em sequência à Meta (campanha, conjunto, criativo, anúncio).
+export const maxDuration = 60;
 
 /** Cria a campanha inteira (campanha → conjunto de anúncios → criativo → anúncio), com rollback em
  * caso de falha — a lógica de verdade mora em criarCampanhaCompleta (compartilhada com o boost

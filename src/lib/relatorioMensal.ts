@@ -35,7 +35,11 @@ export function mesDoRelatorio(hoje = new Date(), mesPedido?: string): MesRelato
 
 /** Os 7 dias até ontem (a cron roda na segunda: pega a semana que acabou de fechar). */
 export function semanaDoRelatorio(hoje = new Date()): MesRelatorio {
-  const hojeSP = diaEmSaoPaulo(hoje.toISOString());
+  // Ancorado na segunda-feira da semana: a rodada de terça (repescagem) usa a MESMA chave e a mesma
+  // janela da de segunda — sem isso, quem já tinha recebido na segunda recebia de novo na terça.
+  const diaReal = diaEmSaoPaulo(hoje.toISOString());
+  const diaDaSemana = new Date(`${diaReal}T12:00:00Z`).getUTCDay(); // 0 = domingo
+  const hojeSP = adicionarDias(diaReal, -((diaDaSemana + 6) % 7));
   const ate = adicionarDias(hojeSP, -1);
   const desde = adicionarDias(ate, -6);
   const curto = (d: string) => d.slice(8, 10) + "/" + d.slice(5, 7);

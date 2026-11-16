@@ -15,9 +15,8 @@ const API_BLOQUEADA = [
 ];
 // POSTs que só consultam/atualizam números: liberados mesmo pra quem não pode editar.
 const API_LEITURA = [
-  "/api/auth/logout", "/api/saude-rede", "/api/relatorio-ads", "/api/relatorio-rede", "/api/analise-trafego", "/api/financeiro/saldo", "/api/financeiro/atualizar",
-  "/api/estrategias/postagens/atualizar", "/api/ia/resumo", "/api/diagnostico", "/api/meta/buscar-interesse",
-  "/api/meta/buscar-localizacao", "/api/meta/posts-instagram",
+  "/api/auth/logout", "/api/saude-rede", "/api/relatorio-ads", "/api/relatorio-rede", "/api/analise-trafego", "/api/financeiro/atualizar",
+  "/api/estrategias/postagens/atualizar", "/api/ia/resumo",
 ];
 // Mesmo nome de COOKIE_AMBIENTE (src/lib/ambiente.ts) — repetido aqui porque aquele arquivo usa APIs
 // de servidor que o middleware não carrega.
@@ -30,10 +29,26 @@ async function foraDoEscopo(ids: string[], empresas: string[]): Promise<boolean>
   const alvo = Array.from(new Set(ids.map((i) => i.toLowerCase()))).filter((i) => !empresas.includes(i));
   if (alvo.length === 0) return false;
   const db = criarClienteAdmin();
+  // Registros que pertencem a uma conta, a um cliente ou a uma empresa (regra, aporte, campanha
+  // criada, plano, sugestão, público...): o id deles também não pode ser de outra empresa.
+  const doFilho = async (tabela: string, coluna: string) => {
+    const { data } = await db.from(tabela).select(`id, ${coluna}`).in("id", alvo);
+    return ((data ?? []) as unknown as Array<Record<string, string | null>>).map((l) => l[coluna]).filter((v): v is string => !!v);
+  };
+  const [porConta, porCliente, porEmpresa] = await Promise.all([
+    Promise.all(
+      ["smartads_campanhas_criadas", "smartads_regras_automacao", "smartads_investimentos", "smartads_planos_execucao", "smartads_sugestoes", "smartads_diagnosticos"].map((t) => doFilho(t, "conta_id"))
+    ),
+    Promise.all(["smartads_publicos_salvos", "smartads_piloto_automatico"].map((t) => doFilho(t, "cliente_id"))),
+    Promise.all(["smartads_calendario_rede", "smartads_boost_rede_regras"].map((t) => doFilho(t, "empresa_id"))),
+  ]);
+  if (porEmpresa.flat().some((e) => !empresas.includes(e))) return true;
+  const contasAlvo = Array.from(new Set([...alvo, ...porConta.flat()]));
+  const clientesAlvo = Array.from(new Set([...alvo, ...porCliente.flat()]));
   const [emp, cli, con] = await Promise.all([
     db.from("smartads_empresas").select("id").in("id", alvo),
-    db.from("smartads_clientes").select("id, empresa_id").in("id", alvo),
-    db.from("smartads_contas_meta").select("id, smartads_clientes(empresa_id)").in("id", alvo),
+    db.from("smartads_clientes").select("id, empresa_id").in("id", clientesAlvo),
+    db.from("smartads_contas_meta").select("id, smartads_clientes(empresa_id)").in("id", contasAlvo),
   ]);
   if ((emp.data ?? []).length > 0) return true;
   if ((cli.data ?? []).some((c) => !c.empresa_id || !empresas.includes(c.empresa_id))) return true;
@@ -100,6 +115,8 @@ export async function middleware(request: NextRequest) {
     // ser forjado editando o cookie.
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
+      // Já na tela de login (sessão apagada/revogada): deixa abrir, senão vira redirecionamento infinito.
+      if (request.nextUrl.pathname === "/login") return response;
       const destino = request.nextUrl.clone();
       destino.pathname = "/login";
       return NextResponse.redirect(destino);
@@ -157,9 +174,13 @@ async function aplicarRestricoes(
   ];
   // Ids enviados no corpo (JSON) de POST/PATCH também contam — sem isso dava pra consultar outra
   // empresa forjando a chamada à mão.
-  if (ehApi && request.method !== "GET" && request.method !== "HEAD" && (request.headers.get("content-type") ?? "").includes("json")) {
+  // Vale pra qualquer tipo de corpo (as rotas leem JSON sem olhar o content-type); upload de arquivo
+  // (multipart) fica de fora — nenhuma rota do app recebe arquivo assim.
+  if (ehApi && request.method !== "GET" && request.method !== "HEAD" && !(request.headers.get("content-type") ?? "").includes("multipart")) {
     try {
-      ids.push(...((await request.clone().text()).match(UUID) ?? []).slice(0, 200));
+      const doCorpo = (await request.clone().text()).match(UUID) ?? [];
+      if (doCorpo.length > 300) return negar(); // nunca "corta" a lista: muitos ids = recusa
+      ids.push(...doCorpo);
     } catch {
       return negar();
     }

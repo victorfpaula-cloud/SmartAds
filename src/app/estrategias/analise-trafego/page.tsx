@@ -43,13 +43,15 @@ export default async function AnaliseTrafegoPage({ searchParams }: { searchParam
     .map((u) => ({ u, m: u.atual[escopo], t: taxas(u.atual[escopo], dias), tAnt: taxas(u.anterior[escopo], dias), ant: u.anterior[escopo] }))
     .sort((a, b) => (a.t.custoEngajamento ?? Infinity) - (b.t.custoEngajamento ?? Infinity));
   const ativas = linhas.filter((l) => !l.u.erro && l.m.gasto >= GASTO_MINIMO_SEMANA * (dias / 7));
+  // As MESMAS medianas das dicas (com volume mínimo e pelo menos 3 unidades) — assim as cores da
+  // tabela nunca discordam das análises.
+  const medLib = analise ? calcularIndices(analise, escopo).medianas : new Map<string, number | null>();
   const med = {
-    custoEng: mediana(ativas.filter((l) => l.m.interacoes >= 50).map((l) => l.t.custoEngajamento)),
-    custoVisita: mediana(ativas.filter((l) => (l.m.visitasPerfil ?? 0) >= 10).map((l) => l.t.custoVisita)),
-    custoClique: mediana(ativas.filter((l) => (l.m.cliques ?? 0) >= 10).map((l) => l.t.custoClique)),
-    custoMil: mediana(ativas.map((l) => l.t.custoMilAlcance)),
-    custoMilViews: mediana(ativas.map((l) => l.t.custoMilVisualizacoes)),
-    taxaEng: mediana(ativas.map((l) => l.t.taxaEngajamento)),
+    custoMil: medLib.get("alcance") ?? null,
+    custoMilViews: medLib.get("visualizacoes") ?? null,
+    custoEng: medLib.get("engajamento") ?? null,
+    custoVisita: medLib.get("visitas") ?? null,
+    custoClique: medLib.get("cliques") ?? null,
     freq: mediana(ativas.map((l) => l.t.frequencia)),
     gastoDia: mediana(ativas.map((l) => l.t.gastoDia)),
   };
@@ -197,7 +199,7 @@ export default async function AnaliseTrafegoPage({ searchParams }: { searchParam
                     <th className="py-2 text-right font-medium">Cliques</th>
                     <th className="py-2 text-right font-medium">R$/clique</th>
                     <th className="py-2 text-right font-medium">Frequência</th>
-                    <th className="py-2 text-right font-medium">R$/engaj. antes</th>
+                    <th className="py-2 text-right font-medium">R$/engaj. período ant.</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -211,9 +213,9 @@ export default async function AnaliseTrafegoPage({ searchParams }: { searchParam
                       <td className="py-2 text-right tabular-nums">{R(t.gastoDia)}</td>
                       <td className="py-2 text-right tabular-nums">{I(m.alcance)}</td>
                       <td className="py-2 text-right font-semibold tabular-nums">{indices.find((x) => x.contaId === u.contaId)?.indice ?? "—"}</td>
-                      <td className={`py-2 text-right tabular-nums ${cor(t.custoMilAlcance, med.custoMil, true)}`}>{R(t.custoMilAlcance)}</td>
+                      <td className={`py-2 text-right tabular-nums ${m.alcance >= 1000 ? cor(t.custoMilAlcance, med.custoMil, true) : ""}`}>{R(t.custoMilAlcance)}</td>
                       <td className="py-2 text-right tabular-nums">{I(m.impressoes)}</td>
-                      <td className={`py-2 text-right tabular-nums ${cor(t.custoMilVisualizacoes, med.custoMilViews, true)}`}>{R(t.custoMilVisualizacoes)}</td>
+                      <td className={`py-2 text-right tabular-nums ${m.impressoes >= 2000 ? cor(t.custoMilVisualizacoes, med.custoMilViews, true) : ""}`}>{R(t.custoMilVisualizacoes)}</td>
                       <td className="py-2 text-right tabular-nums">{I(m.interacoes)}</td>
                       <td className={`py-2 text-right tabular-nums ${m.interacoes >= 50 ? cor(t.custoEngajamento, med.custoEng, true) : ""}`}>{R(t.custoEngajamento)}</td>
                       <td className="py-2 text-right tabular-nums">{I(m.visitasPerfil ?? 0)}</td>
@@ -245,7 +247,7 @@ export default async function AnaliseTrafegoPage({ searchParams }: { searchParam
                 </tbody>
               </table>
               <p className="mt-2 text-[10.5px] text-neutral-600">
-                Alcance é a soma das campanhas do período (a mesma pessoa em duas campanhas conta duas vezes). Engajamento = toda interação com o anúncio (curtida, comentário, compartilhamento, salvamento, clique e visualização de vídeo), como a Meta conta. Visitas e cliques só entram na comparação a partir de 10 no período; engajamento a partir de 50; alcance a partir de mil pessoas. Visitas e cliques aparecem a partir da próxima atualização.
+                Alcance é a soma das campanhas do período (a mesma pessoa em duas campanhas conta duas vezes). Engajamento = toda interação com o anúncio (curtida, comentário, compartilhamento, salvamento, clique e visualização de vídeo), como a Meta conta. Visitas e cliques só entram na comparação a partir de 10 no período; engajamento a partir de 50; alcance a partir de mil pessoas. 
               </p>
             </section>
           </>

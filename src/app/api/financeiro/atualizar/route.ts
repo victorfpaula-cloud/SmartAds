@@ -1,3 +1,5 @@
+import { lerAmbiente } from "@/lib/ambiente";
+import { lerAcesso } from "@/lib/acesso";
 import { NextResponse, type NextRequest } from "next/server";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { comContaMeta } from "@/lib/meta/conexao";
@@ -13,7 +15,14 @@ export async function POST(request: NextRequest) {
   const contaId: string | undefined = typeof corpo?.contaId === "string" ? corpo.contaId : undefined;
 
   const supabase = criarClienteAdmin();
-  const consulta = supabase.from("smartads_contas_meta").select("id, meta_ad_account_id").eq("ativo", true);
+  // Sem conta específica: só as contas do ambiente aberto (na visão geral, todas).
+  const ambiente = contaId ? null : await lerAmbiente();
+  const consulta = ambiente
+    ? supabase.from("smartads_contas_meta").select("id, meta_ad_account_id, smartads_clientes!inner(empresa_id)").eq("ativo", true).eq("smartads_clientes.empresa_id", ambiente.id)
+    : supabase.from("smartads_contas_meta").select("id, meta_ad_account_id").eq("ativo", true);
+  if (!contaId && !ambiente && (await lerAcesso()).restrito) {
+    return NextResponse.json({ erro: "Sem permissão." }, { status: 403 });
+  }
   const { data: contas } = await (contaId ? consulta.eq("id", contaId) : consulta);
   if (!contas || contas.length === 0) {
     return NextResponse.json({ erro: "Conta não encontrada." }, { status: 404 });

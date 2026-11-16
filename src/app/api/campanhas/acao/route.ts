@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { pausarCampanha, ativarCampanha, definirOrcamentoConjunto } from "@/lib/meta/api";
+import { pausarCampanha, ativarCampanha, definirOrcamentoConjunto, contaDeAnuncioDoObjeto } from "@/lib/meta/api";
+import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { registrarAcao } from "@/lib/meta/acoesLog";
 import { comContaMeta } from "@/lib/meta/conexao";
 import { ErroMetaNaoConectado } from "@/lib/meta/token";
@@ -17,10 +18,17 @@ export async function POST(request: NextRequest) {
   if (!corpo) {
     return NextResponse.json({ erro: "Requisição inválida." }, { status: 400 });
   }
+  if (corpo.acao === "orcamento" && (!Number.isInteger(corpo.valorCentavos) || corpo.valorCentavos <= 0)) {
+    return NextResponse.json({ erro: "Informe um orçamento maior que zero." }, { status: 400 });
+  }
 
   try {
     // IDs de campanha/conjunto não dizem de qual conta são — usa a conexão da Meta da conta.
     const acaoValida = await comContaMeta(corpo.contaId, async () => {
+      // O id da campanha/conjunto tem de ser da conta informada (não dá pra mexer em campanha de outra).
+      const { data: conta } = await criarClienteAdmin().from("smartads_contas_meta").select("meta_ad_account_id").eq("id", corpo.contaId).maybeSingle();
+      const dona = await contaDeAnuncioDoObjeto(corpo.acao === "orcamento" ? corpo.adsetId : corpo.campaignId);
+      if (!conta || (dona && dona !== conta.meta_ad_account_id)) return false;
       if (corpo.acao === "pausar") {
         await pausarCampanha(corpo.campaignId);
       } else if (corpo.acao === "ativar") {

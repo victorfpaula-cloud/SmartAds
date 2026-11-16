@@ -21,10 +21,24 @@ export const GET = comRegistroDeCron("automacao", async function (request: NextR
     return NextResponse.json({ erro: "Não autorizado." }, { status: 401 });
   }
 
-  await avaliarRegras();
-  await avaliarTestesAb();
-  await executarPilotoAutomatico();
-  await avaliarPlanosExecucao();
-
+  // Cada rotina isolada: uma que falha não impede as outras de rodar.
+  const falhas: string[] = [];
+  for (const [nome, rotina] of [
+    ["regras", avaliarRegras],
+    ["testes A/B", avaliarTestesAb],
+    ["piloto automático", executarPilotoAutomatico],
+    ["planos de execução", avaliarPlanosExecucao],
+  ] as const) {
+    try {
+      await rotina();
+    } catch (e) {
+      console.error(`Automação (${nome}) falhou:`, e);
+      falhas.push(`${nome}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  if (falhas.length > 0) {
+    // 500 pra o registro do cron marcar a falha e ela aparecer nos Alertas.
+    return NextResponse.json({ erro: falhas.join(" | ").slice(0, 400), executadoEm: new Date().toISOString() }, { status: 500 });
+  }
   return NextResponse.json({ ok: true, executadoEm: new Date().toISOString() });
 });

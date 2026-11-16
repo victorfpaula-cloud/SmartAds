@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { reaisDigitadosParaCentavos } from "@/lib/valorEmReais";
 import Link from "next/link";
 import { NotePencil, TestTube, X } from "@phosphor-icons/react";
 
@@ -244,7 +245,13 @@ export default function PainelCampanhasDaConta({
     const novoValor = prompt(`Novo orçamento ${tipo === "diario" ? "diário" : "total"} (R$):`, String(atual));
     if (!novoValor) return;
 
-    const valorCentavos = Math.round(parseFloat(novoValor.replace(",", ".")) * 100);
+    const valorCentavos = reaisDigitadosParaCentavos(novoValor);
+    if (!valorCentavos || valorCentavos <= 0) {
+      alert("Valor inválido. Digite só o número, por exemplo 25 ou 25,50.");
+      return;
+    }
+    const formatado = (valorCentavos / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+    if (!window.confirm(`Mudar o orçamento ${tipo === "diario" ? "diário" : "total"} de "${campanha.name}" para ${formatado}?`)) return;
     setExecutando(campanha.id);
     const resposta = await fetch("/api/campanhas/acao", {
       method: "POST",
@@ -464,13 +471,6 @@ export default function PainelCampanhasDaConta({
           {carregandoMais ? "Carregando…" : "Carregar mais campanhas"}
         </button>
       )}
-
-      <Link
-        href={`/campanhas/nova/${contaId}`}
-        className="w-fit rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-strong"
-      >
-        + Nova campanha
-      </Link>
 
       {campanhaComNotas && (
         <ModalAnotacoes campanha={campanhaComNotas} onFechar={() => setCampanhaComNotas(null)} />

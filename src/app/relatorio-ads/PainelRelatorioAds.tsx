@@ -16,8 +16,8 @@ export interface OpcaoConta {
 
 const PERIODOS = [15, 30, 45, 60, 90];
 
-export default function PainelRelatorioAds({ contas }: { contas: OpcaoConta[] }) {
-  const [contaId, setContaId] = useState(contas[0]?.id ?? "");
+export default function PainelRelatorioAds({ contas, contaInicial }: { contas: OpcaoConta[]; contaInicial?: string }) {
+  const [contaId, setContaId] = useState(contaInicial ?? contas[0]?.id ?? "");
   const [dias, setDias] = useState(30);
   const [organico, setOrganico] = useState(false);
   const [dados, setDados] = useState<DadosRelatorioAds | null>(null);

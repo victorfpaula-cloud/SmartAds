@@ -50,8 +50,18 @@ export default async function CampanhasDaContaPage({ params }: { params: Promise
         <Link href="/campanhas" className="text-xs text-neutral-500 hover:text-neutral-300">
           ← Campanhas
         </Link>
-        <h1 className="mt-1 font-display text-2xl font-bold">{nomeCliente}</h1>
-        <p className="mt-1 text-sm text-neutral-400">{nomeConta}</p>
+        <div className="mt-1 flex flex-wrap items-end justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="font-display text-2xl font-bold">{nomeCliente}</h1>
+            <p className="mt-1 text-sm text-neutral-400">{nomeConta}</p>
+          </div>
+          <Link
+            href={`/campanhas/nova/${contaId}`}
+            className="shrink-0 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-strong"
+          >
+            + Nova campanha
+          </Link>
+        </div>
 
         <div className="mt-6">
           <PainelCampanhasDaConta

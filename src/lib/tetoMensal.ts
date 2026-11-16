@@ -276,6 +276,7 @@ export function montarPlanoTeto(
     passos.push(`Dentro do teto: projeção de ~${reais(projetado)} de ${reais(teto)}.`);
     if (sobra > 0 && diasRestantes >= 1) passos.push(`Ainda cabem ~${reais(sobra)} em campanhas novas neste mês (até ${reais(Math.floor(sobra / diasRestantes))} por dia a mais).`);
   }
+  if (c.gasto === null) passos.unshift("Atenção: não consegui ler na Meta o gasto do mês agora — os números abaixo consideram gasto zero e podem estar abaixo do real. Atualize a página em alguns minutos.");
   if (!c.campanhasLidas) passos.push("A Meta não devolveu a lista de campanhas agora — a projeção considera só o que já foi gasto.");
   return { ...base, disponivelCentavos: disponivel, ritmoIdealCentavos: ideal, dataDoTeto, status, passos };
 }

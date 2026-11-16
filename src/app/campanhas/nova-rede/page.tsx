@@ -1,3 +1,4 @@
+import Link from "next/link";
 import Cabecalho from "@/components/Cabecalho";
 import { AbasCampanhas } from "@/components/AbasRede";
 import { exigirAmbiente } from "@/lib/ambiente";
@@ -34,10 +35,13 @@ export default async function NovaCampanhaRedePage() {
       <Cabecalho ativo="/campanhas" />
       <main className="mx-auto max-w-6xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
         <AbasCampanhas />
+        <Link href="/campanhas" className="mb-1 block text-xs text-neutral-500 hover:text-neutral-300">
+          ← Campanhas
+        </Link>
         <h1 className="font-display text-2xl font-bold">Nova campanha para várias unidades</h1>
         <p className="mt-1 text-sm text-neutral-400">
           Escolha as unidades, envie a arte e publique a mesma campanha de alcance em todas. Cada unidade usa o público
-          salvo dela. As campanhas nascem pausadas, pra você conferir antes de ligar.
+          salvo dela. As campanhas já entram no ar (ativas) em cada unidade assim que são criadas.
         </p>
         <FormularioCampanhaRede unidades={unidades} />
       </main>
