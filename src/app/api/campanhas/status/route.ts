@@ -40,7 +40,8 @@ export async function GET(request: NextRequest) {
       // vida inteira pro número exibido) — uma conta com gasto lifetime mas nada recente agora fica
       // "relevante" por mais tempo do que antes, troca aceitável por bater na Meta metade das vezes
       // nessa tela, que é visitada o tempo todo.
-      obterInsightsConta(conta.meta_ad_account_id, { nivel: "campaign", datePreset: "maximum", porDia: false }),
+      // Falha aqui não derruba a lista: as campanhas aparecem sem o gasto total.
+      obterInsightsConta(conta.meta_ad_account_id, { nivel: "campaign", datePreset: "maximum", porDia: false }).catch(() => null),
       supabase
         .from("smartads_campanhas_criadas")
         .select("id, meta_campaign_id, meta_adset_id, tipo_modelo, meta_ad_ids")
@@ -59,7 +60,7 @@ export async function GET(request: NextRequest) {
     const gastoMesPorCampanha = new Map((insightsMes ?? []).map((i) => [i.campaign_id, Number(i.spend ?? 0)]));
     const gastoMesTotalReais = insightsMes ? [...gastoMesPorCampanha.values()].reduce((a, b) => a + b, 0) : null;
 
-    const gastoPorCampanha = new Map(insights.map((i) => [i.campaign_id, i.spend]));
+    const gastoPorCampanha = new Map((insights ?? []).map((i) => [i.campaign_id, i.spend]));
     const cachePorCampanha = new Map((cache ?? []).map((c) => [c.meta_campaign_id, c]));
 
     // Orçamento da campanha = soma dos conjuntos dela: só os ativos quando a campanha está ativa (um

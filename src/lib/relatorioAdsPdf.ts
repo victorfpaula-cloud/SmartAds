@@ -99,7 +99,8 @@ export async function montarPdfRelatorioAds(dados: DadosRelatorioAds, opcoes: Op
     doc.setFont("helvetica", negrito ? "bold" : "normal");
     doc.setFontSize(tam);
     doc.setTextColor(...cor);
-    doc.text(t, x, yy, { align: alinhar });
+    // A fonte do PDF (Helvetica) só tem Latin-1: emoji (ex.: o 🤖 do nome das campanhas) virava lixo.
+    doc.text(t.replace(/[^\u0000-\u00FF]/g, "").replace(/\s{2,}/g, " ").trim(), x, yy, { align: alinhar });
   };
   const cartao = (x: number, yy: number, w: number, h: number) => {
     doc.setFillColor(...COR.card);
@@ -321,7 +322,7 @@ export async function montarPdfRelatorioAds(dados: DadosRelatorioAds, opcoes: Op
 }
 
 export function nomeArquivoRelatorio(dados: DadosRelatorioAds, sufixo: string): string {
-  const slug = (dados.conta.clienteNome || dados.conta.contaNome).toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const slug = (dados.conta.clienteNome || dados.conta.contaNome).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   return `relatorio-ads-${slug}-${sufixo}.pdf`;
 }
 

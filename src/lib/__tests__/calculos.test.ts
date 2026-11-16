@@ -228,7 +228,7 @@ describe("análise do tráfego", () => {
   it("pares com investimento parecido usam 'x mais' e nunca percentual gigante", () => {
     const ins = gerarInsights(analise([unidade("Olímpia", m(70, 14000, 300)), unidade("Ribeirão", m(70, 10000, 100)), unidade("Bauru", m(140, 20000, 300))]), "boost");
     const par = ins.find((i) => i.unidade === "Ribeirão" && /Investe parecido com Olímpia/.test(i.titulo));
-    expect(par?.titulo).toContain("mais que o dobro de mais engajamento por real");
+    expect(par?.titulo).toContain("mais que o dobro de engajamento por real");
     expect(ins.every((i) => !/\d{3,}%/.test(i.titulo))).toBe(true);
   });
 
@@ -245,5 +245,22 @@ describe("conta central da rede fora da análise", () => {
     expect(ehContaCentralDaRede("Dona Baunilha - Principal")).toBe(true);
     expect(ehContaCentralDaRede("Dona Baunilha - Expansão")).toBe(true);
     expect(ehContaCentralDaRede("DB - Ribeirão")).toBe(false);
+  });
+});
+
+import { semanaDoRelatorio } from "@/lib/relatorioMensal";
+describe("correções da varredura", () => {
+  it("valor digitado não aceita notação estranha", () => {
+    expect(reaisDigitadosParaCentavos("1e3")).toBeNull();
+    expect(reaisDigitadosParaCentavos("0x10")).toBeNull();
+    expect(reaisDigitadosParaCentavos("1.500,00")).toBe(150000);
+  });
+  it("relatório semanal: segunda e terça usam a mesma semana (sem e-mail em dobro)", () => {
+    const seg = semanaDoRelatorio(sp("2026-11-09T08:00:00"));
+    const ter = semanaDoRelatorio(sp("2026-11-10T08:00:00"));
+    expect(seg.mes).toBe("semana-2026-11-09");
+    expect(ter.mes).toBe(seg.mes);
+    expect(ter.desde).toBe("2026-11-02");
+    expect(ter.ate).toBe("2026-11-08");
   });
 });

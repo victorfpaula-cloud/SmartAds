@@ -6,7 +6,7 @@ import PainelRelatorioAds, { type OpcaoConta } from "./PainelRelatorioAds";
 
 export const dynamic = "force-dynamic";
 
-export default async function RelatorioAdsPage() {
+export default async function RelatorioAdsPage({ searchParams }: { searchParams: { conta?: string } }) {
   const supabase = criarClienteAdmin();
   const ambiente = await lerAmbiente();
   let consulta = supabase
@@ -34,13 +34,13 @@ export default async function RelatorioAdsPage() {
     <>
       <Cabecalho ativo="/relatorio-ads" />
       <main className="mx-auto max-w-6xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
-        <h1 className="font-display text-2xl font-bold">Relatórios</h1>
+        <h1 className="font-display text-2xl font-bold">Relatório por conta (PDF)</h1>
         <p className="mt-1 text-sm text-neutral-400">
           Só os números do tráfego pago: alcance, engajamento, visitas ao perfil e investimento.
         </p>
         <div className="mt-4">
           <AbasRelatorios ativa="conta" />
-          <PainelRelatorioAds contas={contas} />
+          <PainelRelatorioAds contas={contas} contaInicial={contas.some((c) => c.id === searchParams.conta) ? searchParams.conta : undefined} />
         </div>
       </main>
     </>

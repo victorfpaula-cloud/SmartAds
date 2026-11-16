@@ -104,7 +104,9 @@ export async function carregarLinhasRede(empresaId: string, mes: MesRelatorio): 
     }
     const item = (chave: string) => d.organico?.find((i) => i.chave === chave)?.total ?? null;
     const alcance = item("alcance") ?? d.instagram?.alcance ?? null;
-    const interacoes = item("interacoes");
+    // Interações = curtidas + comentários + compartilhamentos + salvamentos (mesma conta da Saúde da rede).
+    const partes = ["curtidas", "comentarios", "compartilhamentos", "salvamentos"].map(item);
+    const interacoes = partes.every((p) => p === null) ? null : partes.reduce<number>((t, p) => t + (p ?? 0), 0);
     linhas.push({
       contaId: c.contaId,
       unidade: c.unidade,
@@ -139,7 +141,8 @@ export async function montarPdfRede(empresaNome: string, mes: MesRelatorio, linh
     doc.setFont("helvetica", negrito ? "bold" : "normal");
     doc.setFontSize(tam);
     doc.setTextColor(...cor);
-    doc.text(t, x, yy, { align: alinhar });
+    // A fonte do PDF (Helvetica) só tem Latin-1: emoji (ex.: o 🤖 do nome das campanhas) virava lixo.
+    doc.text(t.replace(/[^\u0000-\u00FF]/g, "").replace(/\s{2,}/g, " ").trim(), x, yy, { align: alinhar });
   };
 
   const ok = linhas.filter((l) => !l.erro);
@@ -282,7 +285,7 @@ export async function enviarRelatorioRede(
     destinatario: DESTINATARIO_REDE,
     assunto: `Relatório mensal da rede · ${mes.rotulo} — ${nome}`,
     html,
-    anexos: [{ nome: `relatorio-rede-${nome.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${mes.mes}.pdf`, conteudo: Buffer.from(doc.output("arraybuffer")) }],
+    anexos: [{ nome: `relatorio-rede-${nome.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-${mes.mes}.pdf`, conteudo: Buffer.from(doc.output("arraybuffer")) }],
   });
   await db.from("smartads_relatorio_rede_envios").upsert({ empresa_id: empresaId, mes: mes.mes, destinatario: DESTINATARIO_REDE, enviado_em: new Date().toISOString() });
   return { enviado: true };

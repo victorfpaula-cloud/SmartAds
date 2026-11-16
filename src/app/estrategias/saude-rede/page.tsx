@@ -181,7 +181,7 @@ export default async function SaudeDaRedePage({ searchParams }: { searchParams: 
               >
                 <Divisao parte={r.divisao.interacoes} unidadesComIg={unidadesIg} />
               </Kpi>
-              <Kpi rotulo="Novos seguidores" valor={`+${n0.format(r.novosSeguidores)}`} delta={<Delta atual={r.novosSeguidores} anterior={a ? a.novosSeguidores : null} />} nota={`${compacto(r.seguidores)} seguidores somando todas as unidades`} />
+              <Kpi rotulo="Novos seguidores" valor={`${r.novosSeguidores >= 0 ? "+" : ""}${n0.format(r.novosSeguidores)}`} delta={<Delta atual={r.novosSeguidores} anterior={a ? a.novosSeguidores : null} />} nota={`${compacto(r.seguidores)} seguidores somando todas as unidades`} />
               <Kpi rotulo="Visitas ao perfil" valor={compacto(r.visitasPerfil)} delta={<Delta atual={r.visitasPerfil} anterior={a ? a.visitasPerfil : null} />} />
               <Kpi
                 rotulo="Posts publicados"
@@ -303,7 +303,7 @@ export default async function SaudeDaRedePage({ searchParams }: { searchParams: 
                         <td className="px-4 py-3 text-neutral-300">{l.interacoes !== null ? compacto(l.interacoes) : "—"}</td>
                         <td className="px-4 py-3 text-neutral-300">{l.taxaEngajamento !== null ? `${n1.format(l.taxaEngajamento)}%` : "—"}</td>
                         <td className="px-4 py-3 text-neutral-300">{l.posts ?? "—"}</td>
-                        <td className="px-4 py-3 text-neutral-300">{l.novosSeguidores !== null ? `+${n0.format(l.novosSeguidores)}` : "—"}</td>
+                        <td className="px-4 py-3 text-neutral-300">{l.novosSeguidores !== null ? `${l.novosSeguidores >= 0 ? "+" : ""}${n0.format(l.novosSeguidores)}` : "—"}</td>
                         <td className="px-4 py-3 text-neutral-300">{l.gasto > 0 ? real.format(l.gasto) : "—"}</td>
                       </>
                     ) : (

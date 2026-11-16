@@ -1,5 +1,6 @@
 "use client";
 
+import { reaisDigitadosParaCentavos } from "@/lib/valorEmReais";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Lightning, X } from "@phosphor-icons/react";
@@ -8,7 +9,7 @@ import { ROTULO_ENTREGA, DESCRICAO_ENTREGA, custoPorBoostCentavos, type TipoEntr
 
 const TIPOS: TipoEntregaBoost[] = ["engajamento", "alcance", "ambos"];
 const POSTS_POR_DIA = [
-  { valor: 1, rotulo: "1 por dia (o primeiro)" },
+  { valor: 1, rotulo: "1 por dia" },
   { valor: 2, rotulo: "Até 2 por dia" },
   { valor: 3, rotulo: "Até 3 por dia" },
   { valor: 10, rotulo: "Todos os posts do dia" },
@@ -71,8 +72,9 @@ export default function ModalBoostAutomatico({
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [montado, setMontado] = useState(false);
-  const [tipoEntrega, setTipoEntrega] = useState<TipoEntregaBoost>("engajamento");
-  const [postsPorDia, setPostsPorDia] = useState(1);
+  const [tipoEntrega, setTipoEntrega] = useState<TipoEntregaBoost>(conta.boost_tipo_entrega ?? "engajamento");
+  // Começa pelo que já está salvo na conta: salvar rápido (antes da leitura extra voltar) não troca a config pelos padrões.
+  const [postsPorDia, setPostsPorDia] = useState(conta.boost_posts_por_dia ?? 1);
   const [configCarregada, setConfigCarregada] = useState(false);
 
   // O modal é aberto de dentro de cards com blur (.cartao-vidro): um ancestral com backdrop-filter
@@ -110,10 +112,19 @@ export default function ModalBoostAutomatico({
     evento.preventDefault();
     setErro(null);
 
-    const valorDigitado = orcamento.trim() ? Math.round(parseFloat(orcamento.replace(",", ".")) * 100) : null;
+    const valorDigitado = orcamento.trim() ? reaisDigitadosParaCentavos(orcamento) : null;
     const valorCentavos = valorDigitado;
     if (ativo && (!publicoId || !valorCentavos || valorCentavos <= 0)) {
       setErro("Selecione um público e informe um orçamento diário maior que zero.");
+      return;
+    }
+    // Proteção contra erro de digitação (ex.: 5000 no lugar de 50).
+    if (
+      ativo &&
+      valorCentavos &&
+      valorCentavos > 10000 &&
+      !window.confirm(`Confirma ${(valorCentavos / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} POR DIA em cada boost desta conta?`)
+    ) {
       return;
     }
 
@@ -261,7 +272,7 @@ export default function ModalBoostAutomatico({
           </div>
 
           {(() => {
-            const orc = orcamento.trim() ? Math.round(parseFloat(orcamento.replace(",", ".")) * 100) : 0;
+            const orc = orcamento.trim() ? reaisDigitadosParaCentavos(orcamento) ?? 0 : 0;
             if (!orc || !Number.isFinite(orc)) return null;
             const custo = custoPorBoostCentavos(orc, duracaoDias, tipoEntrega);
             const fmt = (c: number) => `R$ ${(c / 100).toFixed(2).replace(".", ",")}`;

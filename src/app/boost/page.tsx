@@ -42,9 +42,9 @@ export default async function BoostPage({ searchParams }: { searchParams: { empr
         </p>
         {empresa?.tipo === "franquia" && (
           <p className="mt-2 rounded-lg border border-accent/30 bg-accent/10 px-3 py-2 text-xs leading-relaxed text-neutral-200">
-            Na franquia o boost turbina <strong>só os posts oficiais da rede</strong>: os que pelo menos 2 unidades publicam
-            com a mesma legenda (o boost sai assim que a segunda posta) (vale mesmo se a unidade postar com até 3 dias de atraso). Post próprio da unidade não é
-            turbinado.
+            Na franquia o boost turbina <strong>só os posts oficiais da rede</strong>: os que pelo menos 2 unidades
+            diferentes publicam com a mesma legenda. Sai assim que a segunda unidade posta e vale também pra quem postar
+            com até 3 dias de atraso. Post próprio da unidade não é turbinado.
           </p>
         )}
 

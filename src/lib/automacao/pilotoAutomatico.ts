@@ -27,7 +27,7 @@ export async function executarPilotoAutomatico() {
   await executarEmLotes(pilotos ?? [], async (piloto) => {
     if (piloto.ultimo_ajuste_em) {
       const horasDesde = (Date.now() - new Date(piloto.ultimo_ajuste_em).getTime()) / 3_600_000;
-      if (horasDesde < COOLDOWN_HORAS) return;
+      if (horasDesde < COOLDOWN_HORAS - 1) return; // 1h de folga (cron diário; ver regras.ts)
     }
 
     const { data: contas } = await supabase

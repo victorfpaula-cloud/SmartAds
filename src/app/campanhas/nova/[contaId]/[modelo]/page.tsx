@@ -1,3 +1,4 @@
+import Link from "next/link";
 import Cabecalho from "@/components/Cabecalho";
 import { MODELOS_CAMPANHA } from "@/lib/meta/modelos";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
@@ -38,6 +39,9 @@ export default async function FormularioCampanhaPage({
     <>
       <Cabecalho ativo="/campanhas" />
       <main className="mx-auto max-w-6xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
+        <Link href={`/campanhas/nova/${params.contaId}`} className="mb-1 block text-xs text-neutral-500 hover:text-neutral-300">
+          ← Escolher outro objetivo
+        </Link>
         <p className="text-xs font-medium text-neutral-500">
           {(conta as any).smartads_clientes?.nome} · {conta.nome_exibicao || conta.meta_ad_account_nome}
         </p>

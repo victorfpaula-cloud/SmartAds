@@ -56,7 +56,9 @@ export async function avaliarRegras() {
   for (const regra of regras ?? []) {
     if (regra.ultimo_disparo_em) {
       const horasDesde = (Date.now() - new Date(regra.ultimo_disparo_em).getTime()) / 3_600_000;
-      if (horasDesde < regra.cooldown_horas) continue;
+      // 1h de tolerância: o cron roda 1x/dia e o disparo é gravado segundos depois do início — sem a
+      // folga, um intervalo de 24h só liberava a regra dia sim, dia não.
+      if (horasDesde < regra.cooldown_horas - 1) continue;
     }
 
     const adAccountId = (regra as any).smartads_contas_meta?.meta_ad_account_id;

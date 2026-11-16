@@ -82,16 +82,21 @@ export async function carregarHistoricoSeguidores(empresaId: string): Promise<Hi
     vistos.add(c.instagramId);
     return true;
   });
-  const { data } =
-    unicas.length > 0
-      ? await criarClienteAdmin()
-          .from("smartads_seguidores_snapshot")
-          .select("conta_id, dia, seguidores")
-          .in("conta_id", unicas.map((c) => c.contaId))
-          .gte("dia", adicionarDias(hoje, -95))
-          .order("dia", { ascending: true })
-          .range(0, 9999)
-      : { data: [] as Array<{ conta_id: string; dia: string; seguidores: number }> };
+  // O Supabase devolve no máximo 1000 linhas por consulta (17 unidades × 95 dias passa disso) — busca
+  // em páginas, senão os dias mais recentes ficavam de fora.
+  const data: Array<{ conta_id: string; dia: string; seguidores: number }> = [];
+  for (let de = 0; unicas.length > 0 && de < 20_000; de += 1000) {
+    const { data: pagina } = await criarClienteAdmin()
+      .from("smartads_seguidores_snapshot")
+      .select("conta_id, dia, seguidores")
+      .in("conta_id", unicas.map((c) => c.contaId))
+      .gte("dia", adicionarDias(hoje, -95))
+      .order("dia", { ascending: true })
+      .order("conta_id", { ascending: true })
+      .range(de, de + 999);
+    data.push(...((pagina ?? []) as typeof data));
+    if (!pagina || pagina.length < 1000) break;
+  }
 
   const porConta = new Map<string, Array<{ dia: string; v: number }>>();
   for (const l of data ?? []) {

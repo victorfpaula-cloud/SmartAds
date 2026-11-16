@@ -1,3 +1,4 @@
+import Link from "next/link";
 import Cabecalho from "@/components/Cabecalho";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { MODELOS_CAMPANHA } from "@/lib/meta/modelos";
@@ -100,6 +101,9 @@ export default async function NovaCampanhaDoPlanoPage({
     <>
       <Cabecalho ativo="/estrategias" />
       <main className="mx-auto max-w-6xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
+        <Link href="/campanhas" className="mb-1 block text-xs text-neutral-500 hover:text-neutral-300">
+          ← Campanhas
+        </Link>
         <p className="text-xs font-medium text-neutral-500">
           {conta.smartads_clientes?.nome} · {plano.nome}
         </p>

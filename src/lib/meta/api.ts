@@ -1317,6 +1317,13 @@ export interface ConjuntoResumoMeta {
   lifetime_budget?: string;
 }
 
+/** Conta de anúncio ("act_…") dona de uma campanha/conjunto/anúncio — pra conferir que o id recebido
+ * é mesmo da conta em que a pessoa está mexendo. */
+export async function contaDeAnuncioDoObjeto(objetoId: string): Promise<string | null> {
+  const d = await chamar<{ account_id?: string }>(objetoId, { query: { fields: "account_id" } });
+  return d.account_id ? `act_${d.account_id}` : null;
+}
+
 /** Conjuntos de anúncios da conta (id da campanha, status e orçamento). O SmartAds cria as campanhas
  * com o orçamento no CONJUNTO (ver criarConjuntoDeAnuncios), então `daily_budget` na campanha vem
  * vazio — o orçamento real de cada campanha é a soma dos conjuntos dela. Até 4 páginas de 100. */

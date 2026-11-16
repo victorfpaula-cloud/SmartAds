@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import ModalBoostAutomatico, { type ContaBoost, type AlteracoesBoost } from "@/components/ModalBoostAutomatico";
 import { ROTULO_ENTREGA, custoPorBoostCentavos, type TipoEntregaBoost } from "@/lib/boostRede";
 
@@ -51,7 +52,7 @@ export default function PainelBoost({ unidades: unidadesIniciais }: { unidades: 
                 return (
                   <tr key={c.id}>
                     <td className="px-4 py-3">
-                      <a href={`/unidade/${c.id}`} className="font-medium text-neutral-100 underline-offset-2 hover:underline">{u.clienteNome}</a>
+                      <Link href={`/unidade/${c.id}`} className="font-medium text-neutral-100 underline-offset-2 hover:underline">{u.clienteNome}</Link>
                       <p className="text-[10.5px] text-neutral-600">{c.nome_exibicao || c.meta_ad_account_nome || c.meta_ad_account_id}</p>
                     </td>
                     <td className="px-4 py-3">

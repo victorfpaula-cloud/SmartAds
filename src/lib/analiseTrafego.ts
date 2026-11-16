@@ -155,6 +155,12 @@ export async function calcularAnaliseTrafego(empresaId: string, dias: number = 7
   );
 
   const analise: AnaliseTrafego = { calculadoEm: new Date().toISOString(), dias, periodo: { desde, ate }, unidades };
+  // Rodada em que a maioria das unidades falhou (Meta fora, tempo esgotado) não apaga a análise boa
+  // que já estava guardada.
+  const comErro = unidades.filter((u) => u.erro).length;
+  if (unidades.length > 0 && comErro > unidades.length / 2) {
+    throw new Error(`Não consegui ler ${comErro} de ${unidades.length} unidades na Meta agora. A análise anterior foi mantida — tente de novo em alguns minutos.`);
+  }
   await criarClienteAdmin()
     .from("smartads_analise_trafego")
     .upsert({ empresa_id: empresaId, dias, dados: analise, calculado_em: analise.calculadoEm });
@@ -271,7 +277,7 @@ export function regua(custo: number, mediana: number): { faixa: "bem_melhor" | "
   return { faixa: "bem_pior", texto: "mais que o dobro da mediana da rede" };
 }
 
-const vezes = (r: number) => (r >= 2 ? "mais que o dobro de" : `${D(r)}x`);
+const vezes = (r: number) => (r >= 2 ? "mais que o dobro de" : `${D(r)}x mais`);
 
 export interface IndiceUnidade {
   contaId: string;
@@ -346,6 +352,9 @@ export function gerarInsights(analise: AnaliseTrafego, escopo: Escopo): Insight[
   for (const met of METRICAS) {
     const med = medianas.get(met.chave);
     if (!med) continue;
+    // Visualizações entra no índice geral, mas não vira dica própria: o custo dela e o do alcance
+    // diferem só pela frequência, e as duas dicas juntas se contradiziam.
+    if (met.chave === "visualizacoes") continue;
     for (const l of ativas) {
       const c = met.custo(l.t);
       if (c === null || met.volume(l.m) < met.minimo) continue;
@@ -365,11 +374,8 @@ export function gerarInsights(analise: AnaliseTrafego, escopo: Escopo): Insight[
   }
 
   // 2) Vídeo: gancho (quem para pra ver) e retenção (quem assiste até 15s/fim).
-  const medGancho = mediana(ativas.filter((l) => (l.m.videoViews ?? 0) >= 100).map((l) => l.t.ganchoVideo));
   const medRet = mediana(ativas.map((l) => l.t.retencaoVideo));
   for (const l of ativas) {
-    if (medGancho && l.t.ganchoVideo !== null && (l.m.videoViews ?? 0) >= 100 && l.t.ganchoVideo < medGancho * 0.7)
-      ins.push({ tom: "oportunidade", unidade: l.u.unidade, metrica: "Vídeo", titulo: "Pouca gente para pra ver o vídeo", detalhe: `${B(D(l.t.ganchoVideo) + "%")} das visualizações viram vídeo de 3s+ (mediana ${D(medGancho)}%).`, acao: "Os **primeiros 2 segundos** do Reels decidem: comece pelo doce/produto em close, com texto grande na tela." });
     if (medRet && l.t.retencaoVideo !== null && l.t.retencaoVideo < medRet * 0.7)
       ins.push({ tom: "info", unidade: l.u.unidade, metrica: "Vídeo", titulo: "Assistem pouco do vídeo", detalhe: `Só ${B(D(l.t.retencaoVideo) + "%")} de quem começou assistiu 15s ou até o fim (mediana ${D(medRet)}%).`, acao: "Prefira turbinar **Reels mais curtos** (até 15s) ou com a parte principal logo no início." });
   }
@@ -396,14 +402,16 @@ export function gerarInsights(analise: AnaliseTrafego, escopo: Escopo): Insight[
         ? `Motivo: ${B("público mais caro")} — ${R(pior.t.custoMilAlcance ?? 0)} por mil pessoas contra ${R(melhor.t.custoMilAlcance ?? 0)}; o post engaja parecido.`
         : postFraco && !publicoCaro
           ? `Motivo: ${B("post engaja menos")} — ${D(rP)} engajamentos a cada 100 pessoas contra ${D(rM)}; o alcance custa parecido.`
-          : `Motivo: ${B("os dois")} — alcance a ${R(pior.t.custoMilAlcance ?? 0)} por mil (contra ${R(melhor.t.custoMilAlcance ?? 0)}) e ${D(rP)} engajamentos a cada 100 pessoas (contra ${D(rM)}).`;
+          : publicoCaro && postFraco
+            ? `Motivo: ${B("os dois")} — alcance a ${R(pior.t.custoMilAlcance ?? 0)} por mil (contra ${R(melhor.t.custoMilAlcance ?? 0)}) e ${D(rP)} engajamentos a cada 100 pessoas (contra ${D(rM)}).`
+            : `Custo do alcance (${R(pior.t.custoMilAlcance ?? 0)} contra ${R(melhor.t.custoMilAlcance ?? 0)} por mil) e resposta ao post (${D(rP)} contra ${D(rM)} a cada 100) são parecidos: a diferença vem de um pouco de cada.`;
       ins.push({
         tom: "oportunidade",
         unidade: pior.u.unidade,
         metrica: "Comparação",
-        titulo: `Investe parecido com ${melhor.u.unidade}, que tira ${vezes(razao)} mais engajamento por real`,
+        titulo: `Investe parecido com ${melhor.u.unidade}, que tira ${vezes(razao)} engajamento por real`,
         detalhe: `${pior.u.unidade}: ${B(R(pior.t.gastoDia) + "/dia")} → ${I(pior.m.alcance)} alcançados, ${I(pior.m.interacoes)} engajamentos. ${melhor.u.unidade}: ${B(R(melhor.t.gastoDia) + "/dia")} → ${I(melhor.m.alcance)} alcançados, ${I(melhor.m.interacoes)} engajamentos. ${motivo}`,
-        acao: publicoCaro && !postFraco ? acaoPorMetrica("alcance") : postFraco && !publicoCaro ? acaoPorMetrica("engajamento") : "Comece pelo **público** (raio maior, menos filtros) e depois priorize os **posts que mais engajaram**.",
+        acao: publicoCaro && !postFraco ? acaoPorMetrica("alcance") : postFraco && !publicoCaro ? acaoPorMetrica("engajamento") : publicoCaro && postFraco ? "Comece pelo **público** (raio maior, menos filtros) e depois priorize os **posts que mais engajaram**." : undefined,
       });
     }
   }
@@ -415,7 +423,7 @@ export function gerarInsights(analise: AnaliseTrafego, escopo: Escopo): Insight[
     if (!topEng || l === topEng || l.m.interacoes < 50 || !l.t.custoEngajamento) continue;
     if (l.m.interacoes >= topEng.m.interacoes * 0.8) continue;
     const r = medEng ? regua(l.t.custoEngajamento, medEng) : null;
-    if (r && (r.faixa === "bem_pior" || r.faixa === "pior")) continue;
+    if (!r || (r.faixa !== "melhor" && r.faixa !== "bem_melhor")) continue; // só pra quem já tem custo melhor que a rede
     const necessarioDia = (topEng.m.interacoes / dias) * l.t.custoEngajamento;
     const passos: number[] = [];
     let atual = l.t.gastoDia;

@@ -90,10 +90,12 @@ export async function gerarAlertas(empresaId: string, agora = new Date()): Promi
 
     // Saldo (só faz sentido em conta pré-paga ou com saldo informado)
     const prev = calcularPrevisaoSaldo(c.saldoDisponivelCentavos, c.mediaDiariaCentavos, agora, c.contaPrePaga);
-    if (c.saldoDisponivelCentavos !== null && c.saldoDisponivelCentavos <= 0 && c.mediaDiariaCentavos >= 100) {
+    const prePaga = c.contaPrePaga !== false; // conta no cartão não tem saldo que "acaba"
+    const semSaldoCritico = prePaga && c.saldoDisponivelCentavos !== null && c.saldoDisponivelCentavos <= 0 && c.mediaDiariaCentavos >= 100;
+    if (semSaldoCritico) {
       // (>= R$ 1/dia: média de centavos é conta praticamente parada, não "estava gastando")
       add({ severidade: "critico", categoria: "saldo", unidade: u, titulo: "Sem saldo — anúncios parados", detalhe: "A conta estava gastando e o saldo zerou. Adicione crédito pra voltar a veicular.", href: "/financeiro" }, c);
-    } else if (c.saldoDisponivelCentavos !== null && c.saldoDisponivelCentavos > 0 && c.saldoDisponivelCentavos <= SALDO_BAIXO_CENTAVOS && c.mediaDiariaCentavos >= 100) {
+    } else if (prePaga && c.saldoDisponivelCentavos !== null && c.saldoDisponivelCentavos > 0 && c.saldoDisponivelCentavos <= SALDO_BAIXO_CENTAVOS && c.mediaDiariaCentavos >= 100) {
       // Só avisa quando o saldo já está bem no fim (pedido do dono: antes avisava com dias de folga).
       add({ severidade: "critico", categoria: "saldo", unidade: u, titulo: `Saldo baixo: ${reais(c.saldoDisponivelCentavos)}`, detalhe: `No ritmo de ${reais(c.mediaDiariaCentavos)}/dia${prev.dias !== null ? `, acaba ${prev.dias < 1 ? "hoje" : `em ${prev.dias} dia${prev.dias !== 1 ? "s" : ""}`}` : ""}.`, href: "/financeiro" }, c);
     }
@@ -102,7 +104,8 @@ export async function gerarAlertas(empresaId: string, agora = new Date()): Promi
     }
 
     // Boost ligado em conta sem saldo
-    if (c.boostAutomaticoAtivo && c.saldoDisponivelCentavos !== null && c.saldoDisponivelCentavos <= 0 && c.contaPrePaga !== false) {
+    // (quando o aviso urgente de "sem saldo" já saiu pra essa conta, não repete a mesma causa)
+    if (!semSaldoCritico && c.boostAutomaticoAtivo && c.saldoDisponivelCentavos !== null && c.saldoDisponivelCentavos <= 0 && c.contaPrePaga !== false) {
       add({ severidade: "atencao", categoria: "boost", unidade: u, titulo: "Boost ligado, mas a conta está sem saldo", detalhe: "Os boosts novos não vão veicular até entrar crédito.", href: "/boost" }, c);
     }
 
@@ -221,6 +224,9 @@ export async function gerarAlertas(empresaId: string, agora = new Date()): Promi
   return alertas.sort((a, b) => ORDEM[a.severidade] - ORDEM[b.severidade] || a.unidade.localeCompare(b.unidade));
 }
 
+/** Nomes de unidade e mensagens de erro da Meta entram no e-mail como texto, nunca como HTML. */
+const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
 /** HTML simples (e-mail) com os alertas agrupados por gravidade. */
 export function alertasEmHtml(alertas: Alerta[], titulo = "Alertas da rede"): string {
   if (alertas.length === 0) return "";
@@ -232,7 +238,7 @@ export function alertasEmHtml(alertas: Alerta[], titulo = "Alertas da rede"): st
       const itens = alertas.filter((a) => a.severidade === sev);
       if (itens.length === 0) return "";
       return `<h3 style="font-size:13px;margin:14px 0 6px;color:${cor[sev]}">${rotulo[sev]} (${itens.length})</h3><ul style="margin:0;padding-left:18px;font-size:13px;color:#1f2937">${itens
-        .map((a) => `<li style="margin-bottom:4px"><strong>${a.unidade}</strong> — ${a.titulo}. <span style="color:#6b7280">${a.detalhe}</span> <a href="${base}${a.href}" style="color:#2563eb">abrir</a></li>`)
+        .map((a) => `<li style="margin-bottom:4px"><strong>${esc(a.unidade)}</strong> — ${esc(a.titulo)}. <span style="color:#6b7280">${esc(a.detalhe)}</span> <a href="${base}${a.href}" style="color:#2563eb">abrir</a></li>`)
         .join("")}</ul>`;
     })
     .join("");

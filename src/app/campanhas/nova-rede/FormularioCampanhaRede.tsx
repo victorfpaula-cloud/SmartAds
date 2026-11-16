@@ -1,5 +1,6 @@
 "use client";
 
+import { reaisDigitadosParaCentavos } from "@/lib/valorEmReais";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import type { Publico } from "@/lib/meta/tipos";
@@ -52,7 +53,7 @@ export default function FormularioCampanhaRede({ unidades }: { unidades: Unidade
   const [enviando, setEnviando] = useState(false);
   const [erroImagem, setErroImagem] = useState<string | null>(null);
 
-  const valorCentavos = Math.round(parseFloat((valor || "0").replace(",", ".")) * 100) || 0;
+  const valorCentavos = Math.max(0, reaisDigitadosParaCentavos(valor || "0") ?? 0);
   const escolhidas = unidades.filter((u) => marcadas[u.contaId] && publicoPorConta[u.contaId]);
   const orcOk = valorCentavos > 0 && (tipoOrc === "diario" || (inicio && fim && fim >= inicio));
   const pronto = escolhidas.length > 0 && nomeBase.trim() && mensagem.trim() && imagens.length > 0 && orcOk && !enviando;
@@ -71,9 +72,17 @@ export default function FormularioCampanhaRede({ unidades }: { unidades: Unidade
   }
 
   async function publicar() {
+    // Quem já foi criada numa tentativa anterior não é criada de novo (evita campanha duplicada).
+    const pendentes = escolhidas.filter((u) => estados[u.contaId]?.tipo !== "ok");
+    if (pendentes.length === 0) {
+      window.alert("Todas as unidades marcadas já tiveram a campanha criada.");
+      return;
+    }
+    const reais = (valorCentavos / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+    if (!window.confirm(`Criar e colocar no ar a campanha em ${pendentes.length} unidade${pendentes.length !== 1 ? "s" : ""}, com ${reais}${tipoOrc === "diario" ? " por dia" : " no total"} em cada uma?`)) return;
     setEnviando(true);
-    setEstados(Object.fromEntries(escolhidas.map((u) => [u.contaId, { tipo: "espera" } as Estado])));
-    for (const u of escolhidas) {
+    setEstados((e) => ({ ...e, ...Object.fromEntries(pendentes.map((u) => [u.contaId, { tipo: "espera" } as Estado])) }));
+    for (const u of pendentes) {
       setEstados((e) => ({ ...e, [u.contaId]: { tipo: "enviando" } }));
       const publicoId = publicoPorConta[u.contaId];
       const publico = u.publicos.find((p) => p.id === publicoId)!;
@@ -143,7 +152,7 @@ export default function FormularioCampanhaRede({ unidades }: { unidades: Unidade
                         est.tipo === "ok" ? "text-ok" : est.tipo === "erro" ? "text-danger" : "text-neutral-400"
                       }`}
                     >
-                      {est.tipo === "ok" ? "Criada (pausada)" : est.tipo === "erro" ? "Erro" : est.tipo === "enviando" ? "Enviando…" : "Na fila"}
+                      {est.tipo === "ok" ? "Criada (no ar)" : est.tipo === "erro" ? "Erro" : est.tipo === "enviando" ? "Enviando…" : "Na fila"}
                     </span>
                   )}
                 </label>

@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { acharPostPorLink, buscarPostsInstagram } from "@/lib/meta/api";
+import { lerAcesso } from "@/lib/acesso";
+import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { ErroMetaNaoConectado } from "@/lib/meta/token";
 import { ErroGraphAPIException } from "@/lib/meta/erros";
 
@@ -9,6 +11,17 @@ export async function GET(request: NextRequest) {
   const instagramBusinessId = request.nextUrl.searchParams.get("instagramBusinessId");
   if (!instagramBusinessId) {
     return NextResponse.json({ erro: "Falta o Instagram vinculado a essa conta." }, { status: 400 });
+  }
+
+  // Login limitado: o Instagram pedido tem de ser de uma conta das empresas liberadas pra ele.
+  const acesso = await lerAcesso();
+  if (acesso.restrito) {
+    const { data: donas } = await criarClienteAdmin()
+      .from("smartads_contas_meta")
+      .select("id, smartads_clientes!inner(empresa_id)")
+      .eq("instagram_business_id", instagramBusinessId)
+      .in("smartads_clientes.empresa_id", acesso.empresas.length ? acesso.empresas : ["00000000-0000-0000-0000-000000000000"]);
+    if (!donas || donas.length === 0) return NextResponse.json({ erro: "Sem permissão." }, { status: 403 });
   }
 
   const p = request.nextUrl.searchParams;

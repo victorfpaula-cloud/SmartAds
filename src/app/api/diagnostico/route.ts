@@ -30,7 +30,8 @@ export async function GET(request: NextRequest) {
     .eq("diagnostico_id", diagnostico.id)
     .order("created_at");
 
-  return NextResponse.json({ diagnostico, sugestoes: sugestoes ?? [] });
+  // O token de aprovação (link do e-mail) nunca vai pro navegador.
+  return NextResponse.json({ diagnostico, sugestoes: (sugestoes ?? []).map(({ token_aprovacao: _t, ...s }) => s) });
 }
 
 /** Gera um diagnóstico novo (chama o Gemini de verdade) — acionado só pelo botão na tela, nunca
@@ -95,5 +96,8 @@ export async function POST(request: NextRequest) {
     sugestoesSalvas = data ?? [];
   }
 
-  return NextResponse.json({ diagnostico, sugestoes: sugestoesSalvas }, { status: 201 });
+  return NextResponse.json(
+    { diagnostico, sugestoes: (sugestoesSalvas as Array<Record<string, unknown>>).map(({ token_aprovacao: _t, ...s }) => s) },
+    { status: 201 }
+  );
 }

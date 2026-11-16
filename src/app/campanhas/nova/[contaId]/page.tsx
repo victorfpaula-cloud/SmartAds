@@ -60,6 +60,9 @@ export default async function EscolherModeloPage({ params }: { params: { contaId
     <>
       <Cabecalho ativo="/campanhas" />
       <main className="mx-auto max-w-6xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
+        <Link href={`/campanhas/conta/${params.contaId}`} className="mb-1 block text-xs text-neutral-500 hover:text-neutral-300">
+          ← Campanhas da conta
+        </Link>
         <p className="text-xs font-medium text-neutral-500">
           {(conta as any).smartads_clientes?.nome} · {conta.nome_exibicao || conta.meta_ad_account_nome}
         </p>

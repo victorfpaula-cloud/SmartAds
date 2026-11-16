@@ -53,13 +53,27 @@ export async function avaliarBoostAutomatico(): Promise<{
   campanhasCriadas: number;
 }> {
   const supabase = criarClienteAdmin();
-  const { data: contas } = await supabase
+  const { data: contasBrutas, error: erroContas } = await supabase
     .from("smartads_contas_meta")
     .select(
-      "id, instagram_business_id, boost_automatico_publico_id, boost_automatico_orcamento_centavos, boost_automatico_duracao_dias, boost_tipo_entrega, boost_posts_por_dia, smartads_clientes(empresa_id, smartads_empresas(tipo))"
+      "id, instagram_business_id, boost_automatico_publico_id, boost_automatico_orcamento_centavos, boost_automatico_duracao_dias, boost_tipo_entrega, boost_posts_por_dia, smartads_clientes!inner(empresa_id, ativo, smartads_empresas(tipo))"
     )
     .eq("ativo", true)
-    .eq("boost_automatico_ativo", true);
+    .eq("boost_automatico_ativo", true)
+    // Cliente desativado não turbina mais (a tela de Boost nem mostra a conta pra desligar).
+    .eq("smartads_clientes.ativo", true)
+    .order("created_at", { ascending: true });
+  if (erroContas) throw new Error(`Boost: não consegui ler as contas (${erroContas.message}).`);
+
+  // Dois cadastros com o MESMO Instagram (ex.: Principal e Expansão) turbinariam o mesmo post duas
+  // vezes na mesma conta de anúncio — fica só o primeiro cadastro de cada Instagram.
+  const igVistos = new Set<string>();
+  const contas = (contasBrutas ?? []).filter((c) => {
+    if (!c.instagram_business_id) return true;
+    if (igVistos.has(c.instagram_business_id)) return false;
+    igVistos.add(c.instagram_business_id);
+    return true;
+  });
 
   // Datas especiais por conta, carregadas uma vez só pro cron inteiro.
   const { data: regrasBrutas } = await supabase
@@ -113,6 +127,9 @@ export async function avaliarBoostAutomatico(): Promise<{
   };
 
   const criadasPorConta = await mapearEmLotes(contas ?? [], async (conta): Promise<boolean> => {
+    // Post em andamento: se der exceção no meio, a tentativa é contada NELE (senão o mesmo post seria
+    // tentado de novo a cada hora, sem nunca esgotar as 3 tentativas).
+    let emAndamento: { mediaId: string; tentativas: number; tipos: string[] } | null = null;
     try {
       const rede = configDaContaHoje(conta);
       const orcamentoDiarioCentavos = rede.orcamentoDiarioCentavos;
@@ -126,13 +143,16 @@ export async function avaliarBoostAutomatico(): Promise<{
       // perfil que posta sem parar não pode empilhar campanha a cada rodada do cron. Cada post
       // turbinado conta 1, mesmo quando recebe duas campanhas (engajamento + alcance).
       const inicioDoDia = new Date(`${hojeSP}T00:00:00-03:00`).toISOString();
-      const { data: sucessosHoje } = await supabase
+      const { data: logsHoje, error: erroLogs } = await supabase
         .from("smartads_boost_automatico_log")
-        .select("id")
+        .select("id, sucesso, tipos_criados")
         .eq("conta_id", conta.id)
-        .eq("sucesso", true)
         .gte("created_at", inicioDoDia);
-      if ((sucessosHoje ?? []).length >= rede.boostsPorDia) return false;
+      // Sem conseguir ler o log não dá pra saber o limite do dia — melhor não turbinar nesta rodada.
+      if (erroLogs) return false;
+      // Conta também o post que recebeu só uma das duas campanhas: ele já está gastando.
+      const turbinadosHoje = (logsHoje ?? []).filter((l) => l.sucesso || ((l.tipos_criados as string[] | null) ?? []).length > 0);
+      if (turbinadosHoje.length >= rede.boostsPorDia) return false;
 
       const empresa = empresaDaConta(conta);
       let postsDeHoje: PostInstagram[];
@@ -144,7 +164,14 @@ export async function avaliarBoostAutomatico(): Promise<{
         const limite = Date.now() - DIAS_ATRASO_OFICIAL * 86_400_000;
         postsDeHoje = proprios
           .filter((p) => new Date(p.timestamp).getTime() >= limite && ehPostOficial(p, outras))
-          .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+          // Os de hoje primeiro (do mais antigo pro mais novo); os atrasados só depois, do mais recente
+          // pro mais velho — um post de 3 dias atrás não toma a vez do post de hoje.
+          .sort((a, b) => {
+            const ha = ehPostDeHoje(a.timestamp);
+            const hb = ehPostDeHoje(b.timestamp);
+            if (ha !== hb) return ha ? -1 : 1;
+            return ha ? a.timestamp.localeCompare(b.timestamp) : b.timestamp.localeCompare(a.timestamp);
+          });
       } else {
         const posts = await listarPostsInstagram(conta.instagram_business_id);
         postsDeHoje = posts
@@ -154,7 +181,7 @@ export async function avaliarBoostAutomatico(): Promise<{
       if (postsDeHoje.length === 0) return false;
 
       // Primeiro post de hoje que ainda não foi turbinado e ainda tem tentativas sobrando.
-      const { data: registros } = await supabase
+      const { data: registros, error: erroRegistros } = await supabase
         .from("smartads_boost_automatico_log")
         .select("instagram_media_id, sucesso, tentativas, tipos_criados")
         .eq("conta_id", conta.id)
@@ -162,6 +189,7 @@ export async function avaliarBoostAutomatico(): Promise<{
           "instagram_media_id",
           postsDeHoje.map((p) => p.id)
         );
+      if (erroRegistros) return false; // sem o log não dá pra saber o que já foi turbinado
       const registroDoPost = new Map((registros ?? []).map((r) => [r.instagram_media_id, r]));
       const alvo = postsDeHoje.find((p) => {
         const r = registroDoPost.get(p.id);
@@ -172,6 +200,7 @@ export async function avaliarBoostAutomatico(): Promise<{
       const registro = registroDoPost.get(alvo.id);
       const tentativasAnteriores = registro?.tentativas ?? 0;
       const jaCriados: string[] = registro?.tipos_criados ?? [];
+      emAndamento = { mediaId: alvo.id, tentativas: tentativasAnteriores, tipos: jaCriados };
 
       const gravarResultado = async (dados: {
         campanha_criada_id?: string | null;
@@ -220,7 +249,7 @@ export async function avaliarBoostAutomatico(): Promise<{
         const resultado = await criarCampanhaCompleta({
           contaId: conta.id,
           tipoModelo: tipo,
-          nomeCampanha: `Boost ${tipo === "alcance" ? "alcance" : "engajamento"} ${new Date().toLocaleDateString("pt-BR")}`,
+          nomeCampanha: `Boost ${tipo === "alcance" ? "alcance" : "engajamento"} ${new Date().toLocaleDateString("pt-BR", { timeZone: FUSO_HORARIO })}`,
           publico: publicoSalvo.targeting as Publico,
           publicoId: conta.boost_automatico_publico_id,
           orcamento: {
@@ -232,6 +261,8 @@ export async function avaliarBoostAutomatico(): Promise<{
         });
         if (resultado.ok) {
           criados.push(tipo);
+          // Se der exceção depois daqui, o registro da falha já sabe que este tipo existe (não recria).
+          emAndamento.tipos = [...criados];
           primeiroId = primeiroId ?? (resultado.campanhaSalva as { id: string })?.id ?? null;
         } else {
           erro = resultado.erro;
@@ -249,12 +280,27 @@ export async function avaliarBoostAutomatico(): Promise<{
 
       return completo;
     } catch (e) {
-      await supabase.from("smartads_boost_automatico_log").insert({
-        conta_id: conta.id,
-        instagram_media_id: "erro-inesperado-" + Date.now(),
-        sucesso: false,
-        erro_mensagem: e instanceof Error ? e.message : "Falha inesperada ao avaliar o boost automático.",
-      });
+      const mensagem = e instanceof Error ? e.message : "Falha inesperada ao avaliar o boost automático.";
+      try {
+        if (emAndamento) {
+          await supabase.from("smartads_boost_automatico_log").upsert(
+            {
+              conta_id: conta.id,
+              instagram_media_id: emAndamento.mediaId,
+              tentativas: emAndamento.tentativas + 1,
+              created_at: new Date().toISOString(),
+              sucesso: false,
+              erro_mensagem: mensagem,
+              tipos_criados: emAndamento.tipos,
+            },
+            { onConflict: "conta_id,instagram_media_id" }
+          );
+        } else {
+          console.error(`Boost automático: falha na conta ${conta.id}:`, mensagem);
+        }
+      } catch {
+        // O registro da falha não pode derrubar as outras contas.
+      }
       return false;
     }
   });

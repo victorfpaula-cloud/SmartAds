@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { reaisDigitadosParaCentavos } from "@/lib/valorEmReais";
 import { useRouter } from "next/navigation";
 import ConstrutorDePublico from "@/components/ConstrutorDePublico";
 import type { ModeloCampanha } from "@/lib/meta/modelos";
@@ -123,6 +124,7 @@ export default function FormularioCampanha({
   );
   const [tambemNoFacebook, setTambemNoFacebook] = useState(false);
   const [publicando, setPublicando] = useState(false);
+  const publicandoRef = useRef(false);
   const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
@@ -210,7 +212,7 @@ export default function FormularioCampanha({
       ? publicosSalvos.find((p) => p.id === publicoSalvoId)?.targeting ?? PUBLICO_VAZIO
       : publicoNovo;
 
-  const valorCentavos = Math.round(parseFloat((valorReais || "0").replace(",", ".")) * 100) || 0;
+  const valorCentavos = Math.max(0, reaisDigitadosParaCentavos(valorReais || "0") ?? 0);
 
   // Teto de gasto do mês da unidade: projeção (gasto + campanhas no ar + esta) com a Meta, só quando há teto.
   const [teto, setTeto] = useState<{
@@ -269,7 +271,7 @@ export default function FormularioCampanha({
     if (passo === 1) return publicoEfetivo.localizacoes.length > 0;
     if (passo === 2) {
       if (!valorCentavos) return false;
-      if (tipoOrcamento === "vitalicio") return !!dataInicio && !!dataFim;
+      if (tipoOrcamento === "vitalicio") return !!dataInicio && !!dataFim && dataFim >= dataInicio;
       return true;
     }
     if (passo === 3) {
@@ -284,11 +286,42 @@ export default function FormularioCampanha({
   }
 
   async function publicar() {
-    if (!nomeCampanha.trim()) return;
+    // Trava contra clique duplo: uma segunda chamada criaria a campanha duas vezes na Meta.
+    if (!nomeCampanha.trim() || publicandoRef.current) return;
+    publicandoRef.current = true;
     setPublicando(true);
     setErro(null);
 
-    const resposta = await fetch("/api/campanhas", {
+    let resposta: Response;
+    let corpo: { erro?: string } = {};
+    try {
+      resposta = await enviarCampanha();
+      corpo = await resposta.json().catch(() => ({}));
+    } catch {
+      publicandoRef.current = false;
+      setPublicando(false);
+      setErro("Sem resposta do servidor. Antes de tentar de novo, confira em Campanhas se ela já foi criada.");
+      return;
+    }
+    if (resposta.ok) {
+      // Mantém o botão travado até a navegação acontecer.
+      router.push(`/campanhas/conta/${contaId}`);
+      return;
+    }
+    publicandoRef.current = false;
+    setPublicando(false);
+    setErro(
+      corpo.erro ||
+        (resposta.status === 413
+          ? "As imagens são grandes demais. Use arquivos menores (até ~1 MB cada)."
+          : resposta.status === 504
+            ? "A Meta demorou demais pra responder. Confira em Campanhas se ela foi criada antes de tentar de novo."
+            : "Falha ao publicar a campanha.")
+    );
+  }
+
+  function enviarCampanha() {
+    return fetch("/api/campanhas", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -319,14 +352,6 @@ export default function FormularioCampanha({
         },
       }),
     });
-    const corpo = await resposta.json();
-    setPublicando(false);
-
-    if (resposta.ok) {
-      router.push(`/campanhas/conta/${contaId}`);
-    } else {
-      setErro(corpo.erro || "Falha ao publicar a campanha.");
-    }
   }
 
   function adicionarImagens(arquivos: FileList) {

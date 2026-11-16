@@ -55,7 +55,7 @@ export default async function UnidadePage({ params }: { params: Promise<{ contaI
   const ultimoBoost = boosts?.[0];
 
   const cartoes: Array<[string, string, string | null]> = [
-    ["Saldo na conta", saldo === null ? (fin?.conta_pre_paga === false ? "Cartão" : "—") : reais(Math.max(saldo, 0)), prev.dias !== null ? `acaba em ${prev.texto}` : prev.detalhe],
+    ["Saldo na conta", saldo === null ? (fin?.conta_pre_paga === false ? "Cartão" : "—") : reais(Math.max(saldo, 0)), prev.dias === null ? prev.detalhe : prev.dias <= 0 ? "sem saldo: adicione crédito" : prev.dias < 1 ? "acaba hoje" : `dura ~${prev.texto}`],
     ["Gasto no mês", gastoMes === null ? "—" : reais(gastoMes), null],
     ["Ritmo (7 dias)", media > 0 ? `${reais(media)}/dia` : "sem gasto", null],
     [
@@ -82,7 +82,7 @@ export default async function UnidadePage({ params }: { params: Promise<{ contaI
       <main className="mx-auto flex max-w-4xl flex-col gap-4 px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">
         <div>
           <Link href="/boost" className="text-xs text-neutral-500 hover:text-neutral-300">
-            ← Unidades
+            {ambiente.tipo === "franquia" ? "← Unidades" : "← Boost"}
           </Link>
           <h1 className="mt-1 font-display text-2xl font-bold">{cliente.nome}</h1>
           <p className="mt-0.5 text-xs text-neutral-500">

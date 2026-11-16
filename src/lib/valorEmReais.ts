@@ -3,6 +3,8 @@
 export function reaisDigitadosParaCentavos(texto: string): number | null {
   const limpo = texto.trim().replace(/[R$\s]/g, "");
   if (!limpo) return null;
+  // Só dígitos, ponto e vírgula: "1e3" ou "0x10" não são valores em reais.
+  if (!/^[\d.,]+$/.test(limpo)) return null;
   let normalizado: string;
   if (limpo.includes(",")) {
     normalizado = limpo.replace(/\./g, "").replace(",", ".");
