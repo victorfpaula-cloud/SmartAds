@@ -32,10 +32,19 @@ export default async function DuplicarCampanhaPage({
   if (!modelo || !conta) notFound();
 
   const config = campanhaCriada.config_criacao as any;
+  // Datas da campanha original que já passaram não servem pra cópia: limpa e, se faltar alguma
+  // obrigatória (orçamento total precisa de início e fim), abre direto no passo do orçamento.
+  const hoje = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
+  const dia = (v: unknown) => (typeof v === "string" ? v.slice(0, 10) : "");
+  const orcamento = { tipo: "diario", valorCentavos: 0, ...(config.orcamento ?? {}) };
+  if (orcamento.dataInicio && dia(orcamento.dataInicio) < hoje) delete orcamento.dataInicio;
+  if (orcamento.dataFim && dia(orcamento.dataFim) <= hoje) delete orcamento.dataFim;
+  const faltaData = !orcamento.valorCentavos || (orcamento.tipo === "vitalicio" && (!orcamento.dataInicio || !orcamento.dataFim));
+  const datasLimpas = orcamento.dataInicio !== config.orcamento?.dataInicio || orcamento.dataFim !== config.orcamento?.dataFim;
   const valoresIniciais: ValoresIniciaisCampanha = {
     publico: config.publico,
     publicoId: config.publicoId,
-    orcamento: config.orcamento,
+    orcamento,
     nomeCampanha: config.nomeCampanha,
   };
 
@@ -50,6 +59,9 @@ export default async function DuplicarCampanhaPage({
           {conta.smartads_clientes?.nome} · {conta.nome_exibicao || conta.meta_ad_account_nome}
         </p>
         <h1 className="mt-1 font-display text-2xl font-bold">Duplicar: {modelo.nomeExibicao}</h1>
+        {datasLimpas && (
+          <p className="mt-2 text-xs text-amber-300">As datas da campanha original já passaram — escolha as novas datas no passo do orçamento.</p>
+        )}
 
         <FormularioCampanha
           contaId={conta.id}
@@ -58,7 +70,7 @@ export default async function DuplicarCampanhaPage({
           instagramBusinessId={conta.instagram_business_id}
           modelo={modelo}
           valoresIniciais={valoresIniciais}
-          etapaInicial={3}
+          etapaInicial={faltaData ? 2 : 3}
         />
       </main>
     </>

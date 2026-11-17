@@ -1,3 +1,4 @@
+import { mapearEmLotes } from "@/lib/lotes";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { obterInsightsConta } from "@/lib/meta/api";
 import { ErroMetaNaoConectado } from "@/lib/meta/token";
@@ -24,7 +25,7 @@ export async function buscarLinhasResumo(empresaId?: string): Promise<LinhaResum
   const supabase = criarClienteAdmin();
   let consulta = supabase
     .from("smartads_clientes")
-    .select("id, nome, smartads_contas_meta(id, meta_ad_account_id, nome_exibicao, meta_ad_account_nome)")
+    .select("id, nome, smartads_contas_meta(id, ativo, meta_ad_account_id, nome_exibicao, meta_ad_account_nome)")
     .eq("ativo", true)
     .order("nome");
   if (empresaId) consulta = consulta.eq("empresa_id", empresaId);
@@ -32,9 +33,20 @@ export async function buscarLinhasResumo(empresaId?: string): Promise<LinhaResum
 
   if (error) throw new Error(error.message);
 
-  return Promise.all(
-    (clientes ?? []).flatMap((cliente) =>
-      (cliente as any).smartads_contas_meta.map(async (conta: any): Promise<LinhaResumo> => {
+  // Conta desativada fica de fora, e a mesma conta de anúncio cadastrada em dois clientes (ex.:
+  // Principal e Expansão) entra uma vez só — senão o gasto da rede aparecia em dobro.
+  const vistas = new Set<string>();
+  const pares = (clientes ?? []).flatMap((cliente) =>
+    ((cliente as any).smartads_contas_meta as any[])
+      .filter((conta) => {
+        if (conta.ativo === false || vistas.has(conta.meta_ad_account_id)) return false;
+        vistas.add(conta.meta_ad_account_id);
+        return true;
+      })
+      .map((conta) => ({ cliente, conta }))
+  );
+  // Em lotes (não todas as contas de uma vez na Meta).
+  return mapearEmLotes(pares, async ({ cliente, conta }): Promise<LinhaResumo> => {
         try {
           const insights = await obterInsightsConta(conta.meta_ad_account_id, {
             nivel: "account",
@@ -61,7 +73,5 @@ export async function buscarLinhasResumo(empresaId?: string): Promise<LinhaResum
             erro: erro instanceof ErroMetaNaoConectado ? erro.message : "Falha ao buscar dados dessa conta.",
           };
         }
-      })
-    )
-  );
+  });
 }

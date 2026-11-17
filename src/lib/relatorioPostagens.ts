@@ -158,12 +158,18 @@ export async function obterRelatorioPostagens(empresaId?: string): Promise<Unida
       let ultimoPostEm: string | null;
       let totalPostagens: number;
 
-      if (podeReaproveitar) {
-        diasBrutos = cache.dias as DiaBruto[];
-        ultimoPostEm = cache.ultimo_post_em;
-        totalPostagens = cache.total_postagens;
+      // Falha da Meta não pode virar "não postou nada": usa o último cálculo guardado (mesmo que de
+      // outro dia) e não grava nada por cima dele.
+      let postsLidos: PostInstagram[] | null = null;
+      if (!podeReaproveitar) postsLidos = await listarPostsInstagram(conta.instagram_business_id).catch(() => null);
+      const usarCacheAntigo = !podeReaproveitar && postsLidos === null && !!cache;
+
+      if (podeReaproveitar || usarCacheAntigo) {
+        diasBrutos = cache!.dias as DiaBruto[];
+        ultimoPostEm = cache!.ultimo_post_em;
+        totalPostagens = cache!.total_postagens;
       } else {
-        const postsBrutos = await listarPostsInstagram(conta.instagram_business_id).catch(() => [] as PostInstagram[]);
+        const postsBrutos = postsLidos ?? [];
         // Deduplica por id — proteção contra a Meta devolver o mesmo post mais de uma vez (não
         // deveria acontecer numa chamada só sem paginação, mas é barato garantir e evita contagem
         // inflada). Map preserva a ordem de inserção = ordem original da Meta (mais recente
@@ -208,7 +214,8 @@ export async function obterRelatorioPostagens(empresaId?: string): Promise<Unida
         }));
         totalPostagens = diasBrutos.reduce((soma, d) => soma + d.horasPost.length, 0);
 
-        await supabase.from("smartads_relatorio_postagens_cache").upsert({
+        // Só grava quando a Meta respondeu (sem cache nem leitura, mostra vazio mas não guarda).
+        if (postsLidos !== null) await supabase.from("smartads_relatorio_postagens_cache").upsert({
           conta_id: conta.id,
           dia_calculado: hojeSP,
           ultimo_post_em: ultimoPostEm,

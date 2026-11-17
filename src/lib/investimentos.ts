@@ -130,8 +130,16 @@ export async function carregarInvestimentos(mes: string, empresaId?: string): Pr
 
   const mesAtual = mes === mesAtualEmSaoPaulo();
   const unidades: InvestimentoUnidade[] = [];
+  // Recargas lidas da Meta são da CONTA DE ANÚNCIO: quando dois cadastros dividem a mesma (ex.:
+  // Principal e Expansão), a mesma recarga aparecia nos dois e o total da rede dobrava. Ficam só no
+  // primeiro cadastro; os lançamentos manuais continuam em quem lançou.
+  const primeiroDaContaDeAnuncio = new Map<string, string>();
+  // Critério fixo (menor id) pra a recarga não ficar trocando de unidade entre uma visita e outra.
+  for (const { c } of [...contas].sort((x, y) => String(x.c.id).localeCompare(String(y.c.id))))
+    if (!primeiroDaContaDeAnuncio.has(c.meta_ad_account_id)) primeiroDaContaDeAnuncio.set(c.meta_ad_account_id, c.id);
   for (const { cl, c } of contas) {
-    const lista = (aportes ?? []).filter((a) => a.conta_id === c.id);
+    const ehPrimeiro = primeiroDaContaDeAnuncio.get(c.meta_ad_account_id) === c.id;
+    const lista = (aportes ?? []).filter((a) => a.conta_id === c.id && (ehPrimeiro || a.origem !== "meta"));
     const meta = (metas ?? []).find((x) => x.conta_id === c.id);
     const fin = (financeiro ?? []).find((f) => f.conta_id === c.id);
     const padrao = c.orcamento_mensal_centavos ?? 50000;

@@ -37,14 +37,25 @@ async function chamar<T = any>(
     url.searchParams.set(chave, typeof valor === "string" ? valor : JSON.stringify(valor));
   }
 
-  const init: RequestInit = { method: metodo, cache: "no-store" };
+  // Teto de 30s só nas LEITURAS: uma Meta travada não segura a rota inteira até o limite da Vercel.
+  // Criação/alteração (POST) fica sem teto — cortar no meio deixaria objeto criado na Meta sem o app
+  // saber o id pra desfazer.
+  const init: RequestInit = { method: metodo, cache: "no-store", ...(metodo === "GET" ? { signal: AbortSignal.timeout(30_000) } : {}) };
   if (corpo && metodo !== "GET") {
     init.headers = { "Content-Type": "application/json" };
     init.body = JSON.stringify(corpo);
   }
 
   const resposta = await fetch(url.toString(), init);
-  const json = await resposta.json().catch(() => ({}));
+  let corpoIlegivel = false;
+  const json = await resposta.json().catch(() => {
+    corpoIlegivel = true;
+    return {};
+  });
+  // Resposta "ok" mas sem corpo legível (cortada no meio): é erro, não um objeto vazio de sucesso.
+  if (resposta.ok && corpoIlegivel && metodo === "GET") {
+    throw new Error("A Meta não respondeu por completo. Tente de novo em instantes.");
+  }
 
   if (!resposta.ok || json.error) {
     throw new ErroGraphAPIException(json.error);
@@ -1315,6 +1326,9 @@ export interface ConjuntoResumoMeta {
   effective_status: string;
   daily_budget?: string;
   lifetime_budget?: string;
+  /** O SmartAds grava a data de término no CONJUNTO (end_time), não na campanha (stop_time). */
+  start_time?: string;
+  end_time?: string;
 }
 
 /** Conta de anúncio ("act_…") dona de uma campanha/conjunto/anúncio — pra conferir que o id recebido
@@ -1335,7 +1349,7 @@ export async function listarConjuntosDaConta(adAccountId: string): Promise<Conju
       data: ConjuntoResumoMeta[];
       paging?: { cursors?: { after?: string }; next?: string };
     }>(`${adAccountId}/adsets`, {
-      query: { fields: "id,campaign_id,effective_status,daily_budget,lifetime_budget", limit: 100, after },
+      query: { fields: "id,campaign_id,effective_status,daily_budget,lifetime_budget,start_time,end_time", limit: 100, after },
     });
     todos.push(...dados.data);
     if (!dados.paging?.next) break;

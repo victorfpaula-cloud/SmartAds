@@ -1,6 +1,6 @@
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { contaSemSaldo } from "@/lib/financeiro/situacaoConta";
-import { listarCampanhas, campanhaAtivaAgora, obterInsightsConta } from "@/lib/meta/api";
+import { listarCampanhas, campanhaAtivaAgora, listarConjuntosDaConta, obterInsightsConta } from "@/lib/meta/api";
 import { mesAtualEmSaoPaulo } from "@/lib/tempoSaoPaulo";
 import { obterResumoBoostPorConta, type ResumoBoostConta } from "@/lib/boostResumo";
 import { mapearEmLotes } from "@/lib/lotes";
@@ -128,6 +128,21 @@ export async function recalcularCampanhasRede(): Promise<{ contasVerificadas: nu
         return porSigla ?? semSigla[0];
       }
 
+      // Data de término de cada campanha: o SmartAds grava no CONJUNTO (end_time), não na campanha —
+      // sem isso o "campanha terminando" nunca disparava pras campanhas criadas pelo app. Vale o maior
+      // fim entre os conjuntos ativos; se algum conjunto ativo não tem fim, a campanha é contínua.
+      const conjuntos = campanhasAtivasMeta.length
+        ? await listarConjuntosDaConta(contasDoGrupo[0].meta_ad_account_id).catch(() => null)
+        : null;
+      const fimPorCampanha = new Map<string, string | null>();
+      for (const cj of conjuntos ?? []) {
+        if (cj.effective_status !== "ACTIVE") continue;
+        const atual = fimPorCampanha.get(cj.campaign_id);
+        if (atual === null) continue; // já tem conjunto sem fim: contínua
+        if (!cj.end_time) fimPorCampanha.set(cj.campaign_id, null);
+        else if (!atual || cj.end_time > atual) fimPorCampanha.set(cj.campaign_id, cj.end_time);
+      }
+
       const linhasPorConta = new Map<string, LinhaCache[]>();
       for (const campanha of campanhasAtivasMeta) {
         const conta = contaDaCampanha(campanha.name);
@@ -140,7 +155,7 @@ export async function recalcularCampanhasRede(): Promise<{ contasVerificadas: nu
           objetivo: campanha.objective ?? null,
           orcamento_diario_centavos: campanha.daily_budget ? Number(campanha.daily_budget) : null,
           vitalicio: !campanha.daily_budget && !!campanha.lifetime_budget,
-          fim_em: campanha.stop_time ?? null,
+          fim_em: campanha.stop_time ?? fimPorCampanha.get(campanha.id) ?? null,
         });
         linhasPorConta.set(conta.id, linhas);
       }
