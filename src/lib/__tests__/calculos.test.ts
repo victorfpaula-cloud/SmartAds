@@ -264,3 +264,35 @@ describe("correções da varredura", () => {
     expect(ter.ate).toBe("2026-11-08");
   });
 });
+
+import { calcularCiclo, sugerirCiclo } from "@/lib/cicloSaldo";
+describe("ritmo do saldo por ciclo de recarga", () => {
+  const agora = sp("2026-11-17T12:00:00");
+  const base = { boost: null, intervaloMedioDias: 7, agora };
+  it("sem ciclo sugere pelo histórico", () => {
+    const r = calcularCiclo({ ...base, ciclo: null, ultimaRecarga: "2026-11-16", valorRecargaCentavos: 35000, saldoRealCentavos: 31138, gastoDesdeCentavos: 4000, ritmoDiarioCentavos: 3000 });
+    expect(r.status).toBe("sem_ciclo");
+    expect(sugerirCiclo(7)).toBe("semanal");
+    expect(sugerirCiclo(30)).toBe("mensal");
+  });
+  it("semanal que vai faltar: Olímpia gastando R$ 80/dia com R$ 300 pra 5,5 dias", () => {
+    const r = calcularCiclo({ ...base, ciclo: "semanal", ultimaRecarga: "2026-11-16", valorRecargaCentavos: 35000, saldoRealCentavos: 30000, gastoDesdeCentavos: 5000, ritmoDiarioCentavos: 8000 });
+    expect(r.status).toBe("falta");
+    expect(r.proximaRecarga).toBe("2026-11-23");
+    expect(r.diasRestantes).toBeCloseTo(5.5, 1);
+    expect(Math.round(r.idealDiarioCentavos!)).toBe(Math.round(30000 / 5.5));
+  });
+  it("mensal que vai sobrar: São Paulo com R$ 700 e gastando R$ 18/dia por 18 dias", () => {
+    const r = calcularCiclo({ ...base, ciclo: "mensal", ultimaRecarga: "2026-11-05", valorRecargaCentavos: 100000, saldoRealCentavos: null, gastoDesdeCentavos: 30000, ritmoDiarioCentavos: 1800 });
+    expect(r.saldoEstimado).toBe(true);
+    expect(r.saldoCentavos).toBe(70000);
+    expect(r.status).toBe("sobra");
+    expect(r.saldoNoFimCentavos!).toBeGreaterThan(30000);
+  });
+  it("no ritmo e ciclo encerrado", () => {
+    const ok = calcularCiclo({ ...base, ciclo: "semanal", ultimaRecarga: "2026-11-16", valorRecargaCentavos: 35000, saldoRealCentavos: 30000, gastoDesdeCentavos: 5000, ritmoDiarioCentavos: 5400 });
+    expect(ok.status).toBe("ok");
+    const fim = calcularCiclo({ ...base, ciclo: "semanal", ultimaRecarga: "2026-11-09", valorRecargaCentavos: 30000, saldoRealCentavos: 5000, gastoDesdeCentavos: 25000, ritmoDiarioCentavos: 3000 });
+    expect(fim.status).toBe("ciclo_encerrado");
+  });
+});

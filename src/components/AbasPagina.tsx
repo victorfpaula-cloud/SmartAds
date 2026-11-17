@@ -14,7 +14,11 @@ export interface AbaPagina {
  * continua o mesmo. */
 export default function AbasPagina({ abas, destaque = false }: { abas: AbaPagina[]; destaque?: boolean }) {
   const caminho = usePathname() ?? "";
-  const bate = (a: AbaPagina) => [a.href, ...(a.tambem ?? [])].some((h) => caminho === h || caminho.startsWith(`${h}/`));
+  const casa = (a: AbaPagina) =>
+    Math.max(-1, ...[a.href, ...(a.tambem ?? [])].filter((h) => caminho === h || caminho.startsWith(`${h}/`)).map((h) => h.length));
+  // Quando duas abas casam (ex.: "/campanhas" e "/campanhas/24h"), acende só a mais específica.
+  const melhor = Math.max(-1, ...abas.map(casa));
+  const bate = (a: AbaPagina) => melhor >= 0 && casa(a) === melhor;
   return (
     <div className={destaque ? "mb-6 flex flex-wrap justify-center gap-2.5" : "mb-5 flex flex-wrap gap-2"}>
       {abas.map((a) => (

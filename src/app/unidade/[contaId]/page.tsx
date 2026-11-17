@@ -7,6 +7,8 @@ import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { calcularPrevisaoSaldo } from "@/lib/financeiro/previsaoSaldo";
 import EmailRelatorioMensal from "@/app/contas/EmailRelatorioMensal";
 import PlanoTeto from "./PlanoTeto";
+import CartaoCiclo from "@/app/financeiro/ritmo/CartaoCiclo";
+import { calcularCiclosDasContas } from "@/lib/cicloSaldo";
 import MelhoresPosts from "./MelhoresPosts";
 
 export const dynamic = "force-dynamic";
@@ -48,6 +50,7 @@ export default async function UnidadePage({ params }: { params: Promise<{ contaI
       .order("created_at", { ascending: false })
       .limit(1),
   ]);
+  const [ciclo] = await calcularCiclosDasContas([contaId]).catch(() => []);
   const saldo = (fin?.saldo_disponivel_centavos as number | null) ?? null;
   const media = (fin?.media_diaria_centavos as number | null) ?? 0;
   const prev = calcularPrevisaoSaldo(saldo, media, new Date(), (fin?.conta_pre_paga as boolean | null) ?? null);
@@ -68,6 +71,7 @@ export default async function UnidadePage({ params }: { params: Promise<{ contaI
   ];
   const atalhos: Array<[string, string]> = [
     ["Campanhas no ar", `/campanhas/conta/${contaId}`],
+    ["Últimas 24h", "/campanhas/24h"],
     ["Nova campanha", `/campanhas/nova/${contaId}`],
     ["Relatório (PDF)", `/relatorio-ads?conta=${contaId}`],
     ...(ambiente.tipo === "franquia" ? ([["Posts e stories", `/estrategias/postagens/${contaId}`]] as Array<[string, string]>) : []),
@@ -112,6 +116,8 @@ export default async function UnidadePage({ params }: { params: Promise<{ contaI
             </Link>
           ))}
         </div>
+
+        {ciclo && <CartaoCiclo c={ciclo} comLink={false} />}
 
         <PlanoTeto contaId={contaId} tetoInicial={(conta.teto_mensal_centavos as number | null) ?? null} />
 
