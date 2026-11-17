@@ -918,3 +918,13 @@ create table if not exists smartads_analise_trafego (
   primary key (empresa_id, dias)
 );
 alter table smartads_analise_trafego enable row level security;
+
+-- Ritmo do saldo: de quanto em quanto tempo a unidade recarrega (o dinheiro de uma recarga tem de
+-- durar até a próxima) e o último cálculo de cada conta (ver src/lib/cicloSaldo.ts).
+alter table smartads_contas_meta add column if not exists ciclo_recarga text check (ciclo_recarga in ('semanal','quinzenal','mensal'));
+create table if not exists smartads_ciclo_saldo_cache (
+  conta_id uuid primary key references smartads_contas_meta(id) on delete cascade,
+  dados jsonb not null,
+  calculado_em timestamptz not null default now()
+);
+alter table smartads_ciclo_saldo_cache enable row level security;

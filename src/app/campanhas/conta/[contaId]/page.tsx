@@ -55,12 +55,17 @@ export default async function CampanhasDaContaPage({ params }: { params: Promise
             <h1 className="font-display text-2xl font-bold">{nomeCliente}</h1>
             <p className="mt-1 text-sm text-neutral-400">{nomeConta}</p>
           </div>
-          <Link
-            href={`/campanhas/nova/${contaId}`}
-            className="shrink-0 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-strong"
-          >
-            + Nova campanha
-          </Link>
+          <div className="flex shrink-0 gap-2">
+            <Link href="/campanhas/24h" className="rounded-lg border border-white/14 px-3.5 py-2 text-sm font-medium text-neutral-200 hover:bg-white/[0.04]">
+              Últimas 24h
+            </Link>
+            <Link
+              href={`/campanhas/nova/${contaId}`}
+              className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-strong"
+            >
+              + Nova campanha
+            </Link>
+          </div>
         </div>
 
         <div className="mt-6">

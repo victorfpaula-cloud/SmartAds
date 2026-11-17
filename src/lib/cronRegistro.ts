@@ -57,6 +57,7 @@ export function comRegistroDeCron(
 /** Nome amigável e de quanto em quanto tempo cada rotina deveria rodar (horas; null = não é diária). */
 export const ROTINAS: Record<string, { rotulo: string; intervaloHoras: number | null }> = {
   financeiro: { rotulo: "Atualização do Financeiro", intervaloHoras: 24 },
+  "ciclo-saldo": { rotulo: "Ritmo do saldo (ciclo de recarga)", intervaloHoras: 24 },
   "boost-automatico": { rotulo: "Boost automático", intervaloHoras: 24 },
   stories: { rotulo: "Contagem de stories", intervaloHoras: 24 },
   "campanhas-rede": { rotulo: "Campanhas da rede", intervaloHoras: 24 },

@@ -2,7 +2,7 @@ import Link from "next/link";
 
 /** Duas visões do mesmo assunto (dinheiro), numa tela só: saldos/situação das contas e o que cada
  * unidade investiu no mês. */
-export default function AbasFinanceiro({ ativa }: { ativa: "saldos" | "investimento" }) {
+export default function AbasFinanceiro({ ativa }: { ativa: "saldos" | "investimento" | "ritmo" }) {
   const aba = (href: string, rotulo: string, ligada: boolean) => (
     <Link
       href={href}
@@ -18,6 +18,7 @@ export default function AbasFinanceiro({ ativa }: { ativa: "saldos" | "investime
   return (
     <div className="mb-5 flex flex-wrap gap-2">
       {aba("/financeiro", "Saldos e situação", ativa === "saldos")}
+      {aba("/financeiro/ritmo", "Ritmo do saldo", ativa === "ritmo")}
       {aba("/financeiro/investimentos", "Investimento do mês", ativa === "investimento")}
     </div>
   );

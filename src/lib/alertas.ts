@@ -1,4 +1,5 @@
 import { ROTINAS } from "@/lib/cronRegistro";
+import { lerCiclosEmCache } from "@/lib/cicloSaldo";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { coletarFinanceiro, unicasPorContaDeAnuncio, type ContaFinanceiro } from "@/lib/financeiro/coletarFinanceiro";
 import { descreverSituacaoConta } from "@/lib/financeiro/situacaoConta";
@@ -60,8 +61,25 @@ export async function gerarAlertas(empresaId: string, agora = new Date()): Promi
     .not("teto_mensal_centavos", "is", null);
   const tetoPorConta = new Map((tetos ?? []).map((t) => [t.id as string, t.teto_mensal_centavos as number]));
 
+  // Ritmo do saldo por ciclo de recarga (calculado pelo cron diário / ao abrir a tela).
+  const ciclos = await lerCiclosEmCache(contas.map((c) => c.contaId)).catch(() => new Map());
+
   for (const c of contas) {
     const u = c.clienteNome;
+
+    const ciclo = ciclos.get(c.contaId);
+    // (conta já sem saldo ou com saldo baixíssimo tem o aviso urgente próprio — não repete aqui)
+    const saldoBaixo = c.saldoDisponivelCentavos !== null && c.saldoDisponivelCentavos <= SALDO_BAIXO_CENTAVOS;
+    if (ciclo && !saldoBaixo && (ciclo.status === "falta" || ciclo.status === "sobra")) {
+      add({
+        severidade: "atencao",
+        categoria: "saldo",
+        unidade: u,
+        titulo: ciclo.titulo,
+        detalhe: ciclo.passos[ciclo.passos.length - 1] ?? "",
+        href: "/financeiro/ritmo",
+      }, c);
+    }
 
     // Teto de gasto do mês (definido por unidade): atingido, ou projeção do mês acima dele.
     const teto = tetoPorConta.get(c.contaId);

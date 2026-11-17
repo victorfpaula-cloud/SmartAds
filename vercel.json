@@ -172,6 +172,10 @@
     {
       "path": "/api/cron/analise-trafego",
       "schedule": "15 11 * * 1"
+    },
+    {
+      "path": "/api/cron/ciclo-saldo",
+      "schedule": "15 11 * * *"
     }
   ]
 }

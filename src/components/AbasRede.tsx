@@ -23,6 +23,7 @@ export async function AbasCampanhas() {
       destaque
       abas={[
         { href: "/campanhas", label: "No ar", tambem: ["/campanhas/nova", "/campanhas/nova-rede", "/campanhas/conta"] },
+        { href: "/campanhas/24h", label: "Últimas 24h" },
         { href: "/estrategias/campanhas-mae", label: "Campanha oficial", tambem: ["/estrategias/moldes", "/estrategias/planos"] },
         { href: "/estrategias/calendario", label: "Calendário" },
       ]}
