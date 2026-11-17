@@ -135,7 +135,8 @@ export function calcularCiclo(e: EntradaCiclo): ResultadoCiclo {
     };
   }
 
-  const ideal = saldo / restantes;
+  // Pelo menos 1 dia no divisor: a fração final do ciclo não vira um "orçamento" absurdo.
+  const ideal = saldo / Math.max(1, restantes);
   const dura = ritmo && ritmo > 0 ? saldo / ritmo : null;
   const noFim = ritmo !== null ? saldo - ritmo * restantes : saldo;
   const resultado = { ...comum, duraDias: dura, idealDiarioCentavos: ideal, saldoNoFimCentavos: noFim };
@@ -159,6 +160,13 @@ export function calcularCiclo(e: EntradaCiclo): ResultadoCiclo {
       titulo: `Vai faltar: o saldo acaba ~${D(restantes - dura)} dia${restantes - dura >= 1.5 ? "s" : ""} antes da próxima recarga`,
       passos: [...passos, `Reduza o gasto de ${R(ritmo!)} para ~${R(arredReais(ideal))}/dia${falta > 0 ? ` (no ritmo atual faltariam ~${R(falta)})` : ""}.`],
     };
+  }
+  // Sem ritmo medido (dia da recarga, ou a Meta não respondeu): não dá pra dizer se falta ou sobra.
+  if (ritmo === null) {
+    return { ...resultado, status: "ok", titulo: "Ritmo ainda não medido", passos: [...passos, "Assim que houver um dia completo de gasto depois da recarga, o app diz se vai faltar ou sobrar."] };
+  }
+  if (saldo <= 0) {
+    return { ...resultado, status: "falta", titulo: "Saldo acabou antes da próxima recarga", passos: [...passos, "Sem saldo, as campanhas param. Adicione crédito ou espere a próxima recarga."] };
   }
   if (dura === null || (dura > restantes * 1.2 && noFim >= 2000)) {
     return {
@@ -202,6 +210,7 @@ export async function calcularCiclosDasContas(contaIds: string[], agora = new Da
     db.from("smartads_financeiro_cache").select("conta_id, saldo_disponivel_centavos, conta_pre_paga").in("conta_id", contaIds),
   ]);
   const finPorConta = new Map((fin ?? []).map((f) => [f.conta_id as string, f]));
+  const falhouMeta = new Set<string>();
 
   const resultados = await mapearEmLotes(
     (contas ?? []) as any[],
@@ -231,7 +240,9 @@ export async function calcularCiclosDasContas(contaIds: string[], agora = new Da
           const completos = [1, 2, 3].map((k) => adicionarDias(hoje, -k)).filter((d) => d >= ultima);
           if (completos.length > 0) ritmo = completos.reduce((t, d) => t + (porDia.get(d) ?? 0), 0) / completos.length;
         } catch {
-          // Sem a Meta agora: segue com o saldo real (se houver) e sem ritmo.
+          // Sem a Meta agora: segue com o saldo real (se houver) e sem ritmo — e não grava por cima
+          // do último cálculo bom (ver o upsert lá embaixo).
+          falhouMeta.add(c.id);
         }
       }
       const r = calcularCiclo({
@@ -252,7 +263,7 @@ export async function calcularCiclosDasContas(contaIds: string[], agora = new Da
     6
   );
 
-  const comCiclo = resultados.filter((r) => r.ciclo);
+  const comCiclo = resultados.filter((r) => r.ciclo && !falhouMeta.has(r.contaId));
   if (comCiclo.length) {
     await db.from("smartads_ciclo_saldo_cache").upsert(comCiclo.map((r) => ({ conta_id: r.contaId, dados: r, calculado_em: r.calculadoEm })));
   }

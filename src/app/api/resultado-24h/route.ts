@@ -49,7 +49,18 @@ export async function GET(request: NextRequest) {
   try {
     const r = await comContaMeta(contaId, async () => {
       const [{ campanhas }, linhasHoje, linhasOntem, criativos] = await Promise.all([
-        listarCampanhas(act, { limit: 100 }),
+        (async () => {
+          // Até 3 páginas: conta com muitas campanhas antigas não esconde uma ativa.
+          const todas = [];
+          let after: string | undefined;
+          for (let i = 0; i < 3; i++) {
+            const p = await listarCampanhas(act, { limit: 100, after });
+            todas.push(...p.campanhas);
+            if (!p.proximoCursor) break;
+            after = p.proximoCursor;
+          }
+          return { campanhas: todas };
+        })(),
         obterInsightsRelatorio(act, { nivel: "campaign", desde: hoje, ate: hoje }),
         obterInsightsRelatorio(act, { nivel: "campaign", desde: ontem, ate: ontem }),
         obterCriativosPorCampanha(act).catch(() => null),

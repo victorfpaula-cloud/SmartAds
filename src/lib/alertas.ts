@@ -69,8 +69,8 @@ export async function gerarAlertas(empresaId: string, agora = new Date()): Promi
 
     const ciclo = ciclos.get(c.contaId);
     // (conta já sem saldo ou com saldo baixíssimo tem o aviso urgente próprio — não repete aqui)
-    const saldoNoFim = c.saldoDisponivelCentavos !== null && c.saldoDisponivelCentavos <= SALDO_BAIXO_CENTAVOS;
-    if (ciclo && !saldoNoFim && (ciclo.status === "falta" || ciclo.status === "sobra")) {
+    const saldoBaixo = c.saldoDisponivelCentavos !== null && c.saldoDisponivelCentavos <= SALDO_BAIXO_CENTAVOS;
+    if (ciclo && !saldoBaixo && (ciclo.status === "falta" || ciclo.status === "sobra")) {
       add({
         severidade: "atencao",
         categoria: "saldo",

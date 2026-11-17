@@ -296,3 +296,17 @@ describe("ritmo do saldo por ciclo de recarga", () => {
     expect(fim.status).toBe("ciclo_encerrado");
   });
 });
+
+describe("ritmo do saldo: casos de borda da revisão", () => {
+  const agora = sp("2026-11-17T12:00:00");
+  it("dia da recarga sem ritmo medido não vira 'sobra' (nem alerta)", () => {
+    const r = calcularCiclo({ boost: null, intervaloMedioDias: 7, agora, ciclo: "semanal", ultimaRecarga: "2026-11-17", valorRecargaCentavos: 35000, saldoRealCentavos: 35000, gastoDesdeCentavos: 500, ritmoDiarioCentavos: null });
+    expect(r.status).toBe("ok");
+  });
+  it("orçamento ideal não explode no fim do ciclo", () => {
+    // 0,58 dia pra acabar o ciclo, R$ 50 de saldo: o ideal é no máximo R$ 50/dia, não R$ 86/dia.
+    const r = calcularCiclo({ boost: null, intervaloMedioDias: 7, agora: sp("2026-11-17T10:00:00"), ciclo: "semanal", ultimaRecarga: "2026-11-11", valorRecargaCentavos: 35000, saldoRealCentavos: 5000, gastoDesdeCentavos: 30000, ritmoDiarioCentavos: 4000 });
+    expect(r.diasRestantes!).toBeLessThan(1);
+    expect(r.idealDiarioCentavos!).toBeLessThanOrEqual(5000);
+  });
+});
