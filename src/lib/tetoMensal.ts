@@ -142,9 +142,13 @@ async function coletar(contaId: string, agora: Date): Promise<Coleta | null> {
     for (const cj of conjuntos) {
       const camp = ativas.get(cj.campaign_id);
       if (!camp || cj.effective_status !== "ACTIVE") continue;
-      const inicio = camp.start_time ? new Date(camp.start_time) : null;
-      const fim = camp.stop_time ? new Date(camp.stop_time) : null;
-      const linha = porId.get(camp.id) ?? { id: camp.id, nome: camp.name, diarioCentavos: 0, restanteCentavos: 0, fim: camp.stop_time ?? null };
+      // Data de término: a do conjunto (onde o SmartAds grava) ou, na falta, a da campanha.
+      const inicioIso = cj.start_time ?? camp.start_time ?? null;
+      const fimIso = cj.end_time ?? camp.stop_time ?? null;
+      const inicio = inicioIso ? new Date(inicioIso) : null;
+      const fim = fimIso ? new Date(fimIso) : null;
+      const linha = porId.get(camp.id) ?? { id: camp.id, nome: camp.name, diarioCentavos: 0, restanteCentavos: 0, fim: fimIso };
+      if (fimIso && (!linha.fim || fimIso > linha.fim)) linha.fim = fimIso;
       if (cj.daily_budget) {
         linha.diarioCentavos += Number(cj.daily_budget);
         linha.restanteCentavos += gastoRestanteNoMes({ tipo: "diario", valorCentavos: Number(cj.daily_budget), inicio, fim }, agora);

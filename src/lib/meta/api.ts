@@ -37,7 +37,8 @@ async function chamar<T = any>(
     url.searchParams.set(chave, typeof valor === "string" ? valor : JSON.stringify(valor));
   }
 
-  const init: RequestInit = { method: metodo, cache: "no-store" };
+  // Teto de 30s por chamada: uma Meta travada não segura a rota inteira até o limite da Vercel.
+  const init: RequestInit = { method: metodo, cache: "no-store", signal: AbortSignal.timeout(30_000) };
   if (corpo && metodo !== "GET") {
     init.headers = { "Content-Type": "application/json" };
     init.body = JSON.stringify(corpo);
@@ -1315,6 +1316,9 @@ export interface ConjuntoResumoMeta {
   effective_status: string;
   daily_budget?: string;
   lifetime_budget?: string;
+  /** O SmartAds grava a data de término no CONJUNTO (end_time), não na campanha (stop_time). */
+  start_time?: string;
+  end_time?: string;
 }
 
 /** Conta de anúncio ("act_…") dona de uma campanha/conjunto/anúncio — pra conferir que o id recebido
@@ -1335,7 +1339,7 @@ export async function listarConjuntosDaConta(adAccountId: string): Promise<Conju
       data: ConjuntoResumoMeta[];
       paging?: { cursors?: { after?: string }; next?: string };
     }>(`${adAccountId}/adsets`, {
-      query: { fields: "id,campaign_id,effective_status,daily_budget,lifetime_budget", limit: 100, after },
+      query: { fields: "id,campaign_id,effective_status,daily_budget,lifetime_budget,start_time,end_time", limit: 100, after },
     });
     todos.push(...dados.data);
     if (!dados.paging?.next) break;
