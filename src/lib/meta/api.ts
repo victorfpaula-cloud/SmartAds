@@ -37,15 +37,25 @@ async function chamar<T = any>(
     url.searchParams.set(chave, typeof valor === "string" ? valor : JSON.stringify(valor));
   }
 
-  // Teto de 30s por chamada: uma Meta travada não segura a rota inteira até o limite da Vercel.
-  const init: RequestInit = { method: metodo, cache: "no-store", signal: AbortSignal.timeout(30_000) };
+  // Teto de 30s só nas LEITURAS: uma Meta travada não segura a rota inteira até o limite da Vercel.
+  // Criação/alteração (POST) fica sem teto — cortar no meio deixaria objeto criado na Meta sem o app
+  // saber o id pra desfazer.
+  const init: RequestInit = { method: metodo, cache: "no-store", ...(metodo === "GET" ? { signal: AbortSignal.timeout(30_000) } : {}) };
   if (corpo && metodo !== "GET") {
     init.headers = { "Content-Type": "application/json" };
     init.body = JSON.stringify(corpo);
   }
 
   const resposta = await fetch(url.toString(), init);
-  const json = await resposta.json().catch(() => ({}));
+  let corpoIlegivel = false;
+  const json = await resposta.json().catch(() => {
+    corpoIlegivel = true;
+    return {};
+  });
+  // Resposta "ok" mas sem corpo legível (cortada no meio): é erro, não um objeto vazio de sucesso.
+  if (resposta.ok && corpoIlegivel && metodo === "GET") {
+    throw new Error("A Meta não respondeu por completo. Tente de novo em instantes.");
+  }
 
   if (!resposta.ok || json.error) {
     throw new ErroGraphAPIException(json.error);

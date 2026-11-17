@@ -36,10 +36,10 @@ export default async function DuplicarCampanhaPage({
   // obrigatória (orçamento total precisa de início e fim), abre direto no passo do orçamento.
   const hoje = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
   const dia = (v: unknown) => (typeof v === "string" ? v.slice(0, 10) : "");
-  const orcamento = { ...(config.orcamento ?? {}) };
+  const orcamento = { tipo: "diario", valorCentavos: 0, ...(config.orcamento ?? {}) };
   if (orcamento.dataInicio && dia(orcamento.dataInicio) < hoje) delete orcamento.dataInicio;
   if (orcamento.dataFim && dia(orcamento.dataFim) <= hoje) delete orcamento.dataFim;
-  const faltaData = orcamento.tipo === "vitalicio" && (!orcamento.dataInicio || !orcamento.dataFim);
+  const faltaData = !orcamento.valorCentavos || (orcamento.tipo === "vitalicio" && (!orcamento.dataInicio || !orcamento.dataFim));
   const datasLimpas = orcamento.dataInicio !== config.orcamento?.dataInicio || orcamento.dataFim !== config.orcamento?.dataFim;
   const valoresIniciais: ValoresIniciaisCampanha = {
     publico: config.publico,

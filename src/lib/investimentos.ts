@@ -134,7 +134,9 @@ export async function carregarInvestimentos(mes: string, empresaId?: string): Pr
   // Principal e Expansão), a mesma recarga aparecia nos dois e o total da rede dobrava. Ficam só no
   // primeiro cadastro; os lançamentos manuais continuam em quem lançou.
   const primeiroDaContaDeAnuncio = new Map<string, string>();
-  for (const { c } of contas) if (!primeiroDaContaDeAnuncio.has(c.meta_ad_account_id)) primeiroDaContaDeAnuncio.set(c.meta_ad_account_id, c.id);
+  // Critério fixo (menor id) pra a recarga não ficar trocando de unidade entre uma visita e outra.
+  for (const { c } of [...contas].sort((x, y) => String(x.c.id).localeCompare(String(y.c.id))))
+    if (!primeiroDaContaDeAnuncio.has(c.meta_ad_account_id)) primeiroDaContaDeAnuncio.set(c.meta_ad_account_id, c.id);
   for (const { cl, c } of contas) {
     const ehPrimeiro = primeiroDaContaDeAnuncio.get(c.meta_ad_account_id) === c.id;
     const lista = (aportes ?? []).filter((a) => a.conta_id === c.id && (ehPrimeiro || a.origem !== "meta"));

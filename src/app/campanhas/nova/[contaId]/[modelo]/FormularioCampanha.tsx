@@ -89,7 +89,7 @@ export default function FormularioCampanha({
     valoresIniciais?.orcamento.tipo ?? "diario"
   );
   const [valorReais, setValorReais] = useState(
-    valoresIniciais ? String(valoresIniciais.orcamento.valorCentavos / 100).replace(".", ",") : ""
+    valoresIniciais?.orcamento.valorCentavos ? String(valoresIniciais.orcamento.valorCentavos / 100).replace(".", ",") : ""
   );
   const [dataInicio, setDataInicio] = useState(valoresIniciais?.orcamento.dataInicio ?? "");
   const [dataFim, setDataFim] = useState(valoresIniciais?.orcamento.dataFim ?? "");
