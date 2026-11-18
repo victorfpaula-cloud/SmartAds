@@ -101,7 +101,9 @@ export function somarLinhas(linhas: LinhaInsightRelatorio[]): Record<Escopo, Met
 }
 
 /** Busca as duas semanas (atual e anterior) de todas as unidades da franquia e guarda. */
-export const PERIODOS_ANALISE = [7, 15] as const;
+export const PERIODOS_ANALISE = [7, 15, 30, 60, 90] as const;
+/** Período válido vindo de um parâmetro (o que não for um dos períodos vira 7). */
+export const periodoAnalise = (v: unknown): number => (PERIODOS_ANALISE as readonly number[]).includes(Number(v)) ? Number(v) : 7;
 
 export async function calcularAnaliseTrafego(empresaId: string, dias: number = 7, limiteMs = 45_000): Promise<AnaliseTrafego> {
   const inicio = Date.now();

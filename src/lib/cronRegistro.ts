@@ -72,4 +72,5 @@ export const ROTINAS: Record<string, { rotulo: string; intervaloHoras: number | 
   "relatorio-rede": { rotulo: "Relatório mensal da rede", intervaloHoras: null },
   limpeza: { rotulo: "Limpeza de dados antigos", intervaloHoras: null },
   "analise-trafego": { rotulo: "Análise semanal do tráfego", intervaloHoras: null },
+  "analise-trafego-longa": { rotulo: "Ranking das unidades (30, 60 e 90 dias)", intervaloHoras: null },
 };

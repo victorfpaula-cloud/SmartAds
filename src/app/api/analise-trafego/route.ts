@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { lerAmbiente } from "@/lib/ambiente";
-import { calcularAnaliseTrafego } from "@/lib/analiseTrafego";
+import { calcularAnaliseTrafego, periodoAnalise } from "@/lib/analiseTrafego";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
   if (!ambiente || ambiente.tipo !== "franquia") return NextResponse.json({ erro: "Abra uma franquia." }, { status: 403 });
   try {
     const corpo = await request.json().catch(() => ({}));
-    const dias = Number(corpo?.dias) === 15 ? 15 : 7;
+    const dias = periodoAnalise(corpo?.dias);
     const a = await calcularAnaliseTrafego(ambiente.id, dias);
     return NextResponse.json({ ok: true, unidades: a.unidades.length, comErro: a.unidades.filter((u) => u.erro).length });
   } catch (e) {
