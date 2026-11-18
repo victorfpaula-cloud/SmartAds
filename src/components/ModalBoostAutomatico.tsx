@@ -76,6 +76,7 @@ export default function ModalBoostAutomatico({
   // Começa pelo que já está salvo na conta: salvar rápido (antes da leitura extra voltar) não troca a config pelos padrões.
   const [postsPorDia, setPostsPorDia] = useState(conta.boost_posts_por_dia ?? 1);
   const [configCarregada, setConfigCarregada] = useState(false);
+  const [soFeed, setSoFeed] = useState(false);
 
   // O modal é aberto de dentro de cards com blur (.cartao-vidro): um ancestral com backdrop-filter
   // vira o "bloco de contenção" do position:fixed, então o modal ficava preso e cortado dentro do
@@ -103,6 +104,7 @@ export default function ModalBoostAutomatico({
       .then((c) => {
         setTipoEntrega((c.tipoEntrega as TipoEntregaBoost) ?? "engajamento");
         setPostsPorDia(Number(c.postsPorDia) || 1);
+        setSoFeed(Boolean(c.soFeed));
         setConfigCarregada(true);
       })
       .catch(() => setConfigCarregada(true));
@@ -132,7 +134,7 @@ export default function ModalBoostAutomatico({
     const resposta = await fetch(`/api/contas-meta/${conta.id}/boost-automatico`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ativo, publicoId: publicoId || null, orcamentoCentavos: valorCentavos, duracaoDias, tipoEntrega, postsPorDia }),
+      body: JSON.stringify({ ativo, publicoId: publicoId || null, orcamentoCentavos: valorCentavos, duracaoDias, tipoEntrega, postsPorDia, ...(configCarregada ? { soFeed } : {}) }),
     });
     const corpo = await resposta.json();
     setSalvando(false);
@@ -270,6 +272,22 @@ export default function ModalBoostAutomatico({
               </select>
             </div>
           </div>
+
+          <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2.5">
+            <input
+              type="checkbox"
+              checked={soFeed}
+              disabled={!configCarregada}
+              onChange={(e) => setSoFeed(e.target.checked)}
+              className="mt-0.5 h-4 w-4 accent-accent"
+            />
+            <span className="text-xs text-neutral-300">
+              <span className="font-semibold text-neutral-100">Só no feed (sem Reels)</span>
+              <span className="mt-0.5 block text-neutral-500">
+                Vídeos também rodam só no feed, onde as pessoas curtem mais. Os boosts que já estão no ar passam a rodar assim na próxima passagem do boost (até 1h). Se a Meta recusar o vídeo no feed, o boost volta pra regra normal.
+              </span>
+            </span>
+          </label>
 
           {(() => {
             const orc = orcamento.trim() ? reaisDigitadosParaCentavos(orcamento) ?? 0 : 0;

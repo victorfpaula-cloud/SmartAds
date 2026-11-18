@@ -715,7 +715,7 @@ export async function listarPublicosSalvosDaMeta(adAccountId: string): Promise<P
 export function montarTargeting(
   publico: Publico,
   ehReels: boolean = false,
-  posicionamento?: "stories" | "reels",
+  posicionamento?: "stories" | "reels" | "feed",
   /** Também publica no Facebook; `video` diz qual conjunto de posicionamentos usar lá. */
   facebook?: { video: boolean }
 ): Record<string, unknown> {
@@ -731,9 +731,9 @@ export function montarTargeting(
     age_max: publico.idadeMax ?? 65,
     publisher_platforms: facebook ? ["instagram", "facebook"] : ["instagram"],
     instagram_positions:
-      posicionamento === "stories" ? ["story"] : posicionamento === "reels" ? ["reels"] : ehReels ? ["stream", "reels"] : ["stream"],
+      posicionamento === "stories" ? ["story"] : posicionamento === "reels" ? ["reels"] : posicionamento === "feed" ? ["stream"] : ehReels ? ["stream", "reels"] : ["stream"],
     ...(facebook
-      ? { facebook_positions: posicionamento === "stories" ? ["story"] : posicionamento === "reels" ? ["facebook_reels"] : facebook.video ? ["feed", "facebook_reels"] : ["feed"] }
+      ? { facebook_positions: posicionamento === "stories" ? ["story"] : posicionamento === "reels" ? ["facebook_reels"] : posicionamento === "feed" ? ["feed"] : facebook.video ? ["feed", "facebook_reels"] : ["feed"] }
       : {}),
     // Passou a ser obrigatório sinalizar explicitamente se o público Advantage (expansão
     // automática de público pela própria Meta) está ligado — "0" porque o SmartAds sempre
@@ -867,6 +867,22 @@ export async function criarConjuntoDeAnuncios(
   }
 
   return chamar(`${adAccountId}/adsets`, { metodo: "POST", corpo });
+}
+
+/** Deixa um conjunto que já está no ar só no feed (tira Reels do Instagram e do Facebook), mantendo o
+ * resto do público como está. Devolve false quando ele já estava só no feed (nada a mudar). */
+export async function deixarConjuntoSoNoFeed(adsetId: string): Promise<boolean> {
+  const { targeting } = await chamar<{ targeting?: Record<string, unknown> }>(adsetId, { query: { fields: "targeting" } });
+  if (!targeting) return false;
+  const ig = (targeting.instagram_positions as string[] | undefined) ?? [];
+  const fb = (targeting.facebook_positions as string[] | undefined) ?? [];
+  const igNovo = ig.filter((p) => p !== "reels");
+  const fbNovo = fb.filter((p) => p !== "facebook_reels");
+  if (igNovo.length === ig.length && fbNovo.length === fb.length) return false;
+  const novo: Record<string, unknown> = { ...targeting, instagram_positions: igNovo.length ? igNovo : ["stream"] };
+  if (fb.length) novo.facebook_positions = fbNovo.length ? fbNovo : ["feed"];
+  await chamar(adsetId, { metodo: "POST", corpo: { targeting: novo } });
+  return true;
 }
 
 export async function pausarConjunto(adsetId: string) {

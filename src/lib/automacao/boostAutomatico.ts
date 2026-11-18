@@ -4,6 +4,7 @@ import { ehPostOficial } from "@/lib/automacao/postsOficiais";
 import { criarCampanhaCompleta } from "@/lib/meta/criarCampanhaCompleta";
 import type { Publico } from "@/lib/meta/tipos";
 import { mapearEmLotes } from "@/lib/lotes";
+import { aplicarSoFeedNosBoostsNoAr } from "@/lib/automacao/boostSoFeed";
 import { configDaConta, regraDeLinha } from "@/lib/boostRedeServidor";
 import {
   configEfetiva,
@@ -51,12 +52,13 @@ const DIAS_ATRASO_OFICIAL = 3;
 export async function avaliarBoostAutomatico(): Promise<{
   contasAvaliadas: number;
   campanhasCriadas: number;
+  conjuntosSoFeed: number;
 }> {
   const supabase = criarClienteAdmin();
   const { data: contasBrutas, error: erroContas } = await supabase
     .from("smartads_contas_meta")
     .select(
-      "id, instagram_business_id, boost_automatico_publico_id, boost_automatico_orcamento_centavos, boost_automatico_duracao_dias, boost_tipo_entrega, boost_posts_por_dia, smartads_clientes!inner(empresa_id, ativo, smartads_empresas(tipo))"
+      "id, instagram_business_id, boost_automatico_publico_id, boost_automatico_orcamento_centavos, boost_automatico_duracao_dias, boost_tipo_entrega, boost_posts_por_dia, boost_posicionamento, smartads_clientes!inner(empresa_id, ativo, smartads_empresas(tipo))"
     )
     .eq("ativo", true)
     .eq("boost_automatico_ativo", true)
@@ -258,6 +260,8 @@ export async function avaliarBoostAutomatico(): Promise<{
             dataFim: dataFim.toISOString(),
           },
           criativo: { usarPostExistente: true, postSelecionadoId: alvo.id, mensagem: "" },
+          // "Só feed" ligado na unidade: sem Reels (mais curtida no post, menos visualização de 3s).
+          ...(conta.boost_posicionamento === "feed" ? { posicionamento: "feed" as const } : {}),
         });
         if (resultado.ok) {
           criados.push(tipo);
@@ -305,6 +309,18 @@ export async function avaliarBoostAutomatico(): Promise<{
     }
   });
 
+  // Unidades com "só feed": os boosts que já estavam no ar passam a rodar só no feed também.
+  let conjuntosSoFeed = 0;
+  for (const conta of (contas ?? []).filter((c) => c.boost_posicionamento === "feed")) {
+    try {
+      const r = await aplicarSoFeedNosBoostsNoAr(conta.id);
+      conjuntosSoFeed += r.alterados;
+      if (r.erros.length) console.error(`Boost só feed: conta ${conta.id}:`, r.erros.join(" | "));
+    } catch (e) {
+      console.error(`Boost só feed: conta ${conta.id}:`, e instanceof Error ? e.message : e);
+    }
+  }
+
   const campanhasCriadas = criadasPorConta.filter(Boolean).length;
-  return { contasAvaliadas: (contas ?? []).length, campanhasCriadas };
+  return { contasAvaliadas: (contas ?? []).length, campanhasCriadas, conjuntosSoFeed };
 }
