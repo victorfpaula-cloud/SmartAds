@@ -55,6 +55,7 @@ export function AbasSaudeRede() {
       abas={[
         { href: "/estrategias/saude-rede", label: "Números da rede" },
         { href: "/estrategias/analise-trafego", label: "Análise do tráfego" },
+        { href: "/estrategias/ranking", label: "Ranking das unidades" },
       ]}
     />
   );

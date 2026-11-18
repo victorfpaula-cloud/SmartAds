@@ -60,7 +60,7 @@ export interface HistoricoSeguidoresRede {
   ganhos: GanhoSeguidores[];
   /** Total da rede por dia (contando cada Instagram uma vez). */
   serie: Array<{ dia: string; total: number }>;
-  porUnidade: Array<{ unidade: string; instagram: string | null; total: number | null; ganhos: Record<number, GanhoSeguidores> }>;
+  porUnidade: Array<{ contaId: string; unidade: string; instagram: string | null; total: number | null; ganhos: Record<number, GanhoSeguidores> }>;
 }
 
 function ganhoDe(pontos: Array<{ dia: string; v: number }>, hoje: string, dias: number): GanhoSeguidores {
@@ -129,6 +129,7 @@ export async function carregarHistoricoSeguidores(empresaId: string): Promise<Hi
     porUnidade: unicas.map((u) => {
       const pts = porConta.get(u.contaId) ?? [];
       return {
+        contaId: u.contaId,
         unidade: u.unidade,
         instagram: u.instagram,
         total: pts.length ? pts[pts.length - 1].v : null,
