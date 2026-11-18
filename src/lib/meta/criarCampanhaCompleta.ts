@@ -32,7 +32,7 @@ export interface ParametrosCriarCampanha {
   publicoId?: string;
   /** Delivery: "stories" restringe a entrega só aos Stories do Instagram. */
   /** "reels": só Reels — usado sozinho pelo app como segunda tentativa de vídeo que o feed recusou. */
-  posicionamento?: "stories" | "reels";
+  posicionamento?: "stories" | "reels" | "feed";
   /** Campanha manual também no Facebook (foto/carrossel só feed; vídeo feed e Reels). */
   tambemNoFacebook?: boolean;
   /** Preenchido quando essa campanha nasce de uma etapa de um Plano de Execução — ao concluir com
@@ -498,6 +498,12 @@ export async function criarCampanhaCompleta(corpo: ParametrosCriarCampanha): Pro
   const primeira = await criarCampanhaUmaVez(corpo);
   if (primeira.ok || primeira.codigo === "teto_mensal") return primeira;
   const recusaDeFormato = /propor[cç][aã]o|aspect ratio/i.test(primeira.erro);
+  // "Só feed" (opção do boost da unidade) com vídeo que a Meta não aceita no feed: em vez de ficar
+  // sem boost, volta pra regra normal (feed + Reels e, se precisar, só Reels).
+  if (recusaDeFormato && corpo.posicionamento === "feed" && primeira.desfeito) {
+    const normal = await criarCampanhaCompleta({ ...corpo, posicionamento: undefined });
+    return normal.ok ? normal : { ...normal, erro: `${primeira.erro} | Sem o "só feed": ${normal.erro}` };
+  }
   if (!recusaDeFormato || corpo.posicionamento || corpo.tambemNoFacebook) return primeira;
   if (!corpo.criativo.usarPostExistente || !corpo.criativo.postSelecionadoId) return primeira;
   // Só tenta de novo se a 1ª tentativa foi desfeita por completo na Meta — nunca arrisca duplicar.

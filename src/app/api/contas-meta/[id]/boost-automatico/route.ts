@@ -11,10 +11,10 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   const { id } = await params;
   const { data } = await criarClienteAdmin()
     .from("smartads_contas_meta")
-    .select("boost_tipo_entrega, boost_posts_por_dia")
+    .select("boost_tipo_entrega, boost_posts_por_dia, boost_posicionamento")
     .eq("id", id)
     .maybeSingle();
-  return NextResponse.json({ tipoEntrega: data?.boost_tipo_entrega ?? "engajamento", postsPorDia: data?.boost_posts_por_dia ?? 1 });
+  return NextResponse.json({ tipoEntrega: data?.boost_tipo_entrega ?? "engajamento", postsPorDia: data?.boost_posts_por_dia ?? 1, soFeed: data?.boost_posicionamento === "feed" });
 }
 
 /** Liga/desliga o boost automático de uma conta e grava público + orçamento diário + duração — ver
@@ -47,6 +47,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       boost_automatico_duracao_dias: duracaoDias,
       boost_tipo_entrega: tipoEntrega,
       boost_posts_por_dia: postsPorDia,
+      // Só muda quando a tela manda (o toggle rápido da lista de unidades não manda e não pode apagar).
+      ...(typeof corpo?.soFeed === "boolean" ? { boost_posicionamento: corpo.soFeed ? "feed" : null } : {}),
     })
     .eq("id", id);
 
