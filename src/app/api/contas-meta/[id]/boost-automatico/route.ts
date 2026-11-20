@@ -3,7 +3,7 @@ import { criarClienteAdmin } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 
-const DURACOES_VALIDAS = [3, 7];
+const DURACOES_VALIDAS = [3, 5, 7];
 const TIPOS = ["engajamento", "alcance", "ambos"];
 
 /** Configuração atual do boost da conta (tipo de entrega, posts por dia) — o modal carrega daqui. */
