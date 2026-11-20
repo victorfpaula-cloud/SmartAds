@@ -254,6 +254,7 @@ export default function ModalBoostAutomatico({
                 className="mt-1 h-9 w-full rounded-lg border border-white/14 bg-ink-850 px-2.5 text-sm text-neutral-100"
               >
                 <option value={3}>3 dias</option>
+                <option value={5}>5 dias</option>
                 <option value={7}>7 dias</option>
               </select>
             </div>
