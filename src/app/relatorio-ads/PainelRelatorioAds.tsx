@@ -467,7 +467,7 @@ function RelatorioCurtidas({ dados }: { dados: DadosRelatorioAds }) {
 function DadosGeraisCards({ dados }: { dados: DadosGeraisRede }) {
   const periodo = `${formatarDiaExibicao(dados.periodo.desde)} a ${formatarDiaExibicao(dados.periodo.ate)}`;
   const cartoes = [
-    { rotulo: "Campanhas criadas", valor: inteiro(dados.campanhasCriadas), sub: "criadas pelo SmartAds no período" },
+    { rotulo: "Seguidores ganhos", valor: dados.seguidoresGanhos.total === null ? "—" : `+${inteiro(dados.seguidoresGanhos.total)}`, sub: `das unidades com boost ligado${dados.seguidoresGanhos.semLeitura > 0 ? ` · ${inteiro(dados.seguidoresGanhos.semLeitura)} sem leitura` : ""}` },
     { rotulo: "Curtidas", valor: inteiro(dados.curtidas), sub: "trazidas pelas campanhas" },
     { rotulo: "Alcance", valor: inteiro(dados.alcance), sub: "soma das campanhas" },
     { rotulo: "Visualizações", valor: inteiro(dados.visualizacoes), sub: "vezes que os anúncios apareceram" },
@@ -491,8 +491,28 @@ function DadosGeraisCards({ dados }: { dados: DadosGeraisRede }) {
           </div>
         ))}
       </div>
+      <div className="cartao-vidro overflow-x-auto p-5">
+        <h3 className="text-sm font-semibold text-neutral-200">Campanhas criadas por unidade</h3>
+        <p className="mt-1 text-xs text-neutral-500">Criadas pelo SmartAds no período, incluindo as unidades sem nenhuma.</p>
+        <table className="mt-3 w-full min-w-[260px] text-left text-[13px]">
+          <thead className="text-[11px] uppercase tracking-wide text-neutral-500">
+            <tr>
+              <th className="py-2 font-medium">Unidade</th>
+              <th className="py-2 text-right font-medium">Campanhas</th>
+            </tr>
+          </thead>
+          <tbody>
+            {dados.campanhasPorUnidade.map((u) => (
+              <tr key={u.unidade} className="border-t border-white/5 text-neutral-300">
+                <td className="py-2">{u.unidade}</td>
+                <td className="py-2 text-right tabular-nums">{inteiro(u.campanhas)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       <p className="text-[11px] text-neutral-600">
-        Só entram as campanhas criadas pelo SmartAds. Alcance soma as campanhas, então a mesma pessoa vista em duas campanhas conta duas vezes. Visualizações são as vezes que os anúncios apareceram.
+        Só entram as campanhas criadas pelo SmartAds. Seguidores são os das unidades com boost ligado. Alcance soma as campanhas, então a mesma pessoa vista em duas campanhas conta duas vezes. Visualizações são as vezes que os anúncios apareceram.
       </p>
     </>
   );

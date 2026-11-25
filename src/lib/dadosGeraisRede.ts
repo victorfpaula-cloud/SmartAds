@@ -5,6 +5,7 @@ import { listarContasDaRede } from "@/lib/saudeRede";
 import { ehContaCentralDaRede, somarLinhas } from "@/lib/analiseTrafego";
 import { adicionarDias, diaEmSaoPaulo } from "@/lib/tempoSaoPaulo";
 import { mapearEmLotes } from "@/lib/lotes";
+import { ganhoSeguidoresEntre } from "@/lib/seguidoresHistorico";
 
 /** Volume de trabalho feito pelo SmartAds na franquia no período: só as campanhas criadas pelo
  * próprio SmartAds (campanhas criadas fora dele, como as de formulário da expansão, não entram em
@@ -14,8 +15,10 @@ export interface DadosGeraisRede {
   periodo: { dias: number; desde: string; ate: string };
   unidades: number;
   unidadesSemLeitura: number;
-  /** Campanhas criadas pelo SmartAds no período. */
-  campanhasCriadas: number;
+  /** Campanhas criadas pelo SmartAds no período, por unidade (inclui as sem nenhuma). */
+  campanhasPorUnidade: Array<{ unidade: string; campanhas: number }>;
+  /** Seguidores que as unidades com boost ligado ganharam no período; null sem leitura de nenhuma. */
+  seguidoresGanhos: { total: number | null; unidades: number; semLeitura: number };
   investido: number;
   curtidas: number;
   alcance: number;
@@ -48,6 +51,7 @@ export async function calcularDadosGeraisRede(empresaId: string, dias: number): 
   // Campanhas criadas pelo SmartAds no período: só elas contam (o resto fica de fora).
   const supabase = criarClienteAdmin();
   const idsDaContaPorCampanha = new Map<string, string>();
+  const campanhasDaConta = new Map<string, number>();
   const { data: criadas, error } = await supabase
     .from("smartads_campanhas_criadas")
     .select("meta_campaign_id, conta_id, config_criacao")
@@ -60,6 +64,7 @@ export async function calcularDadosGeraisRede(empresaId: string, dias: number): 
     const nome = (linha.config_criacao as { nomeCampanha?: string } | null)?.nomeCampanha;
     if (ehCampanhaDeExpansao(nome)) continue;
     idsDaContaPorCampanha.set(linha.meta_campaign_id as string, linha.conta_id as string);
+    campanhasDaConta.set(linha.conta_id as string, (campanhasDaConta.get(linha.conta_id as string) ?? 0) + 1);
   }
 
   const lidas = await mapearEmLotes(
@@ -90,12 +95,43 @@ export async function calcularDadosGeraisRede(empresaId: string, dias: number): 
   });
   const m = somarLinhas(linhasDoSmartAds).tudo;
 
+  // Seguidores: só das unidades com boost ligado (são as que o SmartAds opera).
+  const { data: boosts } = await supabase
+    .from("smartads_contas_meta")
+    .select("id, boost_automatico_ativo")
+    .in("id", contas.map((c) => c.contaId))
+    .eq("boost_automatico_ativo", true);
+  const comBoost = new Set((boosts ?? []).map((b) => b.id as string));
+  const ganhos = await mapearEmLotes(
+    contas.filter((c) => comBoost.has(c.contaId) && c.instagramId),
+    async (c) => {
+      if (Date.now() - inicio > LIMITE_MS) return null;
+      try {
+        return await ganhoSeguidoresEntre(c.contaId, desde, ate);
+      } catch {
+        return null;
+      }
+    },
+    6
+  );
+  const lidosSeguidores = ganhos.filter((g): g is number => g !== null);
+  const seguidoresGanhos = {
+    total: lidosSeguidores.length > 0 ? lidosSeguidores.reduce((soma, g) => soma + g, 0) : null,
+    unidades: ganhos.length,
+    semLeitura: ganhos.length - lidosSeguidores.length,
+  };
+
+  const campanhasPorUnidade = contas
+    .map((c) => ({ unidade: c.unidade, campanhas: campanhasDaConta.get(c.contaId) ?? 0 }))
+    .sort((a, b) => b.campanhas - a.campanhas || a.unidade.localeCompare(b.unidade));
+
   const arred = (n: number) => Math.round(n * 100) / 100;
   return {
     periodo: { dias, desde, ate },
     unidades: contas.length,
     unidadesSemLeitura: semLeitura,
-    campanhasCriadas: idsDaContaPorCampanha.size,
+    campanhasPorUnidade,
+    seguidoresGanhos,
     investido: arred(m.gasto),
     curtidas: Math.round(m.curtidas),
     alcance: Math.round(m.alcance),
