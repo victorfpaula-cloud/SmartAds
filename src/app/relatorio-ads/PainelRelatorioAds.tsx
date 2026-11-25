@@ -479,7 +479,7 @@ function DadosGeraisCards({ dados }: { dados: DadosGeraisRede }) {
         <p className="text-[11px] font-semibold uppercase tracking-wide text-accent-strong">Últimos {dados.periodo.dias} dias · {periodo}</p>
         <h2 className="mt-1 font-display text-lg font-bold">Dados gerais da franquia</h2>
         <p className="mt-1 text-xs text-neutral-500">
-          {inteiro(dados.unidades)} unidades somadas{dados.unidadesSemLeitura > 0 ? ` · ${dados.unidadesSemLeitura} sem leitura agora` : ""}. Conta central (Principal e Expansão) fica de fora.
+          {inteiro(dados.unidades)} unidades ativas (com boost ligado){dados.unidadesSemLeitura > 0 ? ` · ${dados.unidadesSemLeitura} sem leitura agora` : ""}. Conta central (Principal e Expansão) fica de fora.
         </p>
       </div>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
