@@ -5,7 +5,7 @@ import { listarContasDaRede } from "@/lib/saudeRede";
 import { ehContaCentralDaRede, somarLinhas } from "@/lib/analiseTrafego";
 import { adicionarDias, diaEmSaoPaulo } from "@/lib/tempoSaoPaulo";
 import { mapearEmLotes } from "@/lib/lotes";
-import { ganhoSeguidoresEntre } from "@/lib/seguidoresHistorico";
+import { obterSerieSeguidoresInstagram } from "@/lib/meta/api";
 
 /** Volume de trabalho feito pelo SmartAds na franquia no período: só as campanhas criadas pelo
  * próprio SmartAds (campanhas criadas fora dele, como as de formulário da expansão, não entram em
@@ -29,6 +29,8 @@ export interface DadosGeraisRede {
 }
 
 const LIMITE_MS = 45_000;
+/** A Meta informa o ganho diário de seguidores só dos últimos 30 dias. */
+const JANELA_GANHO_DIARIO_DIAS = 30;
 
 /** Campanhas de formulário da expansão: nunca entram nos dados gerais. */
 export const ehCampanhaDeExpansao = (nome: string | null | undefined) => /expans[aã]o|\(form\)/i.test(nome ?? "");
@@ -96,31 +98,43 @@ export async function calcularDadosGeraisRede(empresaId: string, dias: number): 
   });
   const m = somarLinhas(linhasDoSmartAds).tudo;
 
-  // Seguidores: só das unidades com boost ligado (são as que o SmartAds opera).
+  // Seguidores ganhos (orgânico + anúncios, bruto): a soma dos ganhos diários que a Meta informa, só
+  // das páginas com boost ligado. A Meta só guarda 30 dias desse ganho diário, então períodos
+  // maiores não têm esse número.
   const { data: boosts } = await supabase
     .from("smartads_contas_meta")
-    .select("id, boost_automatico_ativo")
+    .select("id, boost_automatico_ativo, page_id")
     .in("id", contas.map((c) => c.contaId))
     .eq("boost_automatico_ativo", true);
-  const comBoost = new Set((boosts ?? []).map((b) => b.id as string));
-  const ganhos = await mapearEmLotes(
-    contas.filter((c) => comBoost.has(c.contaId) && c.instagramId),
-    async (c) => {
-      if (Date.now() - inicio > LIMITE_MS) return null;
-      try {
-        return await ganhoSeguidoresEntre(c.contaId, desde, ate);
-      } catch {
-        return null;
-      }
-    },
-    6
-  );
-  const lidosSeguidores = ganhos.filter((g): g is number => g !== null);
-  const seguidoresGanhos = {
-    total: lidosSeguidores.length > 0 ? lidosSeguidores.reduce((soma, g) => soma + g, 0) : null,
-    unidades: ganhos.length,
-    semLeitura: ganhos.length - lidosSeguidores.length,
-  };
+  const pagina = new Map((boosts ?? []).map((b) => [b.id as string, (b.page_id as string | null) ?? null]));
+  const comBoost = contas.filter((c) => pagina.has(c.contaId));
+  let seguidoresGanhos: DadosGeraisRede["seguidoresGanhos"] = { total: null, unidades: comBoost.length, semLeitura: 0 };
+  if (dias <= JANELA_GANHO_DIARIO_DIAS) {
+    const ganhos = await mapearEmLotes(
+      comBoost.filter((c) => c.instagramId),
+      async (c): Promise<number | null> => {
+        if (Date.now() - inicio > LIMITE_MS) return null;
+        try {
+          const serie = await obterSerieSeguidoresInstagram(c.instagramId as string, pagina.get(c.contaId) ?? null);
+          return serie
+            .filter((p) => {
+              const dia = adicionarDias(diaEmSaoPaulo(p.fimIso), -1);
+              return dia >= desde && dia <= ate;
+            })
+            .reduce((soma, p) => soma + p.valor, 0);
+        } catch {
+          return null;
+        }
+      },
+      6
+    );
+    const lidos = ganhos.filter((g): g is number => g !== null);
+    seguidoresGanhos = {
+      total: lidos.length > 0 ? Math.round(lidos.reduce((soma, g) => soma + g, 0)) : null,
+      unidades: comBoost.length,
+      semLeitura: comBoost.length - lidos.length,
+    };
+  }
 
   const campanhasPorUnidade = contas
     .map((c) => ({ unidade: c.unidade, campanhas: campanhasDaConta.get(c.contaId) ?? 0 }))
@@ -129,7 +143,7 @@ export async function calcularDadosGeraisRede(empresaId: string, dias: number): 
   const arred = (n: number) => Math.round(n * 100) / 100;
   return {
     periodo: { dias, desde, ate },
-    unidades: comBoost.size,
+    unidades: comBoost.length,
     unidadesSemLeitura: semLeitura,
     campanhasPorUnidade,
     seguidoresGanhos,
