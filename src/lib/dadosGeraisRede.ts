@@ -5,7 +5,7 @@ import { listarContasDaRede } from "@/lib/saudeRede";
 import { ehContaCentralDaRede, somarLinhas } from "@/lib/analiseTrafego";
 import { adicionarDias, diaEmSaoPaulo } from "@/lib/tempoSaoPaulo";
 import { mapearEmLotes } from "@/lib/lotes";
-import { obterSerieSeguidoresInstagram } from "@/lib/meta/api";
+import { obterInsightsInstagramRelatorio, obterSerieSeguidoresInstagram } from "@/lib/meta/api";
 
 /** Volume de trabalho feito pelo SmartAds na franquia no período: só as campanhas criadas pelo
  * próprio SmartAds (campanhas criadas fora dele, como as de formulário da expansão, não entram em
@@ -20,6 +20,9 @@ export interface DadosGeraisRede {
   campanhasPorUnidade: Array<{ unidade: string; campanhas: number }>;
   /** Seguidores que as unidades com boost ligado ganharam no período; null sem leitura de nenhuma. */
   seguidoresGanhos: { total: number | null; unidades: number; semLeitura: number };
+  /** Engajamento total das páginas com boost (curtidas, comentários, compartilhamentos e salvamentos,
+   * orgânico + anúncios). null quando nenhuma página foi lida. */
+  engajamentoTotal: number | null;
   investido: number;
   curtidas: number;
   alcance: number;
@@ -108,6 +111,35 @@ export async function calcularDadosGeraisRede(empresaId: string, dias: number): 
     .eq("boost_automatico_ativo", true);
   const pagina = new Map((boosts ?? []).map((b) => [b.id as string, (b.page_id as string | null) ?? null]));
   const comBoost = contas.filter((c) => pagina.has(c.contaId));
+  // Engajamento das páginas com boost: a Meta limita cada leitura a 30 dias, então o período é
+  // dividido em janelas de 30 dias.
+  const JANELA = 30;
+  const janelas: Array<{ dias: number; terminaDiasAtras: number }> = [];
+  for (let feitos = 0; feitos < dias; feitos += JANELA) {
+    janelas.push({ dias: Math.min(JANELA, dias - feitos), terminaDiasAtras: 1 + feitos });
+  }
+  const comBoostComIg = comBoost.filter((c) => c.instagramId);
+  const engajamentos = await mapearEmLotes(
+    comBoostComIg,
+    async (c): Promise<number | null> => {
+      if (Date.now() - inicio > LIMITE_MS) return null;
+      try {
+        let total = 0;
+        for (const j of janelas) {
+          const r = await obterInsightsInstagramRelatorio(c.instagramId as string, pagina.get(c.contaId) ?? null, j.dias, j.terminaDiasAtras, false);
+          const m = r.metricas;
+          total += (m.likes ?? 0) + (m.comments ?? 0) + (m.shares ?? 0) + (m.saves ?? 0);
+        }
+        return total;
+      } catch {
+        return null;
+      }
+    },
+    6
+  );
+  const lidosEngajamento = engajamentos.filter((e): e is number => e !== null);
+  const engajamentoTotal = lidosEngajamento.length > 0 ? Math.round(lidosEngajamento.reduce((s, e) => s + e, 0)) : null;
+
   let seguidoresGanhos: DadosGeraisRede["seguidoresGanhos"] = { total: null, unidades: comBoost.length, semLeitura: 0 };
   if (dias <= JANELA_GANHO_DIARIO_DIAS) {
     const ganhos = await mapearEmLotes(
@@ -148,6 +180,7 @@ export async function calcularDadosGeraisRede(empresaId: string, dias: number): 
     campanhasPorUnidade,
     seguidoresGanhos,
     investido: arred(m.gasto),
+    engajamentoTotal,
     curtidas: Math.round(m.curtidas),
     alcance: Math.round(m.alcance),
     visualizacoes: Math.round(m.impressoes),
