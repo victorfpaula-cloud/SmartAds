@@ -56,11 +56,3 @@
   }
 }
 
-/* Dados gerais em PDF (pelo botão "Baixar PDF"): só a área do relatório, com as cores da tela. */
-@media print {
-  html, body { background: #07080a !important; }
-  body * { visibility: hidden; }
-  #dados-gerais-pdf, #dados-gerais-pdf * { visibility: visible; }
-  #dados-gerais-pdf { position: absolute; left: 0; top: 0; width: 100%; padding: 24px; background: #07080a; }
-  *, *::before, *::after { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-}
