@@ -198,7 +198,21 @@ export default function PainelRelatorioAds({ contas, contaInicial, ehFranquia = 
 
       {visao === "gerais" && dadosGerais && (
         <div className={carregando ? "flex flex-col gap-5 opacity-50 transition" : "flex flex-col gap-5 transition"}>
-          <DadosGeraisCards dados={dadosGerais} />
+          <div id="dados-gerais-pdf" className="flex flex-col gap-5">
+            <DadosGeraisCards dados={dadosGerais} />
+          </div>
+          <div className="print:hidden flex justify-end">
+            <button
+              onClick={() => window.print()}
+              className="flex items-center gap-1.5 rounded-lg bg-accent px-3.5 py-2 text-[13px] font-semibold text-white transition hover:bg-accent-strong"
+            >
+              <FilePdf size={16} weight="fill" />
+              Baixar PDF
+            </button>
+          </div>
+          <p className="print:hidden text-[11px] text-neutral-600">
+            Abre a janela de impressão: escolha &quot;Salvar como PDF&quot; e marque &quot;Gráficos de fundo&quot; para sair com as cores.
+          </p>
         </div>
       )}
 
