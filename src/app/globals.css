@@ -55,3 +55,12 @@
     @apply relative border-white/10 bg-white/[0.05] backdrop-blur-xl shadow-[0_8px_30px_-14px_rgba(99,102,241,0.35)] before:pointer-events-none before:absolute before:inset-x-[10%] before:top-0 before:z-10 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/40 before:to-transparent before:content-[''];
   }
 }
+
+/* Dados gerais em PDF (pelo botão "Baixar PDF"): só a área do relatório, com as cores da tela. */
+@media print {
+  html, body { background: #07080a !important; }
+  body * { visibility: hidden; }
+  #dados-gerais-pdf, #dados-gerais-pdf * { visibility: visible; }
+  #dados-gerais-pdf { position: absolute; left: 0; top: 0; width: 100%; padding: 24px; background: #07080a; }
+  *, *::before, *::after { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
