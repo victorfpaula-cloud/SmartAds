@@ -481,11 +481,12 @@ function RelatorioCurtidas({ dados }: { dados: DadosRelatorioAds }) {
 function DadosGeraisCards({ dados }: { dados: DadosGeraisRede }) {
   const periodo = `${formatarDiaExibicao(dados.periodo.desde)} a ${formatarDiaExibicao(dados.periodo.ate)}`;
   const seg = dados.seguidoresGanhos;
-  const nota = dados.periodo.dias > 30 ? "A Meta só informa ganho de seguidores dos últimos 30 dias" : seg.semLeitura > 0 ? `${inteiro(seg.semLeitura)} sem leitura` : "orgânico + anúncios";
+  const nota = dados.periodo.dias > 30 ? "A Meta só informa ganho de seguidores dos últimos 30 dias" : seg.semLeitura > 0 ? `no período · ${inteiro(seg.semLeitura)} sem leitura` : "no período";
   const cartoes = [
     { rotulo: "Visualizações", valor: inteiro(dados.visualizacoes), sub: "vezes que os anúncios apareceram" },
     { rotulo: "Alcance", valor: inteiro(dados.alcance), sub: "soma das campanhas" },
     { rotulo: "Curtidas", valor: inteiro(dados.curtidas), sub: "trazidas pelas campanhas" },
+    { rotulo: "Engajamento total", valor: dados.engajamentoTotal === null ? "—" : inteiro(dados.engajamentoTotal), sub: "curtidas, comentários, compartilhamentos e salvamentos" },
     { rotulo: "Investido", valor: reais(dados.investido), sub: "em todas as unidades" },
     { rotulo: "Seguidores ganhos", valor: seg.total === null ? "—" : `+${inteiro(seg.total)}`, sub: nota },
   ];
@@ -495,7 +496,7 @@ function DadosGeraisCards({ dados }: { dados: DadosGeraisRede }) {
         <p className="text-[11px] font-semibold uppercase tracking-wide text-accent-strong">Últimos {dados.periodo.dias} dias · {periodo}</p>
         <h2 className="mt-1 font-display text-lg font-bold">Dados gerais da franquia</h2>
         <p className="mt-1 text-xs text-neutral-500">
-          {inteiro(dados.unidades)} unidades ativas (com boost ligado){dados.unidadesSemLeitura > 0 ? ` · ${dados.unidadesSemLeitura} sem leitura agora` : ""}. Conta central (Principal e Expansão) fica de fora.
+          {inteiro(dados.unidades)} unidades ativas (com boost ligado){dados.unidadesSemLeitura > 0 ? ` · ${dados.unidadesSemLeitura} sem leitura agora` : ""}. A conta Expansão fica de fora.
         </p>
       </div>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
