@@ -7,6 +7,7 @@ import type { DadosRelatorioAds, ItemOrganico } from "@/lib/relatorioAds";
 import { baixarPdfRelatorioAds, montarKpis, inteiro, reais, type CartaoKpi } from "@/lib/relatorioAdsPdf";
 import { formatarDiaExibicao } from "@/lib/tempoSaoPaulo";
 import type { DadosGeraisRede } from "@/lib/dadosGeraisRede";
+import { baixarPdfDadosGerais } from "@/lib/dadosGeraisPdf";
 
 export interface OpcaoConta {
   id: string;
@@ -81,6 +82,18 @@ export default function PainelRelatorioAds({ contas, contaInicial, ehFranquia = 
       cancelado = true;
     };
   }, [contaId, dias, organico, visao]);
+
+  async function baixarPdfGerais() {
+    if (!dadosGerais) return;
+    setGerandoPdf(true);
+    try {
+      await baixarPdfDadosGerais(dadosGerais);
+    } catch {
+      setErro("Não consegui gerar o PDF. Tente de novo.");
+    } finally {
+      setGerandoPdf(false);
+    }
+  }
 
   async function baixarPdf() {
     if (!dados) return;
@@ -198,21 +211,19 @@ export default function PainelRelatorioAds({ contas, contaInicial, ehFranquia = 
 
       {visao === "gerais" && dadosGerais && (
         <div className={carregando ? "flex flex-col gap-5 opacity-50 transition" : "flex flex-col gap-5 transition"}>
-          <div id="dados-gerais-pdf" className="flex flex-col gap-5">
+          <div className="flex flex-col gap-5">
             <DadosGeraisCards dados={dadosGerais} />
           </div>
-          <div className="print:hidden flex justify-end">
+          <div className="flex justify-end">
             <button
-              onClick={() => window.print()}
-              className="flex items-center gap-1.5 rounded-lg bg-accent px-3.5 py-2 text-[13px] font-semibold text-white transition hover:bg-accent-strong"
+              onClick={baixarPdfGerais}
+              disabled={gerandoPdf}
+              className="flex items-center gap-1.5 rounded-lg bg-accent px-3.5 py-2 text-[13px] font-semibold text-white transition hover:bg-accent-strong disabled:opacity-50"
             >
               <FilePdf size={16} weight="fill" />
-              Baixar PDF
+              {gerandoPdf ? "Gerando…" : "Baixar PDF"}
             </button>
           </div>
-          <p className="print:hidden text-[11px] text-neutral-600">
-            Abre a janela de impressão: escolha &quot;Salvar como PDF&quot; e marque &quot;Gráficos de fundo&quot; para sair com as cores.
-          </p>
         </div>
       )}
 
