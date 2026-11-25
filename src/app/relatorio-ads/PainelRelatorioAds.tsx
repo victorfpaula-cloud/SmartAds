@@ -15,11 +15,13 @@ export interface OpcaoConta {
 }
 
 const PERIODOS = [15, 30, 45, 60, 90];
+type Visao = "completo" | "curtidas";
 
 export default function PainelRelatorioAds({ contas, contaInicial }: { contas: OpcaoConta[]; contaInicial?: string }) {
   const [contaId, setContaId] = useState(contaInicial ?? contas[0]?.id ?? "");
   const [dias, setDias] = useState(30);
   const [organico, setOrganico] = useState(false);
+  const [visao, setVisao] = useState<Visao>("completo");
   const [dados, setDados] = useState<DadosRelatorioAds | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -116,6 +118,22 @@ export default function PainelRelatorioAds({ contas, contaInicial }: { contas: O
         </div>
       </div>
 
+      <div className="flex flex-wrap gap-2">
+        {(["completo", "curtidas"] as const).map((v) => (
+          <button
+            key={v}
+            onClick={() => setVisao(v)}
+            className={
+              visao === v
+                ? "pilula-ativa rounded-lg px-3.5 py-2 text-[13px] font-semibold text-neutral-100"
+                : "rounded-lg px-3.5 py-2 text-[13px] font-medium text-neutral-400 hover:text-neutral-200"
+            }
+          >
+            {v === "completo" ? "Relatório completo" : "Relatório de curtidas"}
+          </button>
+        ))}
+      </div>
+
       <label className="cartao-vidro flex cursor-pointer items-center justify-between gap-4 px-4 py-3.5">
         <span>
           <span className="block text-sm font-semibold text-neutral-200">Mostrar dados orgânicos</span>
@@ -150,7 +168,7 @@ export default function PainelRelatorioAds({ contas, contaInicial }: { contas: O
 
       {dados && (
         <div className={carregando ? "flex flex-col gap-5 opacity-50 transition" : "flex flex-col gap-5 transition"}>
-          <Relatorio dados={dados} />
+          {visao === "curtidas" ? <RelatorioCurtidas dados={dados} /> : <Relatorio dados={dados} />}
         </div>
       )}
     </div>
@@ -337,3 +355,74 @@ function Bloco({ titulo, kpis }: { titulo: string; kpis: CartaoKpi[] }) {
   );
 }
 
+
+/** Relatório de curtidas: cada campanha com a miniatura do post, um trecho da legenda e quantas
+ * curtidas ela trouxe no período, da mais curtida para a menos. */
+function RelatorioCurtidas({ dados }: { dados: DadosRelatorioAds }) {
+  const campanhas = dados.campanhas.filter((c) => c.gasto > 0 || c.curtidas > 0).sort((a, b) => b.curtidas - a.curtidas);
+  const total = campanhas.reduce((soma, c) => soma + c.curtidas, 0);
+  const maior = Math.max(1, ...campanhas.map((c) => c.curtidas));
+  const trecho = (texto: string | null | undefined) => {
+    if (!texto) return null;
+    const limpo = texto.replace(/\s+/g, " ").trim();
+    return limpo.length > 110 ? `${limpo.slice(0, 110).trimEnd()}…` : limpo;
+  };
+
+  return (
+    <>
+      <div className="cartao-vidro p-5">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-accent-strong">
+          Últimos {dados.periodo.dias} dias · {formatarDiaExibicao(dados.periodo.desde)} a {formatarDiaExibicao(dados.periodo.ate)}
+        </p>
+        <h2 className="mt-1 font-display text-lg font-bold">Curtidas por campanha</h2>
+        <div className="mt-3 flex items-end gap-6">
+          <div>
+            <p className="font-display text-3xl font-bold tabular-nums">{inteiro(total)}</p>
+            <p className="text-xs text-neutral-500">curtidas trazidas pelos anúncios</p>
+          </div>
+          <div>
+            <p className="font-display text-xl font-bold tabular-nums">{campanhas.length}</p>
+            <p className="text-xs text-neutral-500">campanhas no período</p>
+          </div>
+        </div>
+      </div>
+
+      {campanhas.length === 0 ? (
+        <p className="cartao-vidro px-5 py-5 text-sm text-neutral-400">Nenhuma campanha com curtidas no período.</p>
+      ) : (
+        <ul className="flex flex-col gap-3">
+          {campanhas.map((c, i) => (
+            <li key={i} className="cartao-vidro flex gap-4 p-4">
+              {c.thumbnailUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={c.thumbnailUrl} alt="" loading="lazy" referrerPolicy="no-referrer" className="h-20 w-20 shrink-0 rounded-lg border border-white/10 object-cover" />
+              ) : (
+                <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.03] text-[11px] text-neutral-600">sem imagem</div>
+              )}
+              <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                <p className="truncate text-sm font-semibold text-neutral-200">{c.nome}</p>
+                {c.legenda ? (
+                  <p className="text-[12.5px] leading-snug text-neutral-400">“{trecho(c.legenda)}”</p>
+                ) : (
+                  <p className="text-[12.5px] text-neutral-600">Sem legenda registrada.</p>
+                )}
+                <div className="mt-auto flex items-end justify-between gap-3">
+                  <div>
+                    <p className="font-display text-2xl font-bold leading-none tabular-nums">{inteiro(c.curtidas)}</p>
+                    <p className="text-[11px] text-neutral-500">curtidas</p>
+                  </div>
+                  <div className="h-1.5 w-24 overflow-hidden rounded-full bg-white/10">
+                    <div className="h-full rounded-full bg-accent" style={{ width: `${Math.round((c.curtidas / maior) * 100)}%` }} />
+                  </div>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="text-[11px] text-neutral-600">
+        Curtidas são as reações de curtida atribuídas a cada campanha pela Meta. Campanhas sem gasto e sem curtidas não aparecem.
+      </p>
+    </>
+  );
+}

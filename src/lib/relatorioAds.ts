@@ -48,6 +48,8 @@ export interface CampanhaRelatorioAds {
   alcance: number;
   impressoes: number;
   engajamentos: number;
+  /** Curtidas (reações de curtida) que a campanha trouxe no período. */
+  curtidas: number;
   cliquesNoLink: number;
 }
 
@@ -307,6 +309,7 @@ export async function gerarRelatorioAds(
               alcance: num(l.reach),
               impressoes: num(l.impressions),
               engajamentos: acao(l, ["post_engagement"]),
+              curtidas: acao(l, ["post_reaction"]),
               cliquesNoLink: num(l.inline_link_clicks) || acao(l, ["link_click"]),
             }))
             .sort((a, b) => b.alcance - a.alcance)
