@@ -466,12 +466,14 @@ function RelatorioCurtidas({ dados }: { dados: DadosRelatorioAds }) {
 /** Dados gerais da franquia: o volume de trabalho feito no período, somado entre as unidades. */
 function DadosGeraisCards({ dados }: { dados: DadosGeraisRede }) {
   const periodo = `${formatarDiaExibicao(dados.periodo.desde)} a ${formatarDiaExibicao(dados.periodo.ate)}`;
+  const seg = dados.seguidoresGanhos;
+  const nota = dados.periodo.dias > 30 ? "A Meta só informa ganho de seguidores dos últimos 30 dias" : seg.semLeitura > 0 ? `${inteiro(seg.semLeitura)} sem leitura` : "orgânico + anúncios";
   const cartoes = [
-    { rotulo: "Seguidores ganhos", valor: dados.seguidoresGanhos.total === null ? "—" : `+${inteiro(dados.seguidoresGanhos.total)}`, sub: `das unidades com boost ligado${dados.seguidoresGanhos.semLeitura > 0 ? ` · ${inteiro(dados.seguidoresGanhos.semLeitura)} sem leitura` : ""}` },
-    { rotulo: "Curtidas", valor: inteiro(dados.curtidas), sub: "trazidas pelas campanhas" },
-    { rotulo: "Alcance", valor: inteiro(dados.alcance), sub: "soma das campanhas" },
     { rotulo: "Visualizações", valor: inteiro(dados.visualizacoes), sub: "vezes que os anúncios apareceram" },
+    { rotulo: "Alcance", valor: inteiro(dados.alcance), sub: "soma das campanhas" },
+    { rotulo: "Curtidas", valor: inteiro(dados.curtidas), sub: "trazidas pelas campanhas" },
     { rotulo: "Investido", valor: reais(dados.investido), sub: "em todas as unidades" },
+    { rotulo: "Seguidores ganhos", valor: seg.total === null ? "—" : `+${inteiro(seg.total)}`, sub: nota },
   ];
   return (
     <>
