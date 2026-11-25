@@ -511,6 +511,15 @@ function DadosGeraisCards({ dados }: { dados: DadosGeraisRede }) {
         </p>
       </div>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+        <div className="cartao-vidro col-span-2 flex items-center justify-between gap-4 px-5 py-4">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Campanhas criadas</p>
+            <p className="text-[11.5px] text-neutral-500">criadas pelo SmartAds no período, em todas as unidades</p>
+          </div>
+          <p className="font-display text-xl font-bold tabular-nums text-neutral-200">
+            {inteiro(dados.campanhasPorUnidade.reduce((soma, u) => soma + u.campanhas, 0))}
+          </p>
+        </div>
         {cartoes.map((c) => (
           <div key={c.rotulo} className="cartao-vidro flex flex-col gap-1.5 p-4">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">{c.rotulo}</p>

@@ -84,6 +84,13 @@ export async function baixarPdfDadosGerais(dados: DadosGeraisRede): Promise<void
   const cards = montarCardsDadosGerais(dados);
   const gap = 10;
   const w = (W - gap) / 2;
+  // Card de campanhas criadas: ocupa as duas colunas, altura menor, número sem muito destaque.
+  novaPaginaSe(70);
+  cartao(M, y, W, 56);
+  texto("CAMPANHAS CRIADAS", M + 14, y + 22, 8, COR.suave, true);
+  texto("criadas pelo SmartAds no período, em todas as unidades", M + 14, y + 38, 8, COR.fraco);
+  texto(inteiro(dados.campanhasPorUnidade.reduce((soma, u) => soma + u.campanhas, 0)), M + W - 14, y + 34, 16, COR.texto, true, "right");
+  y += 66;
   for (let i = 0; i < cards.length; i += 2) {
     novaPaginaSe(92);
     [cards[i], cards[i + 1]].forEach((c, j) => {
