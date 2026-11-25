@@ -6,6 +6,7 @@ import { FilePdf } from "@phosphor-icons/react";
 import type { DadosRelatorioAds, ItemOrganico } from "@/lib/relatorioAds";
 import { baixarPdfRelatorioAds, montarKpis, inteiro, reais, type CartaoKpi } from "@/lib/relatorioAdsPdf";
 import { formatarDiaExibicao } from "@/lib/tempoSaoPaulo";
+import type { DadosGeraisRede } from "@/lib/dadosGeraisRede";
 
 export interface OpcaoConta {
   id: string;
@@ -15,20 +16,49 @@ export interface OpcaoConta {
 }
 
 const PERIODOS = [15, 30, 45, 60, 90];
-type Visao = "completo" | "curtidas";
+type Visao = "completo" | "curtidas" | "gerais";
 
-export default function PainelRelatorioAds({ contas, contaInicial }: { contas: OpcaoConta[]; contaInicial?: string }) {
+const ROTULO_VISAO: Record<Visao, string> = { completo: "Relatório completo", curtidas: "Relatório de curtidas", gerais: "Dados gerais" };
+
+export default function PainelRelatorioAds({ contas, contaInicial, ehFranquia = false }: { contas: OpcaoConta[]; contaInicial?: string; ehFranquia?: boolean }) {
   const [contaId, setContaId] = useState(contaInicial ?? contas[0]?.id ?? "");
   const [dias, setDias] = useState(30);
   const [organico, setOrganico] = useState(false);
   const [visao, setVisao] = useState<Visao>("completo");
+  const [dadosGerais, setDadosGerais] = useState<DadosGeraisRede | null>(null);
   const [dados, setDados] = useState<DadosRelatorioAds | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [gerandoPdf, setGerandoPdf] = useState(false);
 
+  // Dados gerais: a franquia inteira no período (não depende da conta escolhida).
   useEffect(() => {
-    if (!contaId) return;
+    if (visao !== "gerais") return;
+    let cancelado = false;
+    setCarregando(true);
+    setErro(null);
+    fetch(`/api/relatorio-ads/geral?dias=${dias}`)
+      .then(async (r) => {
+        const corpo = await r.json();
+        if (!r.ok) throw new Error(corpo.erro || "Falha ao calcular os dados gerais.");
+        if (!cancelado) setDadosGerais(corpo.dados);
+      })
+      .catch((e) => {
+        if (!cancelado) {
+          setDadosGerais(null);
+          setErro(e.message);
+        }
+      })
+      .finally(() => {
+        if (!cancelado) setCarregando(false);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [visao, dias]);
+
+  useEffect(() => {
+    if (!contaId || visao === "gerais") return;
     let cancelado = false;
     setCarregando(true);
     setErro(null);
@@ -50,7 +80,7 @@ export default function PainelRelatorioAds({ contas, contaInicial }: { contas: O
     return () => {
       cancelado = true;
     };
-  }, [contaId, dias, organico]);
+  }, [contaId, dias, organico, visao]);
 
   async function baixarPdf() {
     if (!dados) return;
@@ -73,7 +103,7 @@ export default function PainelRelatorioAds({ contas, contaInicial }: { contas: O
   return (
     <div className="flex flex-col gap-5">
       <div className="cartao-vidro flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-        <select
+        {visao !== "gerais" ? <select
           value={contaId}
           onChange={(e) => setContaId(e.target.value)}
           aria-label="Conta"
@@ -91,7 +121,7 @@ export default function PainelRelatorioAds({ contas, contaInicial }: { contas: O
                 ))}
             </optgroup>
           ))}
-        </select>
+        </select> : <p className="text-sm text-neutral-400">Franquia inteira · todas as unidades somadas</p>}
 
         <div className="flex flex-wrap items-center gap-2">
           {PERIODOS.map((p) => (
@@ -107,19 +137,19 @@ export default function PainelRelatorioAds({ contas, contaInicial }: { contas: O
               {p} dias
             </button>
           ))}
-          <button
+          {visao !== "gerais" && <button
             onClick={baixarPdf}
             disabled={!dados || carregando || gerandoPdf}
             className="ml-1 flex items-center gap-1.5 rounded-lg bg-accent px-3.5 py-2 text-[13px] font-semibold text-white transition hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-40"
           >
             <FilePdf size={16} weight="fill" />
             {gerandoPdf ? "Gerando…" : "Baixar PDF"}
-          </button>
+          </button>}
         </div>
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {(["completo", "curtidas"] as const).map((v) => (
+        {(ehFranquia ? (["completo", "curtidas", "gerais"] as const) : (["completo", "curtidas"] as const)).map((v) => (
           <button
             key={v}
             onClick={() => setVisao(v)}
@@ -129,12 +159,12 @@ export default function PainelRelatorioAds({ contas, contaInicial }: { contas: O
                 : "rounded-lg px-3.5 py-2 text-[13px] font-medium text-neutral-400 hover:text-neutral-200"
             }
           >
-            {v === "completo" ? "Relatório completo" : "Relatório de curtidas"}
+            {ROTULO_VISAO[v]}
           </button>
         ))}
       </div>
 
-      <label className="cartao-vidro flex cursor-pointer items-center justify-between gap-4 px-4 py-3.5">
+      {visao !== "gerais" && <label className="cartao-vidro flex cursor-pointer items-center justify-between gap-4 px-4 py-3.5">
         <span>
           <span className="block text-sm font-semibold text-neutral-200">Mostrar dados orgânicos</span>
           <span className="block text-xs text-neutral-500">
@@ -160,13 +190,19 @@ export default function PainelRelatorioAds({ contas, contaInicial }: { contas: O
             }`}
           />
         </span>
-      </label>
+      </label>}
 
       {erro && <div className="rounded-lg border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">{erro}</div>}
 
       {carregando && !dados && <p className="text-sm text-neutral-500">Buscando os números na Meta…</p>}
 
-      {dados && (
+      {visao === "gerais" && dadosGerais && (
+        <div className={carregando ? "flex flex-col gap-5 opacity-50 transition" : "flex flex-col gap-5 transition"}>
+          <DadosGeraisCards dados={dadosGerais} />
+        </div>
+      )}
+
+      {visao !== "gerais" && dados && (
         <div className={carregando ? "flex flex-col gap-5 opacity-50 transition" : "flex flex-col gap-5 transition"}>
           {visao === "curtidas" ? <RelatorioCurtidas dados={dados} /> : <Relatorio dados={dados} />}
         </div>
@@ -422,6 +458,42 @@ function RelatorioCurtidas({ dados }: { dados: DadosRelatorioAds }) {
       )}
       <p className="text-[11px] text-neutral-600">
         Curtidas são as reações de curtida atribuídas a cada campanha pela Meta. Campanhas sem gasto e sem curtidas não aparecem.
+      </p>
+    </>
+  );
+}
+
+/** Dados gerais da franquia: o volume de trabalho feito no período, somado entre as unidades. */
+function DadosGeraisCards({ dados }: { dados: DadosGeraisRede }) {
+  const periodo = `${formatarDiaExibicao(dados.periodo.desde)} a ${formatarDiaExibicao(dados.periodo.ate)}`;
+  const cartoes = [
+    { rotulo: "Campanhas que rodaram", valor: inteiro(dados.rodaram.total), sub: `${inteiro(dados.rodaram.boost)} boost · ${inteiro(dados.rodaram.individuais)} individuais` },
+    { rotulo: "Campanhas criadas", valor: dados.criadas ? inteiro(dados.criadas.total) : "—", sub: dados.criadas ? `${inteiro(dados.criadas.boost)} boost · ${inteiro(dados.criadas.individuais)} individuais` : "Não deu pra contar agora" },
+    { rotulo: "Curtidas", valor: inteiro(dados.curtidas), sub: "trazidas pelas campanhas" },
+    { rotulo: "Alcance", valor: inteiro(dados.alcance), sub: "soma das campanhas" },
+    { rotulo: "Visualizações", valor: inteiro(dados.visualizacoes), sub: "vezes que os anúncios apareceram" },
+    { rotulo: "Investido", valor: reais(dados.investido), sub: "em todas as unidades" },
+  ];
+  return (
+    <>
+      <div className="cartao-vidro p-5">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-accent-strong">Últimos {dados.periodo.dias} dias · {periodo}</p>
+        <h2 className="mt-1 font-display text-lg font-bold">Dados gerais da franquia</h2>
+        <p className="mt-1 text-xs text-neutral-500">
+          {inteiro(dados.unidades)} unidades somadas{dados.unidadesSemLeitura > 0 ? ` · ${dados.unidadesSemLeitura} sem leitura agora` : ""}. Conta central (Principal e Expansão) fica de fora.
+        </p>
+      </div>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+        {cartoes.map((c) => (
+          <div key={c.rotulo} className="cartao-vidro flex flex-col gap-1.5 p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">{c.rotulo}</p>
+            <p className="font-display text-2xl font-bold tabular-nums">{c.valor}</p>
+            <p className="text-[11.5px] text-neutral-500">{c.sub}</p>
+          </div>
+        ))}
+      </div>
+      <p className="text-[11px] text-neutral-600">
+        Alcance soma as campanhas, então a mesma pessoa vista em duas campanhas conta duas vezes. Visualizações são as vezes que os anúncios apareceram.
       </p>
     </>
   );

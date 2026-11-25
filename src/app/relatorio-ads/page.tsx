@@ -40,7 +40,7 @@ export default async function RelatorioAdsPage({ searchParams }: { searchParams:
         </p>
         <div className="mt-4">
           <AbasRelatorios ativa="conta" />
-          <PainelRelatorioAds contas={contas} contaInicial={contas.some((c) => c.id === searchParams.conta) ? searchParams.conta : undefined} />
+          <PainelRelatorioAds ehFranquia={ambiente?.tipo === "franquia"} contas={contas} contaInicial={contas.some((c) => c.id === searchParams.conta) ? searchParams.conta : undefined} />
         </div>
       </main>
     </>
