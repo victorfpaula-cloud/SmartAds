@@ -13,6 +13,7 @@ import { ganhoSeguidoresEntre } from "@/lib/seguidoresHistorico";
  * campanhas que o SmartAds criou nela. */
 export interface DadosGeraisRede {
   periodo: { dias: number; desde: string; ate: string };
+  /** Unidades ativas: as que têm o boost ligado. */
   unidades: number;
   unidadesSemLeitura: number;
   /** Campanhas criadas pelo SmartAds no período, por unidade (inclui as sem nenhuma). */
@@ -128,7 +129,7 @@ export async function calcularDadosGeraisRede(empresaId: string, dias: number): 
   const arred = (n: number) => Math.round(n * 100) / 100;
   return {
     periodo: { dias, desde, ate },
-    unidades: contas.length,
+    unidades: comBoost.size,
     unidadesSemLeitura: semLeitura,
     campanhasPorUnidade,
     seguidoresGanhos,
