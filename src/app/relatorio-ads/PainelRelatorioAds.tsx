@@ -467,8 +467,7 @@ function RelatorioCurtidas({ dados }: { dados: DadosRelatorioAds }) {
 function DadosGeraisCards({ dados }: { dados: DadosGeraisRede }) {
   const periodo = `${formatarDiaExibicao(dados.periodo.desde)} a ${formatarDiaExibicao(dados.periodo.ate)}`;
   const cartoes = [
-    { rotulo: "Campanhas no ar", valor: inteiro(dados.rodaram.total), sub: "com gasto no período, na Meta" },
-    { rotulo: "Campanhas criadas", valor: dados.criadas ? inteiro(dados.criadas.total) : "—", sub: dados.criadas ? "criadas pelo SmartAds no período" : "Não deu pra contar agora" },
+    { rotulo: "Campanhas criadas", valor: inteiro(dados.campanhasCriadas), sub: "criadas pelo SmartAds no período" },
     { rotulo: "Curtidas", valor: inteiro(dados.curtidas), sub: "trazidas pelas campanhas" },
     { rotulo: "Alcance", valor: inteiro(dados.alcance), sub: "soma das campanhas" },
     { rotulo: "Visualizações", valor: inteiro(dados.visualizacoes), sub: "vezes que os anúncios apareceram" },
@@ -493,7 +492,7 @@ function DadosGeraisCards({ dados }: { dados: DadosGeraisRede }) {
         ))}
       </div>
       <p className="text-[11px] text-neutral-600">
-        Alcance soma as campanhas, então a mesma pessoa vista em duas campanhas conta duas vezes. Visualizações são as vezes que os anúncios apareceram.
+        Só entram as campanhas criadas pelo SmartAds. Alcance soma as campanhas, então a mesma pessoa vista em duas campanhas conta duas vezes. Visualizações são as vezes que os anúncios apareceram.
       </p>
     </>
   );
