@@ -27,14 +27,21 @@ export interface DadosGeraisRede {
 
 const LIMITE_MS = 45_000;
 
+/** Campanhas de formulário da expansão (ficam na conta da Principal, mas não são da Principal). */
+export const ehCampanhaDeExpansao = (nome: string | null | undefined) => /expans[aã]o|\(form\)/i.test(nome ?? "");
+
 export async function calcularDadosGeraisRede(empresaId: string, dias: number): Promise<DadosGeraisRede> {
   const inicio = Date.now();
   const contasTodas = await listarContasDaRede(empresaId);
   const usos = new Map<string, number>();
   for (const c of contasTodas) if (c.adAccountId) usos.set(c.adAccountId, (usos.get(c.adAccountId) ?? 0) + 1);
-  const contas = contasTodas.filter(
-    (c) => c.adAccountId && (usos.get(c.adAccountId) ?? 0) === 1 && !ehContaCentralDaRede(c.unidade)
-  );
+  // A Principal divide a conta de anúncio com a Expansão: entra, mas sem as campanhas de Expansão
+  // (ver ehCampanhaDeExpansao). A Expansão em si fica de fora, como as demais contas centrais.
+  const contas = contasTodas.filter((c) => {
+    if (!c.adAccountId) return false;
+    if (/\bprincipal\b/i.test(c.unidade) && (usos.get(c.adAccountId) ?? 0) === 2) return true;
+    return (usos.get(c.adAccountId) ?? 0) === 1 && !ehContaCentralDaRede(c.unidade);
+  });
 
   const hoje = diaEmSaoPaulo(new Date().toISOString());
   const ate = adicionarDias(hoje, -1);
@@ -48,7 +55,7 @@ export async function calcularDadosGeraisRede(empresaId: string, dias: number): 
         const linhas = await comContaMeta(c.contaId, () =>
           obterInsightsRelatorio(c.adAccountId as string, { nivel: "campaign", desde, ate })
         );
-        return somarLinhas(linhas);
+        return somarLinhas(linhas.filter((l) => !ehCampanhaDeExpansao(l.campaign_name)));
       } catch {
         return null;
       }
@@ -83,7 +90,9 @@ export async function calcularDadosGeraisRede(empresaId: string, dias: number): 
         .from("smartads_campanhas_criadas")
         .select("id", { count: "exact", head: true })
         .in("conta_id", ids)
-        .gte("created_at", `${desde}T00:00:00-03:00`);
+        .gte("created_at", `${desde}T00:00:00-03:00`)
+        .not("config_criacao->>nomeCampanha", "ilike", "%expans%")
+        .not("config_criacao->>nomeCampanha", "ilike", "%(form)%");
     const [todas, boost] = await Promise.all([base(), base().filter("config_criacao->>nomeCampanha", "ilike", "Boost%")]);
     if (!todas.error && !boost.error) {
       const t = todas.count ?? 0;

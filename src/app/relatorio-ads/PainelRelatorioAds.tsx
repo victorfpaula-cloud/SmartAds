@@ -467,8 +467,8 @@ function RelatorioCurtidas({ dados }: { dados: DadosRelatorioAds }) {
 function DadosGeraisCards({ dados }: { dados: DadosGeraisRede }) {
   const periodo = `${formatarDiaExibicao(dados.periodo.desde)} a ${formatarDiaExibicao(dados.periodo.ate)}`;
   const cartoes = [
-    { rotulo: "Campanhas que rodaram", valor: inteiro(dados.rodaram.total), sub: `${inteiro(dados.rodaram.boost)} boost · ${inteiro(dados.rodaram.individuais)} individuais` },
-    { rotulo: "Campanhas criadas", valor: dados.criadas ? inteiro(dados.criadas.total) : "—", sub: dados.criadas ? `${inteiro(dados.criadas.boost)} boost · ${inteiro(dados.criadas.individuais)} individuais` : "Não deu pra contar agora" },
+    { rotulo: "Campanhas no ar", valor: inteiro(dados.rodaram.total), sub: "com gasto no período, na Meta" },
+    { rotulo: "Campanhas criadas", valor: dados.criadas ? inteiro(dados.criadas.total) : "—", sub: dados.criadas ? "criadas pelo SmartAds no período" : "Não deu pra contar agora" },
     { rotulo: "Curtidas", valor: inteiro(dados.curtidas), sub: "trazidas pelas campanhas" },
     { rotulo: "Alcance", valor: inteiro(dados.alcance), sub: "soma das campanhas" },
     { rotulo: "Visualizações", valor: inteiro(dados.visualizacoes), sub: "vezes que os anúncios apareceram" },
