@@ -5,6 +5,7 @@ import { listarContasDaRede } from "@/lib/saudeRede";
 import { ehContaCentralDaRede, somarLinhas } from "@/lib/analiseTrafego";
 import { adicionarDias, diaEmSaoPaulo } from "@/lib/tempoSaoPaulo";
 import { mapearEmLotes } from "@/lib/lotes";
+import { listarEventosDasContas } from "@/lib/unidadeEventos";
 import { obterInsightsInstagramRelatorio, obterSerieSeguidoresInstagram } from "@/lib/meta/api";
 
 /** Volume de trabalho feito pelo SmartAds na franquia no período: só as campanhas criadas pelo
@@ -16,6 +17,8 @@ export interface DadosGeraisRede {
   /** Unidades ativas: as que têm o boost ligado. */
   unidades: number;
   unidadesSemLeitura: number;
+  /** Eventos registrados nas unidades no período (mais recentes primeiro). */
+  eventos: Array<{ unidade: string; data: string; texto: string }>;
   /** Campanhas criadas pelo SmartAds no período, por unidade (inclui as sem nenhuma). */
   campanhasPorUnidade: Array<{ unidade: string; campanhas: number }>;
   /** Seguidores que as unidades com boost ligado ganharam no período; null sem leitura de nenhuma. */
@@ -168,6 +171,13 @@ export async function calcularDadosGeraisRede(empresaId: string, dias: number): 
     };
   }
 
+  const nomePorConta = new Map(contas.map((c) => [c.contaId, c.unidade]));
+  const eventos = (await listarEventosDasContas(contas.map((c) => c.contaId), desde, ate)).map((e) => ({
+    unidade: nomePorConta.get(e.contaId) ?? "",
+    data: e.data,
+    texto: e.texto,
+  }));
+
   const campanhasPorUnidade = contas
     .map((c) => ({ unidade: c.unidade, campanhas: campanhasDaConta.get(c.contaId) ?? 0 }))
     .sort((a, b) => b.campanhas - a.campanhas || a.unidade.localeCompare(b.unidade));
@@ -177,6 +187,7 @@ export async function calcularDadosGeraisRede(empresaId: string, dias: number): 
     periodo: { dias, desde, ate },
     unidades: comBoost.length,
     unidadesSemLeitura: semLeitura,
+    eventos,
     campanhasPorUnidade,
     seguidoresGanhos,
     investido: arred(m.gasto),

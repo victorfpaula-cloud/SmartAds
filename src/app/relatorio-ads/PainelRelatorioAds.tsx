@@ -99,7 +99,10 @@ export default function PainelRelatorioAds({ contas, contaInicial, ehFranquia = 
     if (!dados) return;
     setGerandoPdf(true);
     try {
-      await baixarPdfRelatorioAds(dados);
+      // Eventos registrados na unidade no período (ficam no PDF).
+      const r = await fetch(`/api/unidade-eventos?contaId=${encodeURIComponent(dados.conta.contaId)}&desde=${dados.periodo.desde}&ate=${dados.periodo.ate}`);
+      const corpo = await r.json().catch(() => ({}));
+      await baixarPdfRelatorioAds(dados, r.ok ? (corpo.eventos ?? []) : []);
     } catch {
       setErro("Não consegui gerar o PDF. Tente de novo.");
     } finally {
@@ -548,6 +551,20 @@ function DadosGeraisCards({ dados }: { dados: DadosGeraisRede }) {
           </tbody>
         </table>
       </div>
+      {dados.eventos.length > 0 && (
+        <div className="cartao-vidro p-5">
+          <h3 className="text-sm font-semibold text-neutral-200">Eventos registrados no período</h3>
+          <ul className="mt-3 flex flex-col divide-y divide-white/5">
+            {dados.eventos.map((e, i) => (
+              <li key={i} className="flex flex-wrap items-start gap-x-3 gap-y-1 py-2.5 text-[13px]">
+                <span className="w-24 shrink-0 font-semibold tabular-nums text-accent-strong">{`${e.data.slice(8, 10)}/${e.data.slice(5, 7)}/${e.data.slice(0, 4)}`}</span>
+                <span className="w-32 shrink-0 text-neutral-500">{e.unidade}</span>
+                <span className="min-w-0 flex-1 text-neutral-300">{e.texto}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <p className="text-[11px] text-neutral-600">
         Só entram as campanhas criadas pelo SmartAds. Seguidores são os das unidades com boost ligado. Alcance soma as campanhas, então a mesma pessoa vista em duas campanhas conta duas vezes. Visualizações são as vezes que os anúncios apareceram.
       </p>

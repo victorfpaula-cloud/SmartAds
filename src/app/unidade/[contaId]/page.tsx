@@ -10,6 +10,7 @@ import PlanoTeto from "./PlanoTeto";
 import CartaoCiclo from "@/app/financeiro/ritmo/CartaoCiclo";
 import { calcularCiclosDasContas } from "@/lib/cicloSaldo";
 import MelhoresPosts from "./MelhoresPosts";
+import EventosUnidade from "./EventosUnidade";
 
 export const dynamic = "force-dynamic";
 
@@ -119,6 +120,7 @@ export default async function UnidadePage({ params }: { params: Promise<{ contaI
 
         {ciclo && <CartaoCiclo c={ciclo} comLink={false} />}
 
+        <EventosUnidade contaId={contaId} podeEditar={!acesso.restrito} />
         <PlanoTeto contaId={contaId} tetoInicial={(conta.teto_mensal_centavos as number | null) ?? null} />
 
         {conta.instagram_business_id && <MelhoresPosts contaId={contaId} instagramBusinessId={conta.instagram_business_id as string} />}

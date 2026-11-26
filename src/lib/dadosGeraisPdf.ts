@@ -121,6 +121,22 @@ export async function baixarPdfDadosGerais(dados: DadosGeraisRede): Promise<void
     y += 20;
   });
 
+  if (dados.eventos.length > 0) {
+    y += 14;
+    novaPaginaSe(40);
+    texto("EVENTOS REGISTRADOS NO PERÍODO", M, y + 10, 8.5, COR.acento, true);
+    y += 24;
+    dados.eventos.forEach((e) => {
+      const linhas = doc.splitTextToSize(e.texto.replace(/[^\u0000-\u00FF]/g, ""), W - 210) as string[];
+      novaPaginaSe(linhas.length * 12 + 12);
+      const [a, m, d] = e.data.split("-");
+      texto(`${d}/${m}/${a}`, M + 10, y, 9, COR.acento, true);
+      texto(e.unidade, M + 80, y, 9, COR.suave);
+      linhas.forEach((l, i) => texto(l, M + 200, y + i * 12, 9, COR.texto));
+      y += Math.max(1, linhas.length) * 12 + 6;
+    });
+  }
+
   y += 14;
   novaPaginaSe(40);
   texto(
