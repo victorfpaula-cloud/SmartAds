@@ -62,6 +62,8 @@ export interface OpcoesPdfRelatorio {
   rotuloPeriodo?: string;
   /** Título pequeno acima do nome da unidade; padrão "SmartAds · Relatório de anúncios". */
   titulo?: string;
+  /** Eventos registrados na unidade no período (data AAAA-MM-DD), saem numa seção própria. */
+  eventos?: Array<{ data: string; texto: string }>;
 }
 
 /** Monta o PDF (funciona no navegador e no servidor). */
@@ -304,6 +306,21 @@ export async function montarPdfRelatorioAds(dados: DadosRelatorioAds, opcoes: Op
     });
   }
 
+  // Eventos registrados no período
+  if (opcoes.eventos && opcoes.eventos.length > 0) {
+    garantir(40);
+    titulo("Eventos registrados no período");
+    opcoes.eventos.forEach((ev) => {
+      const linhas = doc.splitTextToSize(ev.texto.replace(/[^\u0000-\u00FF]/g, ""), W - 90) as string[];
+      garantir(linhas.length * 12 + 16);
+      const [a, m, d] = ev.data.split("-");
+      texto(`${d}/${m}/${a}`, M, y + 10, 8.5, COR.acento, true);
+      linhas.forEach((l, i) => texto(l, M + 80, y + 10 + i * 12, 8.5, COR.texto));
+      y += Math.max(1, linhas.length) * 12 + 8;
+    });
+    y += 6;
+  }
+
   // Rodapé em todas as páginas
   const paginas = doc.getNumberOfPages();
   for (let p = 1; p <= paginas; p++) {
@@ -326,7 +343,7 @@ export function nomeArquivoRelatorio(dados: DadosRelatorioAds, sufixo: string): 
   return `relatorio-ads-${slug}-${sufixo}.pdf`;
 }
 
-export async function baixarPdfRelatorioAds(dados: DadosRelatorioAds): Promise<void> {
-  const doc = await montarPdfRelatorioAds(dados);
+export async function baixarPdfRelatorioAds(dados: DadosRelatorioAds, eventos?: Array<{ data: string; texto: string }>): Promise<void> {
+  const doc = await montarPdfRelatorioAds(dados, { eventos });
   doc.save(nomeArquivoRelatorio(dados, `${dados.periodo.dias}d`));
 }

@@ -2,6 +2,7 @@ import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { gerarRelatorioAds, type DadosRelatorioAds } from "@/lib/relatorioAds";
 import { montarPdfRelatorioAds, nomeArquivoRelatorio, inteiro, reais } from "@/lib/relatorioAdsPdf";
 import { enviarEmail } from "@/lib/email/resend";
+import { listarEventosDasContas } from "@/lib/unidadeEventos";
 import { adicionarDias, diaEmSaoPaulo } from "@/lib/tempoSaoPaulo";
 
 const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
@@ -74,9 +75,15 @@ export async function gerarRelatoriosDoMes(clienteId: string, mes: MesRelatorio)
   for (const c of contas) {
     relatorios.push(await gerarRelatorioAds(c.id, mes.dias, true, { terminaDiasAtras }));
   }
+  // Eventos registrados na unidade no período saem no PDF de cada conta.
+  const eventos = await listarEventosDasContas(contas.map((c) => c.id as string), mes.desde, mes.ate);
   const pdfs = [];
   for (const d of relatorios) {
-    const doc = await montarPdfRelatorioAds(d, { rotuloPeriodo: mes.rotulo, titulo: mes.tipo === "semanal" ? "SmartAds · Relatório semanal" : "SmartAds · Relatório mensal" });
+    const doc = await montarPdfRelatorioAds(d, {
+      rotuloPeriodo: mes.rotulo,
+      titulo: mes.tipo === "semanal" ? "SmartAds · Relatório semanal" : "SmartAds · Relatório mensal",
+      eventos: eventos.filter((e) => e.contaId === d.conta.contaId).map((e) => ({ data: e.data, texto: e.texto })),
+    });
     pdfs.push({ nome: nomeArquivoRelatorio(d, mes.mes), conteudo: Buffer.from(doc.output("arraybuffer")) });
   }
   return { cliente, relatorios, pdfs };
