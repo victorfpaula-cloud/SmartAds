@@ -144,6 +144,33 @@ function totaisDe(linha: LinhaInsightRelatorio | undefined): TotaisAds {
   };
 }
 
+/** Soma os totais de várias linhas de campanha e recalcula as taxas (CTR, CPM, CPC, frequência). */
+function somarTotaisLinhas(linhas: LinhaInsightRelatorio[]): TotaisAds {
+  const t = linhas.map((l) => totaisDe(l)).reduce(
+    (a, x) => ({
+      gasto: a.gasto + x.gasto,
+      impressoes: a.impressoes + x.impressoes,
+      alcance: a.alcance + x.alcance,
+      cliques: a.cliques + x.cliques,
+      cliquesNoLink: a.cliquesNoLink + x.cliquesNoLink,
+      engajamentos: a.engajamentos + x.engajamentos,
+      curtidas: a.curtidas + x.curtidas,
+      comentarios: a.comentarios + x.comentarios,
+      compartilhamentos: a.compartilhamentos + x.compartilhamentos,
+      salvamentos: a.salvamentos + x.salvamentos,
+      visitasPerfilAnuncios: a.visitasPerfilAnuncios === null && x.visitasPerfilAnuncios === null ? null : (a.visitasPerfilAnuncios ?? 0) + (x.visitasPerfilAnuncios ?? 0),
+    }),
+    { gasto: 0, impressoes: 0, alcance: 0, cliques: 0, cliquesNoLink: 0, engajamentos: 0, curtidas: 0, comentarios: 0, compartilhamentos: 0, salvamentos: 0, visitasPerfilAnuncios: null as number | null }
+  );
+  return {
+    ...t,
+    frequencia: t.alcance > 0 ? t.impressoes / t.alcance : 0,
+    cpm: t.impressoes > 0 ? (t.gasto / t.impressoes) * 1000 : 0,
+    cpc: t.cliquesNoLink > 0 ? t.gasto / t.cliquesNoLink : 0,
+    ctr: t.impressoes > 0 ? (t.cliques / t.impressoes) * 100 : 0,
+  };
+}
+
 /** A Meta limita os insights do Instagram a 30 dias por chamada; períodos maiores somam janelas
  * consecutivas. Os totais de curtidas, visualizações etc. somam certo; o alcance, em períodos
  * longos, pode contar a mesma pessoa em mais de uma janela (o relatório avisa). */
@@ -243,7 +270,13 @@ export async function gerarRelatorioAds(
   dias: number,
   comOrganico = false,
   /** Termina o período N dias atrás (ex.: 1 = até ontem; dias=7 + 7 = a semana anterior). */
-  opcoes: { terminaDiasAtras?: number } = {}
+  opcoes: {
+    terminaDiasAtras?: number;
+    /** Campanhas que devem ficar de fora dos números de anúncios (ex.: formulários da expansão na conta
+     * da Principal). Com isso, os totais vêm do detalhe por campanha, sem a série diária nem a divisão
+     * por plataforma (a Meta não as separa por campanha). */
+    ignorarCampanha?: (nome: string) => boolean;
+  } = {}
 ): Promise<DadosRelatorioAds> {
   const supabase = criarClienteAdmin();
   const { data: conta, error } = await supabase
@@ -286,7 +319,7 @@ export async function gerarRelatorioAds(
     if (porCampanha.status === "rejected") avisos.push("Não deu pra buscar o detalhe por campanha.");
 
     const serieDiaria: DiaRelatorioAds[] =
-      porDia.status === "fulfilled"
+      porDia.status === "fulfilled" && !opcoes.ignorarCampanha
         ? porDia.value
             .filter((l) => l.date_start)
             .map((l) => ({
@@ -385,12 +418,22 @@ export async function gerarRelatorioAds(
       }
     }
 
-    const totaisAtuais = totaisDe(totalAtual.value[0]);
+    const filtrar = opcoes.ignorarCampanha;
+    let totaisAtuais: TotaisAds;
+    if (filtrar && porCampanha.status === "fulfilled") {
+      const linhasFiltradas = porCampanha.value.filter((l) => !filtrar(l.campaign_name ?? ""));
+      totaisAtuais = somarTotaisLinhas(linhasFiltradas);
+      avisos.push("Campanhas de formulário da expansão ficaram de fora dos números de anúncios desta conta.");
+    } else {
+      totaisAtuais = totaisDe(totalAtual.value[0]);
+    }
     // Anúncios que rodaram no Instagram × em outras plataformas (Facebook etc.): o total do Instagram só
     // inclui o que rodou nele, então a divisão orgânico × tráfego usa só essa parte.
     let totaisInstagram: TotaisAds | null = null;
     let plataformas: DadosRelatorioAds["plataformas"] = [];
-    if (porPlataforma.status === "fulfilled") {
+    if (filtrar) {
+      // Sem a divisão por plataforma quando há campanhas excluídas (a Meta não separa isso por campanha).
+    } else if (porPlataforma.status === "fulfilled") {
       plataformas = porPlataforma.value
         .filter((l) => l.publisher_platform)
         .map((l) => ({

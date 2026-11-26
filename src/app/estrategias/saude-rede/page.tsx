@@ -167,12 +167,6 @@ export default async function SaudeDaRedePage({ searchParams }: { searchParams: 
           <>
             <h2 className="mt-8 text-sm font-semibold text-neutral-300">Instagram da rede (orgânico + tráfego)</h2>
             <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <Kpi rotulo="Alcance" valor={compacto(r.alcance)} delta={<Delta atual={r.alcance} anterior={a ? a.alcance : null} />} nota="soma das unidades — a mesma pessoa pode estar em mais de uma">
-                <Divisao parte={r.divisao.alcance} unidadesComIg={unidadesIg} />
-              </Kpi>
-              <Kpi rotulo="Visualizações" valor={compacto(r.visualizacoes)} delta={<Delta atual={r.visualizacoes} anterior={a ? a.visualizacoes : null} />} nota="vezes que o conteúdo foi visto">
-                <Divisao parte={r.divisao.visualizacoes} unidadesComIg={unidadesIg} />
-              </Kpi>
               <Kpi
                 rotulo="Interações"
                 valor={compacto(r.interacoes)}
@@ -181,6 +175,13 @@ export default async function SaudeDaRedePage({ searchParams }: { searchParams: 
               >
                 <Divisao parte={r.divisao.interacoes} unidadesComIg={unidadesIg} />
               </Kpi>
+              <Kpi rotulo="Alcance" valor={compacto(r.alcance)} delta={<Delta atual={r.alcance} anterior={a ? a.alcance : null} />} nota="soma das unidades — a mesma pessoa pode estar em mais de uma">
+                <Divisao parte={r.divisao.alcance} unidadesComIg={unidadesIg} />
+              </Kpi>
+              <Kpi rotulo="Visualizações" valor={compacto(r.visualizacoes)} delta={<Delta atual={r.visualizacoes} anterior={a ? a.visualizacoes : null} />} nota="vezes que o conteúdo foi visto">
+                <Divisao parte={r.divisao.visualizacoes} unidadesComIg={unidadesIg} />
+              </Kpi>
+
               <Kpi rotulo="Novos seguidores" valor={`${r.novosSeguidores >= 0 ? "+" : ""}${n0.format(r.novosSeguidores)}`} delta={<Delta atual={r.novosSeguidores} anterior={a ? a.novosSeguidores : null} />} nota={`${compacto(r.seguidores)} seguidores somando todas as unidades`} />
               <Kpi rotulo="Visitas ao perfil" valor={compacto(r.visitasPerfil)} delta={<Delta atual={r.visitasPerfil} anterior={a ? a.visitasPerfil : null} />} />
               <Kpi

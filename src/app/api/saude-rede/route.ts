@@ -3,6 +3,7 @@ import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { lerAmbiente } from "@/lib/ambiente";
 import { comContaMeta } from "@/lib/meta/conexao";
 import { gerarRelatorioAds } from "@/lib/relatorioAds";
+import { ehCampanhaDeExpansao } from "@/lib/dadosGeraisRede";
 import { completarHistoricoSeguidores } from "@/lib/seguidoresHistorico";
 import { enxugar, listarContasDaRede, OFFSET_ANTERIOR, PERIODOS_SAUDE_REDE } from "@/lib/saudeRede";
 
@@ -28,7 +29,13 @@ export async function POST(request: NextRequest) {
 
   const supabase = criarClienteAdmin();
   try {
-    const relatorio = await gerarRelatorioAds(contaId, dias, true, anterior ? { terminaDiasAtras: dias } : {});
+    // Principal divide a conta de anúncio com a Expansão: as campanhas de formulário da expansão ficam de fora.
+    const unidade = contas.find((c) => c.contaId === contaId)?.unidade ?? "";
+    const ignorarCampanha = /\bprincipal\b/i.test(unidade) ? ehCampanhaDeExpansao : undefined;
+    const relatorio = await gerarRelatorioAds(contaId, dias, true, {
+      ...(anterior ? { terminaDiasAtras: dias } : {}),
+      ignorarCampanha,
+    });
     await supabase
       .from("smartads_saude_rede_cache")
       .upsert({ conta_id: contaId, dias: chaveDias, dados: enxugar(relatorio), erro: null, calculado_em: new Date().toISOString() });
