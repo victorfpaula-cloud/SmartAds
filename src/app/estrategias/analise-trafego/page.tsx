@@ -33,7 +33,7 @@ function Texto({ t }: { t: string }) {
 export default async function AnaliseTrafegoPage({ searchParams }: { searchParams: { escopo?: string; dias?: string } }) {
   const ambiente = await exigirAmbiente("franquia");
   const escopo: Escopo = searchParams.escopo === "tudo" ? "tudo" : "boost";
-  const dias = searchParams.dias === "15" ? 15 : 7;
+  const dias = searchParams.dias === "30" ? 30 : searchParams.dias === "15" ? 15 : 7;
   const analise = await lerAnaliseTrafego(ambiente.id, dias);
   const nomePeriodo = dias === 7 ? "7 dias" : "15 dias";
   const link = (mud: { escopo?: Escopo; dias?: number }) => `/estrategias/analise-trafego?escopo=${mud.escopo ?? escopo}&dias=${mud.dias ?? dias}`;
@@ -96,7 +96,7 @@ export default async function AnaliseTrafegoPage({ searchParams }: { searchParam
         </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-2">
-          {([7, 15] as const).map((d) => (
+          {([7, 15, 30] as const).map((d) => (
             <Link key={d} href={link({ dias: d })} className={d === dias ? "pilula-ativa rounded-lg px-3.5 py-2 text-[13px] font-semibold text-neutral-100" : "rounded-lg px-3.5 py-2 text-[13px] font-medium text-neutral-400 hover:text-neutral-200"}>
               Últimos {d} dias
             </Link>

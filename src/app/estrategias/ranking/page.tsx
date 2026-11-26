@@ -68,7 +68,7 @@ function CartaoTop({ titulo, explica, lista, valor, vazio }: { titulo: string; e
 export default async function RankingPage({ searchParams }: { searchParams: { dias?: string; escopo?: string } }) {
   const ambiente = await exigirAmbiente("franquia");
   const dias = periodoAnalise(searchParams.dias ?? 30);
-  const escopo: Escopo = searchParams.escopo === "boost" ? "boost" : "tudo";
+  const escopo: Escopo = searchParams.escopo === "tudo" ? "tudo" : "boost";
   const link = (mud: { dias?: number; escopo?: Escopo }) => `/estrategias/ranking?dias=${mud.dias ?? dias}&escopo=${mud.escopo ?? escopo}`;
 
   const [analise, historico] = await Promise.all([
@@ -126,7 +126,7 @@ export default async function RankingPage({ searchParams }: { searchParams: { di
             </Link>
           ))}
           <span className="mx-1 h-5 w-px bg-white/10" />
-          {(["tudo", "boost"] as const).map((e) => (
+          {(["boost", "tudo"] as const).map((e) => (
             <Link key={e} href={link({ escopo: e })} className={e === escopo ? "pilula-ativa rounded-lg px-3.5 py-2 text-[13px] font-semibold text-neutral-100" : "rounded-lg px-3.5 py-2 text-[13px] font-medium text-neutral-400 hover:text-neutral-200"}>
               {e === "tudo" ? "Todo o tráfego" : "Só boost"}
             </Link>
@@ -161,6 +161,38 @@ export default async function RankingPage({ searchParams }: { searchParams: { di
                 {comIndice[0] && <p className="text-[11px] text-ok">índice {comIndice[0].indice}{comIndice[0].indice! > 100 ? `: cada real rende ${comIndice[0].indice! - 100}% acima da mediana` : ""}</p>}
               </div>
             </div>
+
+            {comIndice.length > 0 && (
+              <section className="mt-6">
+                <h2 className="font-display text-base font-bold">Top 3 do período</h2>
+                <div className="cartao-vidro mt-3 overflow-x-auto p-4">
+                  <table className="w-full min-w-[480px] text-left text-[13px]">
+                    <thead className="text-[10.5px] uppercase tracking-wide text-neutral-500">
+                      <tr>
+                        <th className="py-2 font-medium">#</th>
+                        <th className="py-2 font-medium">Unidade</th>
+                        <th className="py-2 text-right font-medium">Índice</th>
+                        <th className="py-2 text-right font-medium">Investido</th>
+                        <th className="py-2 text-right font-medium">Por dia</th>
+                        <th className="py-2 text-right font-medium">vs ant.</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {comIndice.slice(0, 3).map((l, n) => (
+                        <tr key={l.contaId} className="border-t border-white/5 text-neutral-300">
+                          <td className="py-2 tabular-nums text-neutral-500">{n + 1}º</td>
+                          <td className="py-2 font-medium text-neutral-100">{curto(l.unidade)}</td>
+                          <td className={`py-2 text-right font-bold tabular-nums ${corIndice(l.indice)}`}>{l.indice}</td>
+                          <td className="py-2 text-right tabular-nums">{R0(l.gasto)}</td>
+                          <td className="py-2 text-right tabular-nums">{R(l.gastoDia)}</td>
+                          <td className={`py-2 text-right tabular-nums ${l.evolucao === null ? "text-neutral-600" : l.evolucao >= 10 ? "text-ok" : l.evolucao <= -10 ? "text-amber-300" : ""}`}>{l.evolucao === null ? "—" : sinal(l.evolucao)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
 
             <section className="mt-6">
               <h2 className="font-display text-base font-bold">Investimento × resultado</h2>

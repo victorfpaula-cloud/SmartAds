@@ -13,6 +13,7 @@ export const OFFSET_ANTERIOR = 1000;
 export interface ContaDaRede {
   contaId: string;
   unidade: string;
+  boostAtivo: boolean;
   instagram: string | null;
   adAccountId: string | null;
   instagramId: string | null;
@@ -22,7 +23,7 @@ export interface ContaDaRede {
 export async function listarContasDaRede(empresaId: string): Promise<ContaDaRede[]> {
   const { data } = await criarClienteAdmin()
     .from("smartads_clientes")
-    .select("nome, smartads_contas_meta(id, ativo, instagram_username, meta_ad_account_id, instagram_business_id)")
+    .select("nome, smartads_contas_meta(id, ativo, boost_automatico_ativo, instagram_username, meta_ad_account_id, instagram_business_id)")
     .eq("empresa_id", empresaId)
     .eq("ativo", true)
     .order("nome");
@@ -32,6 +33,7 @@ export async function listarContasDaRede(empresaId: string): Promise<ContaDaRede
       .map((conta: any) => ({
         contaId: conta.id,
         unidade: c.nome,
+        boostAtivo: Boolean(conta.boost_automatico_ativo),
         instagram: conta.instagram_username ?? null,
         adAccountId: conta.meta_ad_account_id ?? null,
         instagramId: conta.instagram_business_id ?? null,
@@ -135,7 +137,9 @@ const item = (d: Omit<DadosRelatorioAds, "campanhas">, chave: string): ItemOrgan
 /** Lê o cache da Saúde da rede e soma tudo. Nada aqui chama a Meta — os números vêm do botão Atualizar. */
 export async function carregarSaudeRede(empresaId: string, dias: number, anterior = false): Promise<ResumoRede> {
   const chaveDias = anterior ? dias + OFFSET_ANTERIOR : dias;
-  const contas = await listarContasDaRede(empresaId);
+  // Só as unidades com boost ligado (a Principal entra; a Expansão fica de fora — os formulários dela
+  // não entram em nenhum número).
+  const contas = (await listarContasDaRede(empresaId)).filter((c) => c.boostAtivo && !/expans[aã]o/i.test(c.unidade));
   const repetidas = contasRepetidas(contas);
   const { data: cache } =
     contas.length > 0
